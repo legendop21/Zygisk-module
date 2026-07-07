@@ -15,6 +15,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     root_hide.cpp
     sim_mock.cpp
     upi_hook.cpp
+    zygisk_utils.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
