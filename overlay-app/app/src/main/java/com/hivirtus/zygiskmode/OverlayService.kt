@@ -15,8 +15,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
-import com.google.android.material.switchmaterial.SwitchMaterial
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import com.hivirtus.zygiskmode.databinding.OverlayRootBinding
 import kotlinx.coroutines.CoroutineScope
@@ -254,7 +255,7 @@ class OverlayService : Service() {
             val switch = SwitchMaterial(this).apply {
                 text = app.displayName
                 isChecked = config.hookedUpiApps[app.packageName] ?: true
-                setTextColor(getColor(R.color.text_primary))
+                setTextColor(ContextCompat.getColor(this@OverlayService, R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
