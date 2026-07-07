@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zygisk Mod Menu</string>
+    <string name="mod_menu_title">Zygisk Mod Menu</string>
+    <string name="main_description">SMS hook, auto OTP read, aur token forward ke liye overlay menu start karein.</string>
+    <string name="start_overlay">Start Overlay Menu</string>
+    <string name="stop_overlay">Stop Overlay Menu</string>
+    <string name="overlay_started">Overlay menu started</string>
+    <string name="overlay_stopped">Overlay menu stopped</string>
+    <string name="overlay_running">Overlay menu is running</string>
+    <string name="grant_overlay_permission">Overlay permission grant karein</string>
+    <string name="notification_channel">Zygisk Mod Menu</string>
+    <string name="close">Close</string>
+    <string name="tab_system">SYSTEM</string>
+    <string name="tab_message">MESSAGE</string>
+    <string name="tab_forward">FORWARD</string>
+    <string name="hook_incoming_sms">Hook Incoming SMS</string>
+    <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
+    <string name="auto_extract_otp">Auto Extract OTP</string>
+    <string name="auto_forward_token">Auto Forward Token</string>
+    <string name="sender_id">Sender ID:</string>
+    <string name="message_body">Message Body:</string>
+    <string name="message_body_hint">Type your message body (e.g. Your verification OTP code is 918204)</string>
+    <string name="inject_local_sms">Inject Local SMS</string>
+    <string name="forward_url">Forward Webhook URL:</string>
+    <string name="save_forward_config">Save Forward Config</string>
+    <string name="config_saved">Config saved</string>
+    <string name="enter_message_body">Message body enter karein</string>
+    <string name="sms_injected">Local SMS injected</string>
+    <string name="footer_text">Zygisk Injected. Developed for Android.</string>
+    <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
+    <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
+</resources>

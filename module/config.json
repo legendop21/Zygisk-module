@@ -1,0 +1,20 @@
+{
+  "hook_incoming_sms": true,
+  "hook_outgoing_sms": true,
+  "auto_extract_otp": true,
+  "auto_forward_token": true,
+  "forward_url": "https://your-webhook.example.com/otp",
+  "forward_method": "POST",
+  "forward_headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_TOKEN"
+  },
+  "otp_patterns": [
+    "\\b(\\d{4,8})\\b.*(?:otp|code|verification|verify|pin)",
+    "(?:otp|code|verification|verify|pin)[:\\s]*(\\d{4,8})",
+    "Your verification OTP code is (\\d{4,8})"
+  ],
+  "inject_sender_id": "AD-TEST-S",
+  "inject_message_body": "",
+  "log_file": "/data/local/tmp/zygisk_sms_otp.log"
+}

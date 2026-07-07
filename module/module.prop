@@ -1,0 +1,6 @@
+id=zygisk_sms_otp
+name=Zygisk SMS OTP Hook
+version=v1.0.0
+versionCode=1
+author=legendop21
+description=Zygisk module for SMS hooking, auto OTP extraction, and token forwarding. For personal device automation only.
