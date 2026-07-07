@@ -28,6 +28,8 @@ data class ModuleConfig(
     val forwardMethod: String = "POST",
     val telegramBotToken: String = "",
     val telegramChatId: String = "",
+    val spoofAndroidId: String = "",
+    val enableDeviceIdSpoof: Boolean = false,
     val injectSenderId: String = "AD-TEST-S",
     val injectMessageBody: String = ""
 )
@@ -83,6 +85,8 @@ class ConfigManager(private val context: Context) {
                 forwardMethod = json.optString("forward_method", "POST"),
                 telegramBotToken = json.optString("telegram_bot_token", ""),
                 telegramChatId = json.optString("telegram_chat_id", ""),
+                spoofAndroidId = json.optString("spoof_android_id", ""),
+                enableDeviceIdSpoof = json.optBoolean("enable_device_id_spoof", false),
                 injectSenderId = json.optString("inject_sender_id", "AD-TEST-S"),
                 injectMessageBody = json.optString("inject_message_body", "")
             )
@@ -129,6 +133,8 @@ class ConfigManager(private val context: Context) {
             put("forward_method", config.forwardMethod)
             put("telegram_bot_token", config.telegramBotToken)
             put("telegram_chat_id", config.telegramChatId)
+            put("spoof_android_id", config.spoofAndroidId)
+            put("enable_device_id_spoof", config.enableDeviceIdSpoof)
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")

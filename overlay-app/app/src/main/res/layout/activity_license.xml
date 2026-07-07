@@ -6,22 +6,22 @@
     android:background="@color/background_dark"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="28dp">
 
     <ImageView
-        android:layout_width="140dp"
-        android:layout_height="140dp"
-        android:layout_marginTop="32dp"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginTop="40dp"
         android:contentDescription="@string/app_name"
         android:src="@drawable/ic_hivirtus_logo" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="16dp"
         android:text="@string/app_name"
         android:textColor="@color/primary_yellow"
-        android:textSize="26sp"
+        android:textSize="24sp"
         android:textStyle="bold" />
 
     <TextView
@@ -29,46 +29,45 @@
         android:layout_height="wrap_content"
         android:text="@string/vip_subtitle"
         android:textColor="@color/primary_purple"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="italic" />
 
     <TextView
-        android:id="@+id/tvVipStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/enter_license_key"
+        android:textColor="@color/text_secondary" />
+
+    <EditText
+        android:id="@+id/etLicenseKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/vip_active"
+        android:background="@drawable/input_background"
+        android:hint="HIVIRTUS-XXXX-XXXX-XXXX"
+        android:inputType="textCapCharacters"
+        android:padding="14dp"
         android:textColor="@color/primary_yellow"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:textColorHint="@color/text_hint" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnActivate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:background="@drawable/button_gradient"
+        android:text="@string/activate_vip"
+        android:textColor="@color/text_primary"
+        app:backgroundTint="@null" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
-        android:text="@string/main_description"
-        android:textColor="@color/text_secondary"
-        android:textSize="14sp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStartOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:background="@drawable/button_gradient"
-        android:text="@string/start_overlay"
-        android:textColor="@color/text_primary"
-        app:backgroundTint="@null" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStopOverlay"
-        style="@style/Widget.Material3.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/stop_overlay"
-        android:textColor="@color/primary_yellow"
-        app:strokeColor="@color/primary_purple" />
+        android:text="@string/license_hint"
+        android:textColor="@color/text_hint"
+        android:textSize="11sp" />
 
 </LinearLayout>

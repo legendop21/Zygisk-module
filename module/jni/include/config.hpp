@@ -36,6 +36,9 @@ struct ModuleConfig {
     std::string log_file = "/data/local/tmp/hivirtus_zygisk_mode.log";
     std::map<std::string, bool> hooked_upi_apps;
 
+    bool enable_device_id_spoof = false;
+    std::string spoof_android_id;
+
     bool is_upi_app_hooked(const std::string& package) const;
 };
 

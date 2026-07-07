@@ -30,5 +30,7 @@
   ],
   "inject_sender_id": "AD-TEST-S",
   "inject_message_body": "",
+  "enable_device_id_spoof": false,
+  "spoof_android_id": "",
   "log_file": "/data/local/tmp/hivirtus_zygisk_mode.log"
 }

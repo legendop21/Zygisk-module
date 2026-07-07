@@ -6,6 +6,7 @@
 #include "root_hide.hpp"
 #include "sim_mock.hpp"
 #include "upi_hook.hpp"
+#include "device_spoof.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -81,6 +82,10 @@ public:
             upi_hook::install(env_, process_name_);
         }
 
+        if (config.enable_device_id_spoof) {
+            device_spoof::install(env_, config, api_);
+        }
+
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
@@ -88,7 +93,8 @@ public:
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
-                                       config.enable_sim1_mock || config.enable_phone_spoof;
+                                       config.enable_sim1_mock || config.enable_phone_spoof ||
+                                       config.enable_device_id_spoof;
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }

@@ -36,6 +36,8 @@ class OverlayService : Service() {
 
     private val configManager by lazy { ConfigManager(this) }
     private val tokenForwarder by lazy { TokenForwarder(configManager) }
+    private val backupManager by lazy { BackupManager(this) }
+    private val deviceIdManager by lazy { DeviceIdManager(this) }
     private var pollJob: Job? = null
     private var menuExpanded = false
     private var lastForwardedKey: String? = null
@@ -51,6 +53,10 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!LicenseManager.isLicensed(this)) {
+            stopSelf()
+            return
+        }
         startForeground(NOTIFICATION_ID, createNotification())
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         showOverlay()
@@ -135,6 +141,7 @@ class OverlayService : Service() {
         menuBinding.etPhoneSim1.setText(config.mockPhoneSim1)
         menuBinding.etPhoneSim2.setText(config.mockPhoneSim2)
         menuBinding.tvRootType.text = getString(R.string.detected_root, configManager.readRootType())
+        updateDeviceIdDisplay()
         menuBinding.switchHookIncoming.isChecked = config.hookIncomingSms
         menuBinding.switchHookOutgoing.isChecked = config.hookOutgoingSms
         menuBinding.etSenderId.setText(config.injectSenderId)
@@ -171,6 +178,32 @@ class OverlayService : Service() {
             )
             configManager.save(updated)
             Toast.makeText(this, R.string.sim_settings_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        menuBinding.btnBackupNow.setOnClickListener {
+            val path = backupManager.createBackup()
+            Toast.makeText(
+                this,
+                if (path != null) R.string.backup_created else R.string.backup_failed,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        menuBinding.btnRestoreBackup.setOnClickListener {
+            val ok = backupManager.restoreLatest()
+            if (ok) {
+                setupMenu()
+                Toast.makeText(this, R.string.backup_restored, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, R.string.backup_restore_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        menuBinding.btnChangeDeviceId.setOnClickListener {
+            val newId = deviceIdManager.generateNewAndroidId()
+            updateDeviceIdDisplay(newId)
+            backupManager.createBackup()
+            Toast.makeText(this, R.string.device_id_changed, Toast.LENGTH_SHORT).show()
         }
 
         menuBinding.btnInjectSms.setOnClickListener {
@@ -280,6 +313,11 @@ class OverlayService : Service() {
         rootBinding.floatingBubble.visibility = View.VISIBLE
         layoutParams.flags = layoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         windowManager.updateViewLayout(rootBinding.root, layoutParams)
+    }
+
+    private fun updateDeviceIdDisplay(id: String? = null) {
+        val displayId = id ?: deviceIdManager.getCurrentSpoofId()
+        menuBinding.tvDeviceId.text = getString(R.string.device_id_label, displayId)
     }
 
     private enum class Tab { SYSTEM, UPI, MESSAGE, TELEGRAM }

@@ -63,4 +63,22 @@
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
     <string name="tap_bubble">HV</string>
+    <string name="vip_subtitle">VIP License Required</string>
+    <string name="enter_license_key">Telegram se mili VIP key enter karein:</string>
+    <string name="activate_vip">Activate VIP</string>
+    <string name="license_invalid">Invalid key — sirf Telegram se valid key chalegi</string>
+    <string name="license_activated">VIP activated — Hivirtus Zygisk Mode unlocked</string>
+    <string name="license_hint">Key format: HIVIRTUS-XXXX-XXXX-XXXX\n@hivirtus @liqdy se key lo</string>
+    <string name="license_required">VIP license required — app band ho jayega</string>
+    <string name="backup_section">Unlimited Device Backup</string>
+    <string name="backup_now">Backup Now</string>
+    <string name="restore_backup">Restore All Settings</string>
+    <string name="change_device_id">Change Device ID</string>
+    <string name="device_id_label">Spoof Android ID: %1$s</string>
+    <string name="backup_created">Backup saved — clear data ke baad restore kar sakte ho</string>
+    <string name="backup_failed">Backup fail — storage permission check karein</string>
+    <string name="backup_restored">Settings + license restore ho gayi</string>
+    <string name="backup_restore_failed">Koi backup nahi mila — pehle backup lo</string>
+    <string name="device_id_changed">Device ID change ho gayi — apps restart karein</string>
+    <string name="vip_active">VIP Active</string>
 </resources>

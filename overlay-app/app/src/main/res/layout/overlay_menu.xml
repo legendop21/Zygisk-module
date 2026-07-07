@@ -19,7 +19,16 @@
             android:layout_weight="1"
             android:text="@string/mod_menu_title"
             android:textColor="@color/primary_yellow"
-            android:textSize="17sp"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="VIP"
+            android:textColor="@color/primary_purple"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <ImageButton
@@ -184,12 +193,69 @@
     </LinearLayout>
 
     <!-- SYSTEM tab -->
-    <LinearLayout
+    <ScrollView
         android:id="@+id/panelSystem"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="12dp">
+        android:layout_height="420dp"
+        android:paddingTop="12dp"
+        android:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/backup_section"
+            android:textColor="@color/primary_yellow"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvDeviceId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/text_hint"
+            android:textSize="11sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBackupNow"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/backup_now"
+            android:textColor="@color/primary_yellow"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRestoreBackup"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/restore_backup"
+            android:textColor="@color/primary_purple"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnChangeDeviceId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/button_gradient"
+            android:text="@string/change_device_id"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            app:backgroundTint="@null" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@color/divider" />
 
         <TextView
             android:layout_width="match_parent"
@@ -386,7 +452,9 @@
             android:text="@string/save_sim_settings"
             android:textColor="@color/text_primary"
             app:backgroundTint="@null" />
-    </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
 
     <!-- MESSAGE tab -->
     <LinearLayout
