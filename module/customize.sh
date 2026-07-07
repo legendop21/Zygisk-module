@@ -37,6 +37,6 @@ if [ ! -f "$MODPATH/config.json" ]; then
 EOF
 fi
 
-ui_print "- Root hide + SIM mock + SMS hook ready"
-ui_print "- Safe install: no bootloop risk"
+ui_print "- Supports: Magisk | KernelSU | APatch | SukiSU"
+ui_print "- Root hide auto-fix on flash"
 ui_print "- Reboot to activate"

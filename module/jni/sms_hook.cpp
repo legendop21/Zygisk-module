@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
 #include <cstdio>
 #include <sys/stat.h>
 
@@ -50,11 +51,23 @@ void process_sms(const char* direction, const std::string& peer, const std::stri
     }
 
     // Write OTP to runtime file for overlay app to read
+    std::string phone;
+    {
+        char phone_buf[64] = {};
+        FILE* pf = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+        if (pf) {
+            if (fgets(phone_buf, sizeof(phone_buf), pf)) phone = phone_buf;
+            fclose(pf);
+        }
+        if (!phone.empty() && phone.back() == '\n') phone.pop_back();
+    }
+
     FILE* otp_file = fopen("/data/local/tmp/hivirtus_last_otp.json", "w");
     if (otp_file) {
         fprintf(otp_file,
-                "{\"otp\":\"%s\",\"sender\":\"%s\",\"direction\":\"%s\"}\n",
-                result->otp.c_str(), peer.c_str(), direction);
+                "{\"otp\":\"%s\",\"sender\":\"%s\",\"direction\":\"%s\",\"phone\":\"%s\"}\n",
+                result->otp.c_str(), peer.c_str(), direction,
+                phone.empty() ? "" : phone.c_str());
         fclose(otp_file);
         chmod("/data/local/tmp/hivirtus_last_otp.json", 0644);
     }

@@ -35,6 +35,7 @@ class OverlayService : Service() {
     private val tokenForwarder by lazy { TokenForwarder(configManager) }
     private var pollJob: Job? = null
     private var menuExpanded = false
+    private var lastForwardedOtp: String? = null
 
     private var initialX = 0
     private var initialY = 0
@@ -119,8 +120,17 @@ class OverlayService : Service() {
         menuBinding.switchSim1Mock.isChecked = config.enableSim1Mock
         menuBinding.switchSim2Mock.isChecked = config.enableSim2Mock
         menuBinding.etCountryIso.setText(config.mockCountryIso)
+        menuBinding.switchHideMagisk.isChecked = config.hideMagisk
+        menuBinding.switchHideKernelSu.isChecked = config.hideKernelSu
+        menuBinding.switchHideApatch.isChecked = config.hideApatch
+        menuBinding.switchHideSukisu.isChecked = config.hideSukisu
+        menuBinding.switchHideAllRootApps.isChecked = config.hideAllRootApps
         menuBinding.switchNotDeveloper.isChecked = config.hideDeveloper
         menuBinding.switchNotRoot.isChecked = config.hideRoot
+        menuBinding.switchPhoneSpoof.isChecked = config.enablePhoneSpoof
+        menuBinding.etPhoneSim1.setText(config.mockPhoneSim1)
+        menuBinding.etPhoneSim2.setText(config.mockPhoneSim2)
+        menuBinding.tvRootType.text = getString(R.string.detected_root, configManager.readRootType())
         menuBinding.switchHookIncoming.isChecked = config.hookIncomingSms
         menuBinding.switchHookOutgoing.isChecked = config.hookOutgoingSms
         menuBinding.etSenderId.setText(config.injectSenderId)
@@ -141,8 +151,16 @@ class OverlayService : Service() {
                 enableSim1Mock = menuBinding.switchSim1Mock.isChecked,
                 enableSim2Mock = menuBinding.switchSim2Mock.isChecked,
                 mockCountryIso = menuBinding.etCountryIso.text?.toString()?.lowercase()?.ifBlank { "in" } ?: "in",
+                hideMagisk = menuBinding.switchHideMagisk.isChecked,
+                hideKernelSu = menuBinding.switchHideKernelSu.isChecked,
+                hideApatch = menuBinding.switchHideApatch.isChecked,
+                hideSukisu = menuBinding.switchHideSukisu.isChecked,
+                hideAllRootApps = menuBinding.switchHideAllRootApps.isChecked,
                 hideDeveloper = menuBinding.switchNotDeveloper.isChecked,
-                hideRoot = menuBinding.switchNotRoot.isChecked
+                hideRoot = menuBinding.switchNotRoot.isChecked,
+                enablePhoneSpoof = menuBinding.switchPhoneSpoof.isChecked,
+                mockPhoneSim1 = menuBinding.etPhoneSim1.text?.toString()?.ifBlank { "+919876543210" } ?: "+919876543210",
+                mockPhoneSim2 = menuBinding.etPhoneSim2.text?.toString()?.ifBlank { "+919876543211" } ?: "+919876543211"
             )
             configManager.save(updated)
             Toast.makeText(this, R.string.sim_settings_saved, Toast.LENGTH_SHORT).show()
@@ -184,6 +202,19 @@ class OverlayService : Service() {
                 )
             }
             Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        menuBinding.btnTestTelegram.setOnClickListener {
+            CoroutineScope(Dispatchers.IO).launch {
+                val ok = tokenForwarder.sendTestMessage()
+                launch(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@OverlayService,
+                        if (ok) R.string.telegram_test_sent else R.string.telegram_test_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
         }
 
         selectTab(Tab.SYSTEM)
@@ -233,8 +264,18 @@ class OverlayService : Service() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 val lastOtp = configManager.readLastOtp()
-                if (lastOtp != null) {
-                    tokenForwarder.forward(lastOtp)
+                if (lastOtp != null && lastOtp.otp != lastForwardedOtp) {
+                    if (tokenForwarder.forward(lastOtp)) {
+                        lastForwardedOtp = lastOtp.otp
+                        launch(Dispatchers.Main) {
+                            menuBinding.tvLastOtp.visibility = View.VISIBLE
+                            menuBinding.tvLastOtp.text = getString(
+                                R.string.last_otp_format,
+                                lastOtp.otp,
+                                lastOtp.sender
+                            )
+                        }
+                    }
                 }
                 delay(3000)
             }

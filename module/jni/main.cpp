@@ -5,7 +5,6 @@
 #include "inject_sms.hpp"
 #include "root_hide.hpp"
 #include "sim_mock.hpp"
-#include "zygisk_utils.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -36,10 +35,7 @@ void process_inject_command(JNIEnv* env) {
     const size_t first_sep = line.find('|', 7);
     if (first_sep == std::string::npos) return;
 
-    const std::string sender = line.substr(7, first_sep - 7);
-    const std::string body = line.substr(first_sep + 1);
-
-    inject_sms::inject_local_sms(env, sender, body);
+    inject_sms::inject_local_sms(env, line.substr(7, first_sep - 7), line.substr(first_sep + 1));
     unlink(kInjectCommandFile);
 }
 
@@ -57,10 +53,7 @@ public:
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
         ConfigManager::instance().load();
-        const auto& config = ConfigManager::instance().get();
-
-        // Magisk denylist unmount — hides root from target apps safely
-        if (config.hide_root) {
+        if (ConfigManager::instance().get().hide_root) {
             api_->setOption(zygisk::Option::FORCE_DENYLIST_UNMOUNT);
         }
     }
@@ -70,24 +63,27 @@ public:
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
-        // Root + developer hide — runs in every app process (safe, no bootloop)
-        root_hide::install(env_, config.hide_root, config.hide_developer);
+        // Universal root hide — all apps, all root types
+        root_hide::install(env_, config);
 
-        // SIM mock — telephony + all apps
+        // SIM + phone number spoof
         sim_mock::install(env_,
                           config.enable_sim1_mock,
                           config.enable_sim2_mock,
-                          config.mock_country_iso);
+                          config.mock_country_iso,
+                          config.enable_phone_spoof,
+                          config.mock_phone_sim1,
+                          config.mock_phone_sim2);
 
-        // SMS hooks — telephony processes only
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony hooks in %s", process_name_.c_str());
             sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
             process_inject_command(env_);
         }
 
-        // Unload library from non-essential processes to save memory
-        if (!is_telephony_ && !config.hide_root && !config.enable_sim1_mock) {
+        const bool needs_stay_loaded = is_telephony_ || config.hide_root ||
+                                       config.enable_sim1_mock || config.enable_phone_spoof;
+        if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }
     }

@@ -128,9 +128,17 @@ bool ConfigManager::load() {
 
     config_.hide_root = parse_bool(json, "hide_root", true);
     config_.hide_developer = parse_bool(json, "hide_developer", true);
+    config_.hide_magisk = parse_bool(json, "hide_magisk", true);
+    config_.hide_kernelsu = parse_bool(json, "hide_kernelsu", true);
+    config_.hide_apatch = parse_bool(json, "hide_apatch", true);
+    config_.hide_sukisu = parse_bool(json, "hide_sukisu", true);
+    config_.hide_all_root_apps = parse_bool(json, "hide_all_root_apps", true);
     config_.enable_sim1_mock = parse_bool(json, "enable_sim1_mock", false);
     config_.enable_sim2_mock = parse_bool(json, "enable_sim2_mock", false);
+    config_.enable_phone_spoof = parse_bool(json, "enable_phone_spoof", false);
     config_.mock_country_iso = parse_string(json, "mock_country_iso", config_.mock_country_iso);
+    config_.mock_phone_sim1 = parse_string(json, "mock_phone_sim1", config_.mock_phone_sim1);
+    config_.mock_phone_sim2 = parse_string(json, "mock_phone_sim2", config_.mock_phone_sim2);
     config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", true);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", true);
     config_.auto_extract_otp = parse_bool(json, "auto_extract_otp", true);

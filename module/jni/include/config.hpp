@@ -7,9 +7,18 @@
 struct ModuleConfig {
     bool hide_root = true;
     bool hide_developer = true;
+    bool hide_magisk = true;
+    bool hide_kernelsu = true;
+    bool hide_apatch = true;
+    bool hide_sukisu = true;
+    bool hide_all_root_apps = true;
+
     bool enable_sim1_mock = false;
     bool enable_sim2_mock = false;
+    bool enable_phone_spoof = false;
     std::string mock_country_iso = "in";
+    std::string mock_phone_sim1;
+    std::string mock_phone_sim2;
 
     bool hook_incoming_sms = true;
     bool hook_outgoing_sms = true;
