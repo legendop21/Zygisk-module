@@ -18,6 +18,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Sign release with debug key so APK installs without Play Store signing
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
