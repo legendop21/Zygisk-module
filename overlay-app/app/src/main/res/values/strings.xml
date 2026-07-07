@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hivirtus Zygisk Mode</string>
-    <string name="mod_menu_title">Hivirtus Zygisk Mode</string>
+    <string name="mod_menu_title">Zygisk Mod Menu</string>
     <string name="main_description">Tap floating bubble se menu kholein. Root hide, SIM mock, SMS OTP — sab ek jagah.</string>
     <string name="start_overlay">Start Floating Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
@@ -59,7 +59,7 @@
     <string name="config_saved">Config saved</string>
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
-    <string name="footer_text">Hivirtus Zygisk Injected. Developed for Android.</string>
+    <string name="footer_text">Zygisk Injected. Developed for Android.</string>
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
     <string name="tap_bubble">HV</string>

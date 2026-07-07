@@ -17,12 +17,15 @@ class DeviceIdManager(private val context: Context) {
 
     fun getCurrentSpoofId(): String {
         val config = configManager.load()
-        if (config.spoofAndroidId.isNotBlank()) return config.spoofAndroidId
-        return generateNewAndroidId()
+        return config.spoofAndroidId.ifBlank { "Not set" }
     }
 
     private fun writeRuntimeId(id: String) {
-        File("/data/local/tmp/hivirtus_spoof_android_id.txt").writeText(id)
-        File("/data/local/tmp/hivirtus_change_device_id.cmd").writeText("CHANGE_ID|$id")
+        try {
+            File("/data/local/tmp/hivirtus_spoof_android_id.txt").writeText(id)
+        } catch (_: Exception) {}
+        try {
+            File("/data/local/tmp/hivirtus_change_device_id.cmd").writeText("CHANGE_ID|$id")
+        } catch (_: Exception) {}
     }
 }

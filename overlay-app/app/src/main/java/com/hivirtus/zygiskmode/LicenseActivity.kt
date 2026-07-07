@@ -18,8 +18,12 @@ class LicenseActivity : AppCompatActivity() {
             return
         }
 
-        // Auto-restore backup after clear data
-        BackupManager(this).restoreLatest()
+        try {
+            if (BackupManager(this).restoreLatest() && LicenseManager.isLicensed(this)) {
+                openMain()
+                return
+            }
+        } catch (_: Exception) {}
 
         binding = ActivityLicenseBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -27,7 +31,9 @@ class LicenseActivity : AppCompatActivity() {
         binding.btnActivate.setOnClickListener {
             val key = binding.etLicenseKey.text?.toString().orEmpty()
             if (LicenseManager.activate(this, key)) {
-                BackupManager(this).createBackup()
+                try {
+                    BackupManager(this).createBackup()
+                } catch (_: Exception) {}
                 Toast.makeText(this, R.string.license_activated, Toast.LENGTH_SHORT).show()
                 openMain()
             } else {

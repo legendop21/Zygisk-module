@@ -24,7 +24,7 @@ class BackupManager(private val context: Context) {
                 put("config", buildConfigJson(config))
                 put("license", LicenseManager.getSavedKey(context).orEmpty())
                 put("timestamp", stamp)
-                put("version", "2.3.0")
+                put("version", "2.3.1")
             }
 
             val payload = json.toString(2)

