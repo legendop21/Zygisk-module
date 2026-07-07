@@ -1,4 +1,4 @@
-package com.zygisk.modmenu
+package com.hivirtus.zygiskmode
 
 import android.content.Intent
 import android.net.Uri
@@ -7,7 +7,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.zygisk.modmenu.databinding.ActivityMainBinding
+import com.hivirtus.zygiskmode.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
@@ -20,35 +20,28 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnStartOverlay.setOnClickListener {
             if (!Settings.canDrawOverlays(this)) {
-                requestOverlayPermission()
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+                Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            startOverlayService()
+            val intent = Intent(this, OverlayService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
+            finish()
         }
 
         binding.btnStopOverlay.setOnClickListener {
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, R.string.overlay_stopped, Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun requestOverlayPermission() {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:$packageName")
-        )
-        startActivity(intent)
-        Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
-    }
-
-    private fun startOverlayService() {
-        val intent = Intent(this, OverlayService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-        Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
-        finish()
     }
 }

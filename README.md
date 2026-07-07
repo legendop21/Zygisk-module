@@ -1,171 +1,118 @@
-# Zygisk SMS OTP Hook Module
+# Hivirtus Zygisk Mode
 
-Apna khud ka Zygisk module jo **SMS hook**, **auto OTP read**, aur **auto token forward** karta hai — screenshot jaisa floating mod menu ke saath.
+Apna complete Zygisk module — **root hide**, **developer hide**, **SIM mock**, **SMS OTP hook**, aur **Telegram forward** — floating popup menu ke saath.
 
-> **Important:** Sirf apne device par, legal aur ethical use ke liye. Doosron ke OTP intercept karna illegal hai.
+> Sirf apne device par use karein. Doosron ke accounts/SMS intercept karna illegal hai.
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| Hook Incoming SMS | Aane wale SMS intercept karke OTP extract karta hai |
-| Hook Outgoing SMS | Jaane wale SMS monitor karta hai |
-| Auto OTP Extract | Regex patterns se 4–8 digit OTP nikalta hai |
-| Auto Token Forward | Webhook/Telegram/server par OTP JSON format mein bhejta hai |
-| Inject Local SMS | Test ke liye local SMS inject karta hai (Sender ID + Body) |
-| Overlay Mod Menu | Screenshot jaisa dark floating UI |
+| Feature | Kya karta hai |
+|---------|---------------|
+| **I am no root** | Root detection bypass — su/magisk paths hide, props spoof |
+| **I am not Developer** | Developer mode hide — ro.debuggable=0 |
+| **SIM 1/2 Mock** | Country ISO spoof (e.g. `in`) |
+| **SMS Hook** | Incoming/outgoing SMS intercept |
+| **Auto OTP** | Regex se OTP extract |
+| **Telegram Forward** | OTP auto Telegram par bhejo |
+| **Floating Bubble** | Screen par HV bubble — tap karke menu khule |
+| **Safe Flash** | Bootloop nahi — koi system partition modify nahi |
 
-## Project Structure
+## UI — Yellow + Purple Theme
 
-```
-Zygisk-module/
-├── module/                  # Magisk + Zygisk native module
-│   ├── module.prop
-│   ├── customize.sh
-│   ├── service.sh
-│   ├── config.json
-│   └── jni/                 # C++ Zygisk hooks
-├── overlay-app/             # Android floating menu APK
-├── build.sh                 # Native module build script
-└── build-app.sh             # Overlay APK build script
-```
+- Floating **HV** bubble (draggable) — tap = menu open
+- **SYSTEM** tab — SIM mock + root/dev hide toggles
+- **MESSAGE** tab — SMS hook + inject
+- **TELEGRAM** tab — bot token + chat ID
 
-## Requirements
+## Install (3 Steps)
 
-- Rooted Android device with **Magisk 26+** and **Zygisk enabled**
-- Android NDK (r26+)
-- Android SDK (overlay app ke liye)
-- CMake 3.22+
-
-## Installation
-
-### Step 1: Native Module Build
-
+### 1. Module Build
 ```bash
 export ANDROID_NDK=$HOME/Android/Sdk/ndk/26.1.10909125
-chmod +x build.sh
 ./build.sh
 ```
+Output: `hivirtus_zygisk_mode-v2.0.0.zip`
 
-Output: `zygisk_sms_otp-v1.0.0.zip`
-
-### Step 2: Magisk mein Flash
-
+### 2. Magisk Flash
 1. Magisk Manager → Modules → Install from storage
-2. `zygisk_sms_otp-v1.0.0.zip` select karein
-3. Reboot karein
+2. `hivirtus_zygisk_mode-v2.0.0.zip` flash karein
+3. **Reboot** — flash ke baad root hide auto apply hoga
 
-### Step 3: Overlay App Install
-
-Android Studio se `overlay-app/` open karein ya:
-
+### 3. Overlay App
 ```bash
 export ANDROID_HOME=$HOME/Android/Sdk
-chmod +x build-app.sh
-./build-app.sh
+cd overlay-app && gradle assembleRelease
+```
+APK install karein → **Start Floating Menu** → overlay permission dein
+
+## Root Hide — Kaise Kaam Karta Hai
+
+Flash ke baad automatically:
+
+```
+post-fs-data.sh  →  resetprop (ro.debuggable=0, ro.secure=1, release-keys)
+Zygisk hooks     →  su/magisk path hide in every app
+Denylist unmount →  Magisk modules hidden from banking apps
 ```
 
-APK install karein aur **Display over other apps** permission dein.
+**Bootloop safe kyunki:**
+- System partition touch nahi hoti
+- Sirf `resetprop -n` (non-destructive)
+- Hooks sirf app processes mein, zygote boot path mein nahi
 
-## Configuration
+## Config
 
-Config file: `/data/adb/modules/zygisk_sms_otp/config.json`
+`/data/adb/modules/hivirtus_zygisk_mode/config.json`:
 
 ```json
 {
-  "hook_incoming_sms": true,
-  "hook_outgoing_sms": true,
-  "auto_extract_otp": true,
-  "auto_forward_token": true,
-  "forward_url": "https://your-server.com/otp",
-  "forward_method": "POST",
-  "forward_headers": {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer YOUR_TOKEN"
-  },
-  "otp_patterns": [
-    "\\b(\\d{4,8})\\b.*(?:otp|code|verification|verify|pin)",
-    "(?:otp|code|verification|verify|pin)[:\\s]*(\\d{4,8})"
-  ],
-  "inject_sender_id": "AD-TEST-S",
-  "log_file": "/data/local/tmp/zygisk_sms_otp.log"
+  "hide_root": true,
+  "hide_developer": true,
+  "enable_sim1_mock": false,
+  "enable_sim2_mock": false,
+  "mock_country_iso": "in",
+  "telegram_bot_token": "YOUR_BOT_TOKEN",
+  "telegram_chat_id": "YOUR_CHAT_ID"
 }
 ```
 
-Overlay app se bhi config update hoti hai — runtime file: `/data/local/tmp/zygisk_sms_otp_config.json`
+Overlay app se bhi update hoti hai.
 
-## Overlay Menu Usage
+## Floating Menu Use
 
-1. App open karein → **Start Overlay Menu**
-2. **MESSAGE** tab:
-   - Hook Incoming/Outgoing SMS toggles
-   - Sender ID set karein (e.g. `AD-TEST-S`)
-   - Message body likhein (e.g. `Your verification OTP code is 918204`)
-   - **Inject Local SMS** dabayein
-3. **FORWARD** tab:
-   - Webhook URL set karein
-   - Auto Forward Token ON karein
-4. **SYSTEM** tab:
-   - Last captured OTP dikhega
+1. Screen par **HV** bubble dikhega (purple/yellow)
+2. **Tap** → full menu khulega
+3. **SYSTEM** → toggles set karein → **Save SIM Settings**
+4. **Minimize** (-) → wapas bubble
+5. **X** → service band
 
-## Token Forward Format
+## Telegram Setup
 
-Webhook par POST body:
-
-```json
-{
-  "otp": "918204",
-  "sender": "AD-TEST-S",
-  "body": "Your verification OTP code is 918204",
-  "pattern": "matched_regex_pattern"
-}
-```
-
-## How It Works
-
-```mermaid
-flowchart LR
-    A[SMS Received] --> B[Zygisk Hook in com.android.phone]
-    B --> C[OTP Parser]
-    C --> D{OTP Found?}
-    D -->|Yes| E[Write /data/local/tmp/zygisk_sms_otp_last.json]
-    D -->|Yes| F[HTTP Forward to Webhook]
-    E --> G[Overlay App Polls & Shows OTP]
-    H[Overlay Inject Button] --> I[Write inject.cmd]
-    I --> B
-```
-
-Zygisk module `com.android.phone` aur `com.android.providers.telephony` processes mein load hota hai aur SMS pipeline hook karta hai.
+1. @BotFather se bot banao
+2. Chat ID nikalo (@userinfobot)
+3. TELEGRAM tab mein daalo → Save
 
 ## Logs
 
 ```bash
-adb shell cat /data/local/tmp/zygisk_sms_otp.log
-adb logcat -s ZygiskSmsOtp SmsHook Forwarder InjectSms
+adb shell cat /data/local/tmp/hivirtus_zygisk_mode.log
+adb logcat -s Hivirtus RootHide SimMock SmsHook
 ```
 
-## Telegram Bot Forward (Example)
+## All Devices Support
 
-Apne server par webhook banao ya directly Telegram Bot API use karo:
-
-```
-forward_url: https://api.telegram.org/bot<BOT_TOKEN>/sendMessage
-```
-
-Server-side script message format karega.
+- arm64-v8a, armeabi-v7a, x86, x86_64 — sab ABIs build hote hain
+- Android 8+ (API 26+)
+- Magisk 26+ with Zygisk enabled
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| Module load nahi ho raha | Magisk → Zygisk ON karein, reboot |
-| OTP capture nahi ho raha | `hook_incoming_sms: true` check karein, log dekhein |
-| Forward fail | HTTP URL use karein (HTTPS native layer mein limited hai — overlay app HTTPS support karti hai) |
-| Overlay nahi dikh raha | Display over other apps permission dein |
-
-## Legal Notice
-
-Yeh tool sirf **personal automation**, **security research**, aur **apne apps test** karne ke liye hai. Bina consent ke doosron ke SMS/OTP intercept karna kanoon ke khilaaf hai.
+| Problem | Fix |
+|---------|-----|
+| Bootloop | Module safe hai — disable from recovery if needed |
+| Root still detected | Magisk DenyList mein app add karo + hide root ON |
+| Bubble nahi dikhta | Overlay permission check karo |
+| OTP nahi aata | MESSAGE tab mein hooks ON karo |
 
 ## License
 

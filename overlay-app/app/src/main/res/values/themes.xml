@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.ZygiskModMenu" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/primary_blue</item>
-        <item name="colorSecondary">@color/primary_blue</item>
+    <style name="Theme.HivirtusZygiskMode" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/primary_purple</item>
+        <item name="colorSecondary">@color/primary_yellow</item>
+        <item name="colorPrimaryContainer">@color/primary_purple_dark</item>
+        <item name="colorSecondaryContainer">@color/primary_yellow_dark</item>
         <item name="android:windowBackground">@color/background_dark</item>
+    </style>
+
+    <style name="HivirtusButton" parent="Widget.Material3.Button">
+        <item name="backgroundTint">@color/primary_purple</item>
+        <item name="android:textColor">@color/primary_yellow</item>
+    </style>
+
+    <style name="HivirtusSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/primary_yellow</item>
+        <item name="trackTint">@color/switch_track</item>
     </style>
 </resources>

@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background_dark">#121212</color>
-    <color name="overlay_bg">#1E1E1E</color>
-    <color name="input_bg">#2A2A2A</color>
-    <color name="primary_blue">#2196F3</color>
+    <color name="background_dark">#0D0B14</color>
+    <color name="overlay_bg">#16122A</color>
+    <color name="input_bg">#1E1835</color>
+    <color name="primary_purple">#7B2CBF</color>
+    <color name="primary_purple_dark">#5A189A</color>
+    <color name="primary_yellow">#FFD60A</color>
+    <color name="primary_yellow_dark">#FFC300</color>
+    <color name="accent_gradient_start">#7B2CBF</color>
+    <color name="accent_gradient_end">#FFD60A</color>
     <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#B0B0B0</color>
-    <color name="text_hint">#757575</color>
-    <color name="tab_active">#2196F3</color>
-    <color name="tab_inactive">#888888</color>
-    <color name="divider">#333333</color>
+    <color name="text_secondary">#C4B5D8</color>
+    <color name="text_hint">#8B7FA8</color>
+    <color name="tab_active">#FFD60A</color>
+    <color name="tab_inactive">#8B7FA8</color>
+    <color name="tab_bg_active">#2A1F45</color>
+    <color name="divider">#3D2E66</color>
+    <color name="switch_track">#3D2E66</color>
+    <color name="bubble_purple">#7B2CBF</color>
+    <color name="bubble_yellow">#FFD60A</color>
 </resources>

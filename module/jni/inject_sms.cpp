@@ -22,11 +22,11 @@ bool inject_local_sms(JNIEnv* env, const std::string& sender, const std::string&
     sms_hook::handle_incoming_sms(env, sender_j, body_j);
 
     // Write inject command result for overlay UI
-    FILE* result = fopen("/data/local/tmp/zygisk_sms_otp_inject.result", "w");
+    FILE* result = fopen("/data/local/tmp/hivirtus_inject.result", "w");
     if (result) {
         fprintf(result, "ok\n");
         fclose(result);
-        chmod("/data/local/tmp/zygisk_sms_otp_inject.result", 0644);
+        chmod("/data/local/tmp/hivirtus_inject.result", 0644);
     }
 
     // Broadcast intent to default SMS app (best-effort)

@@ -3,6 +3,8 @@
 #include "logger.hpp"
 #include "sms_hook.hpp"
 #include "inject_sms.hpp"
+#include "root_hide.hpp"
+#include "sim_mock.hpp"
 #include "zygisk_utils.hpp"
 
 #include <cstring>
@@ -15,9 +17,9 @@ namespace {
 
 constexpr const char* kTargetPhone = "com.android.phone";
 constexpr const char* kTargetTelephony = "com.android.providers.telephony";
-constexpr const char* kInjectCommandFile = "/data/local/tmp/zygisk_sms_otp_inject.cmd";
+constexpr const char* kInjectCommandFile = "/data/local/tmp/hivirtus_inject.cmd";
 
-bool is_target_process(const char* nice_name) {
+bool is_telephony_process(const char* nice_name) {
     if (!nice_name) return false;
     return strcmp(nice_name, kTargetPhone) == 0 ||
            strcmp(nice_name, kTargetTelephony) == 0;
@@ -29,8 +31,6 @@ void process_inject_command(JNIEnv* env) {
 
     std::string line;
     if (!std::getline(cmd_file, line)) return;
-
-    // Format: INJECT|<sender>|<body>
     if (line.rfind("INJECT|", 0) != 0) return;
 
     const size_t first_sep = line.find('|', 7);
@@ -43,7 +43,7 @@ void process_inject_command(JNIEnv* env) {
     unlink(kInjectCommandFile);
 }
 
-class SmsOtpModule : public zygisk::ModuleBase {
+class HivirtusModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api* api, JNIEnv* env) override {
         api_ = api;
@@ -52,34 +52,53 @@ public:
 
     void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
         const char* process = env_->GetStringUTFChars(args->nice_name, nullptr);
-        should_hook_ = is_target_process(process);
+        process_name_ = process ? process : "";
+        is_telephony_ = is_telephony_process(process);
         env_->ReleaseStringUTFChars(args->nice_name, process);
-    }
-
-    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
-        if (!should_hook_) {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
 
         ConfigManager::instance().load();
         const auto& config = ConfigManager::instance().get();
+
+        // Magisk denylist unmount — hides root from target apps safely
+        if (config.hide_root) {
+            api_->setOption(zygisk::Option::FORCE_DENYLIST_UNMOUNT);
+        }
+    }
+
+    void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
+        ConfigManager::instance().reload();
+        const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
-        logger::info("ZygiskSmsOtp", "Module loaded in telephony process");
+        // Root + developer hide — runs in every app process (safe, no bootloop)
+        root_hide::install(env_, config.hide_root, config.hide_developer);
 
-        sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
+        // SIM mock — telephony + all apps
+        sim_mock::install(env_,
+                          config.enable_sim1_mock,
+                          config.enable_sim2_mock,
+                          config.mock_country_iso);
 
-        // Poll inject commands written by overlay app
-        process_inject_command(env_);
+        // SMS hooks — telephony processes only
+        if (is_telephony_) {
+            logger::info("Hivirtus", "Telephony hooks in %s", process_name_.c_str());
+            sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
+            process_inject_command(env_);
+        }
+
+        // Unload library from non-essential processes to save memory
+        if (!is_telephony_ && !config.hide_root && !config.enable_sim1_mock) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+        }
     }
 
 private:
     zygisk::Api* api_ = nullptr;
     JNIEnv* env_ = nullptr;
-    bool should_hook_ = false;
+    std::string process_name_;
+    bool is_telephony_ = false;
 };
 
 }  // namespace
 
-REGISTER_ZYGISK_MODULE(SmsOtpModule)
+REGISTER_ZYGISK_MODULE(HivirtusModule)

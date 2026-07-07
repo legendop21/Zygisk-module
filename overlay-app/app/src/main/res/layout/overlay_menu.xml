@@ -18,14 +18,24 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/mod_menu_title"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
+            android:textColor="@color/primary_yellow"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <ImageButton
+            android:id="@+id/btnMinimize"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginEnd="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/minimize"
+            android:src="@drawable/ic_minimize"
+            app:tint="@color/primary_yellow" />
+
+        <ImageButton
             android:id="@+id/btnClose"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/close"
             android:src="@drawable/ic_close"
@@ -43,10 +53,12 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:background="@drawable/tab_selector"
             android:gravity="center"
             android:padding="8dp"
             android:text="@string/tab_system"
-            android:textColor="@color/tab_inactive"
+            android:textColor="@color/tab_active"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
@@ -54,21 +66,25 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:background="@drawable/tab_selector"
             android:gravity="center"
             android:padding="8dp"
             android:text="@string/tab_message"
-            android:textColor="@color/tab_active"
+            android:textColor="@color/tab_inactive"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/tabForward"
+            android:id="@+id/tabTelegram"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:background="@drawable/tab_selector"
             android:gravity="center"
             android:padding="8dp"
-            android:text="@string/tab_forward"
+            android:text="@string/tab_telegram"
             android:textColor="@color/tab_inactive"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -78,8 +94,101 @@
         android:layout_marginTop="4dp"
         android:background="@color/divider" />
 
+    <!-- SYSTEM tab -->
     <LinearLayout
         android:id="@+id/panelSystem"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/system_sim_config"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchSim1Mock"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/enable_sim1_mock"
+            android:textColor="@color/text_primary" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchSim2Mock"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/enable_sim2_mock"
+            android:textColor="@color/text_primary" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/mock_country_iso"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/etCountryIso"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/input_background"
+            android:hint="in"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="12dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchNotDeveloper"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/i_am_not_developer"
+            android:textColor="@color/text_primary" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchNotRoot"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/i_am_not_root"
+            android:textColor="@color/text_primary" />
+
+        <TextView
+            android:id="@+id/tvLastOtp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/no_otp_yet"
+            android:textColor="@color/text_hint"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveSim"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/button_gradient"
+            android:text="@string/save_sim_settings"
+            android:textColor="@color/text_primary"
+            app:backgroundTint="@null" />
+    </LinearLayout>
+
+    <!-- MESSAGE tab -->
+    <LinearLayout
+        android:id="@+id/panelMessage"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -87,30 +196,8 @@
         android:visibility="gone">
 
         <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchAutoOtp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/auto_extract_otp"
-            android:textColor="@color/text_primary" />
-
-        <TextView
-            android:id="@+id/tvLastOtp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/no_otp_yet"
-            android:textColor="@color/text_secondary" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/panelMessage"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="12dp">
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchHookIncoming"
+            style="@style/HivirtusSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/hook_incoming_sms"
@@ -118,9 +205,10 @@
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchHookOutgoing"
+            style="@style/HivirtusSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:text="@string/hook_outgoing_sms"
             android:textColor="@color/text_primary" />
 
@@ -129,7 +217,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/sender_id"
-            android:textColor="@color/text_secondary" />
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
 
         <EditText
             android:id="@+id/etSenderId"
@@ -147,12 +236,13 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/message_body"
-            android:textColor="@color/text_secondary" />
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
 
         <EditText
             android:id="@+id/etMessageBody"
             android:layout_width="match_parent"
-            android:layout_height="100dp"
+            android:layout_height="90dp"
             android:background="@drawable/input_background"
             android:gravity="top"
             android:hint="@string/message_body_hint"
@@ -166,11 +256,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/inject_local_sms" />
+            android:background="@drawable/button_gradient"
+            android:text="@string/inject_local_sms"
+            android:textColor="@color/text_primary"
+            app:backgroundTint="@null" />
     </LinearLayout>
 
+    <!-- TELEGRAM tab -->
     <LinearLayout
-        android:id="@+id/panelForward"
+        android:id="@+id/panelTelegram"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -179,6 +273,7 @@
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchAutoForward"
+            style="@style/HivirtusSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/auto_forward_token"
@@ -188,26 +283,49 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="@string/forward_url"
-            android:textColor="@color/text_secondary" />
+            android:text="@string/telegram_bot_token"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
 
         <EditText
-            android:id="@+id/etForwardUrl"
+            android:id="@+id/etBotToken"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/input_background"
-            android:hint="https://your-webhook.example.com/otp"
-            android:inputType="textUri"
+            android:hint="123456:ABC-DEF..."
+            android:inputType="textPassword"
+            android:padding="12dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/telegram_chat_id"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/etChatId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/input_background"
+            android:hint="-1001234567890"
+            android:inputType="numberSigned"
             android:padding="12dp"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_hint" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSaveForward"
+            android:id="@+id/btnSaveTelegram"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/save_forward_config" />
+            android:background="@drawable/button_gradient"
+            android:text="@string/save_telegram_config"
+            android:textColor="@color/text_primary"
+            app:backgroundTint="@null" />
     </LinearLayout>
 
     <TextView
@@ -217,6 +335,6 @@
         android:gravity="center"
         android:text="@string/footer_text"
         android:textColor="@color/text_hint"
-        android:textSize="11sp" />
+        android:textSize="10sp" />
 
 </LinearLayout>

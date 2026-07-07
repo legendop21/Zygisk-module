@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(zygisk_sms_otp)
+project(hivirtus_zygisk_mode)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,6 +12,8 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     forwarder.cpp
     sms_hook.cpp
     inject_sms.cpp
+    root_hide.cpp
+    sim_mock.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

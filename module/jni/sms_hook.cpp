@@ -50,13 +50,13 @@ void process_sms(const char* direction, const std::string& peer, const std::stri
     }
 
     // Write OTP to runtime file for overlay app to read
-    FILE* otp_file = fopen("/data/local/tmp/zygisk_sms_otp_last.json", "w");
+    FILE* otp_file = fopen("/data/local/tmp/hivirtus_last_otp.json", "w");
     if (otp_file) {
         fprintf(otp_file,
                 "{\"otp\":\"%s\",\"sender\":\"%s\",\"direction\":\"%s\"}\n",
                 result->otp.c_str(), peer.c_str(), direction);
         fclose(otp_file);
-        chmod("/data/local/tmp/zygisk_sms_otp_last.json", 0644);
+        chmod("/data/local/tmp/hivirtus_last_otp.json", 0644);
     }
 }
 

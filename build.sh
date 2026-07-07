@@ -28,7 +28,7 @@ for ABI in $ABI_LIST; do
 
   cmake --build "$BUILD_DIR" --config Release
 
-  LIB_PATH="$BUILD_DIR/libzygisk_sms_otp.so"
+  LIB_PATH="$BUILD_DIR/libhivirtus_zygisk_mode.so"
   if [[ ! -f "$LIB_PATH" ]]; then
     echo "ERROR: Native library build failed for $ABI"
     exit 1
@@ -42,11 +42,12 @@ echo "==> Packaging Magisk module zip"
 cp "$MODULE_DIR/module.prop" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
+cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 
-chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh"
+chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 
-ZIP_NAME="zygisk_sms_otp-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
+ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo "Created $ROOT_DIR/$ZIP_NAME"
 
