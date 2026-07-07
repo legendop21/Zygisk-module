@@ -269,14 +269,14 @@ class OverlayService : Service() {
     private fun expandMenu() {
         menuExpanded = true
         rootBinding.floatingBubble.visibility = View.GONE
-        rootBinding.menuPanel.visibility = View.VISIBLE
+        rootBinding.menuPanel.root.visibility = View.VISIBLE
         layoutParams.flags = layoutParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
         windowManager.updateViewLayout(rootBinding.root, layoutParams)
     }
 
     private fun collapseMenu() {
         menuExpanded = false
-        rootBinding.menuPanel.visibility = View.GONE
+        rootBinding.menuPanel.root.visibility = View.GONE
         rootBinding.floatingBubble.visibility = View.VISIBLE
         layoutParams.flags = layoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         windowManager.updateViewLayout(rootBinding.root, layoutParams)
