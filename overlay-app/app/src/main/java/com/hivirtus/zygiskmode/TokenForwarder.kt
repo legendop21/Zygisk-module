@@ -70,7 +70,7 @@ class TokenForwarder(private val configManager: ConfigManager) {
                 label = label.substring(prefix.length)
             }
         }
-        label = label.trim('-', ' ')
+        label = label.trim { it == '-' || it == ' ' }
         if (label.endsWith("-S", ignoreCase = true)) {
             label = label.dropLast(2)
         }

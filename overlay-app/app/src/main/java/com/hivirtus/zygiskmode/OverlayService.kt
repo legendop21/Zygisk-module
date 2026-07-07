@@ -66,7 +66,7 @@ class OverlayService : Service() {
 
     private fun showOverlay() {
         rootBinding = OverlayRootBinding.inflate(LayoutInflater.from(this))
-        menuBinding = OverlayMenuBinding.bind(rootBinding.menuPanel)
+        menuBinding = rootBinding.menuPanel
 
         setupMenu()
         setupBubble()
