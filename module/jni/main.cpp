@@ -5,6 +5,7 @@
 #include "inject_sms.hpp"
 #include "root_hide.hpp"
 #include "sim_mock.hpp"
+#include "upi_hook.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -53,7 +54,10 @@ public:
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
         ConfigManager::instance().load();
-        if (ConfigManager::instance().get().hide_root) {
+        const auto& config = ConfigManager::instance().get();
+        is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
+
+        if (config.hide_root) {
             api_->setOption(zygisk::Option::FORCE_DENYLIST_UNMOUNT);
         }
     }
@@ -63,10 +67,8 @@ public:
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
-        // Universal root hide — all apps, all root types
         root_hide::install(env_, config);
 
-        // SIM + phone number spoof
         sim_mock::install(env_,
                           config.enable_sim1_mock,
                           config.enable_sim2_mock,
@@ -75,13 +77,17 @@ public:
                           config.mock_phone_sim1,
                           config.mock_phone_sim2);
 
+        if (is_hooked_upi_) {
+            upi_hook::install(env_, process_name_);
+        }
+
         if (is_telephony_) {
-            logger::info("Hivirtus", "Telephony hooks in %s", process_name_.c_str());
+            logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
             process_inject_command(env_);
         }
 
-        const bool needs_stay_loaded = is_telephony_ || config.hide_root ||
+        const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
                                        config.enable_sim1_mock || config.enable_phone_spoof;
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
@@ -93,6 +99,7 @@ private:
     JNIEnv* env_ = nullptr;
     std::string process_name_;
     bool is_telephony_ = false;
+    bool is_hooked_upi_ = false;
 };
 
 }  // namespace

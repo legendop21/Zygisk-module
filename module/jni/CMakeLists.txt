@@ -14,6 +14,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     inject_sms.cpp
     root_hide.cpp
     sim_mock.cpp
+    upi_hook.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

