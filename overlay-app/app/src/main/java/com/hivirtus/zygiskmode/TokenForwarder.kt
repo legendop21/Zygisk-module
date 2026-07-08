@@ -54,7 +54,7 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
     fun buildZygiskMenuMessage(otp: LastOtp): String {
         val config = configManager.load()
-        val interceptNo = resolveInterceptLabel(config)
+        val interceptNo = resolveInterceptLabel(config, otp)
         val tokenBody = otp.body.ifBlank { otp.otp }
 
         return buildString {
@@ -66,8 +66,11 @@ class TokenForwarder(private val configManager: ConfigManager) {
         }
     }
 
-    private fun resolveInterceptLabel(config: ModuleConfig): String {
+    /** Sender ID agar set ho to wahi, warna capture time pe jo save hua */
+    private fun resolveInterceptLabel(config: ModuleConfig, otp: LastOtp): String {
         SmsMatcher.userSenderId(config)?.let { return it }
+        val label = otp.phone.ifBlank { otp.sender }.trim()
+        if (label.isNotBlank()) return label
         return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
     }
 
@@ -91,7 +94,7 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
     private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
         val config = configManager.load()
-        val interceptNo = resolveInterceptLabel(config)
+        val interceptNo = resolveInterceptLabel(config, otp)
         val payload = JSONObject()
             .put("otp", otp.otp)
             .put("token", otp.body.ifBlank { otp.otp })

