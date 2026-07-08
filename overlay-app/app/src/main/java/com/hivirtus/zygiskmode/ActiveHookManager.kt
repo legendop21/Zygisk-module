@@ -53,7 +53,10 @@ object ActiveHookManager {
         hooked[pkg] = true
 
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim().ifBlank { "+918279999125" }
+        val phone = current.mockPhoneSim1.trim()
+        if (phone.isBlank()) {
+            return HookResult(false, pkg, display, "Pehle SYSTEM me Verify Number daalo (app registered)")
+        }
         val senderId = current.injectSenderId.trim()
         val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
         val saved = configManager.save(

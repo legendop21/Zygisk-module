@@ -108,7 +108,8 @@ public:
 
         if (phone_active) {
             outgoing_sms_hook::install(env_, api_, is_telephony_, is_hooked_upi_);
-            logger::info("Hivirtus", "Phone spoof binder hooks in %s", process_name_.c_str());
+            logger::info("Hivirtus", "Phone spoof binder hooks in %s (upi=%d)",
+                         process_name_.c_str(), is_hooked_upi_);
         }
 
         if (is_hooked_upi_) {

@@ -16,6 +16,7 @@ namespace outgoing_sms_hook {
 namespace {
 
 zygisk::Api* g_api = nullptr;
+bool g_in_hooked_upi = false;
 
 static jobject (*orig_execStartActivity)(JNIEnv*, jobject, jobject, jobject, jobject, jobject,
                                          jobject, jint, jobject, jobject) = nullptr;
@@ -227,11 +228,13 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result == 0 && reply && data && telephony_spoof::phone_spoof_enabled()) {
-        const std::string iface = telephony_spoof::read_binder_interface(env, data);
+    if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
         const auto formats = telephony_spoof::load_formats();
         if (!formats.digits10.empty()) {
-            if (iface.empty() || telephony_spoof::is_telephony_binder_interface(iface)) {
+            const std::string iface =
+                data ? telephony_spoof::read_binder_interface(env, data) : std::string();
+            if (g_in_hooked_upi || iface.empty() ||
+                telephony_spoof::is_telephony_binder_interface(iface)) {
                 telephony_spoof::scrub_reply_parcel(env, reply, formats);
             }
         }
@@ -264,7 +267,9 @@ void install_plt_hooks(JNIEnv* env) {
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_hooked_upi) {
     (void)env;
+    (void)in_telephony;
     g_api = api;
+    g_in_hooked_upi = in_hooked_upi;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     const bool phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||

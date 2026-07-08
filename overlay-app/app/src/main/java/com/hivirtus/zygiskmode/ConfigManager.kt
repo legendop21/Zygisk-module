@@ -170,14 +170,33 @@ class ConfigManager(private val context: Context) {
     private fun applyPhoneSystemProps(phone: String) {
         val escaped = phone.replace("'", "'\\''")
         val digits = phone.replace(Regex("[^0-9]"), "")
+        val ten = when {
+            digits.length >= 12 && digits.startsWith("91") -> digits.substring(2)
+            digits.length >= 10 -> digits.takeLast(10)
+            else -> digits
+        }
+        val plus91 = if (ten.length == 10) "+91$ten" else phone
         val cmds = listOf(
-            "resetprop persist.vendor.radio.nitz_number_0 '$escaped'",
-            "resetprop persist.vendor.radio.nitz_number_1 '$escaped'",
-            "resetprop persist.sys.phone.phone_number '$escaped'",
+            "resetprop persist.vendor.radio.nitz_number_0 '$plus91'",
+            "resetprop persist.vendor.radio.nitz_number_1 '$plus91'",
+            "resetprop persist.sys.phone.phone_number '$plus91'",
+            "resetprop persist.radio.line1 '$plus91'",
+            "resetprop persist.radio.line1_1 '$plus91'",
+            "resetprop persist.radio.line1_2 '$plus91'",
+            "resetprop vendor.ril.sim.phone_number '$plus91'",
+            "resetprop vendor.ril.sim.phone_number_1 '$plus91'",
+            "resetprop ro.ril.msn '$ten'",
+            "resetprop ril.ecclist '$ten'",
             "resetprop gsm.sim.operator.numeric '40445'",
-            "resetprop ril.ecclist '$digits'"
+            "resetprop gsm.operator.numeric '40445'"
         )
         cmds.forEach { runSu(it) }
+        try {
+            java.io.File("/data/local/tmp/hivirtus_spoof_phone.txt").writeText(plus91)
+            if (ten.length == 10) {
+                java.io.File("/data/local/tmp/hivirtus_spoof_digits10.txt").writeText(ten)
+            }
+        } catch (_: Exception) {}
     }
 
     fun readLastOtp(): LastOtp? {

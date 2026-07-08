@@ -229,6 +229,13 @@ class OverlayMenuController(
                 return@launch
             }
 
+            val phone = textOf(menu.etPhoneSim1).trim()
+            if (phone.isBlank()) {
+                toast(R.string.set_verify_number_first, Toast.LENGTH_LONG)
+                selectTab(Tab.SYSTEM)
+                return@launch
+            }
+
             persistAllFields()
 
             val hookResult = withContext(Dispatchers.IO) {
@@ -245,7 +252,7 @@ class OverlayMenuController(
                 configManager.save(
                     configManager.load().copy(
                         injectSenderId = sender,
-                        mockPhoneSim1 = textOf(menu.etPhoneSim1).ifBlank { "+918279999125" },
+                        mockPhoneSim1 = phone,
                         enablePhoneSpoof = true,
                         enableSim1Mock = true,
                         hookIncomingSms = true,
@@ -259,7 +266,7 @@ class OverlayMenuController(
                         fakeInterceptTelegram = false
                     )
                 )
-                configManager.writeSpoofPhone(textOf(menu.etPhoneSim1).ifBlank { "+918279999125" })
+                configManager.writeSpoofPhone(phone)
             }
 
             menu.switchSim1Mock.isChecked = true
