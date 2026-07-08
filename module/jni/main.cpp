@@ -38,11 +38,32 @@ bool is_messaging_process(const char* nice_name) {
            strcmp(nice_name, "com.samsung.android.messaging") == 0;
 }
 
+// Sirf daemon / manager processes — substring "zygisk"/"lsposed" se normal apps block mat karo.
 bool is_lsposed_stack(const std::string& process) {
-    if (process.find("lsposed") != std::string::npos) return true;
-    if (process.find("zygisk") != std::string::npos) return true;
-    if (process == "org.lsposed.manager") return true;
+    static const char* kSkipProcesses[] = {
+        "org.lsposed.manager",
+        "lspd",
+        "lspd64",
+        "zygiskd",
+        "zygiskd64",
+        "zygiskd32",
+        "rezygiskd",
+        "rezygiskd64",
+        nullptr
+    };
+    for (const char** name = kSkipProcesses; *name; ++name) {
+        if (process == *name) return true;
+    }
     return false;
+}
+
+void mark_zygisk_native_active() {
+    FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
+    if (f) {
+        fprintf(f, "1\n");
+        fclose(f);
+        chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0644);
+    }
 }
 
 bool is_hook_target(bool telephony, bool messaging, bool hooked_upi) {
@@ -175,6 +196,7 @@ public:
             return;
         }
 
+        mark_zygisk_native_active();
         device_spoof::install(env_, config, api_);
 
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);

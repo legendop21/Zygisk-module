@@ -9,6 +9,12 @@ class HivirtusXposedInit : IXposedHookLoadPackage {
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName == "com.hivirtus.zygiskmode") return
 
+        // Zygisk ZIP active hai to double-hook / crash avoid — sirf native module chalega.
+        if (isZygiskNativeModuleActive()) {
+            HookDebug.log(lpparam.packageName, "SKIP: Zygisk native module active")
+            return
+        }
+
         val config = runCatching { XposedConfigBridge.load(force = true) }
             .getOrElse { XposedConfigBridge.fallbackConfig() }
 
@@ -26,6 +32,17 @@ class HivirtusXposedInit : IXposedHookLoadPackage {
         } catch (t: Throwable) {
             HookDebug.log(lpparam.packageName, "HOOK FAIL: ${t.message}")
         }
+    }
+
+    private fun isZygiskNativeModuleActive(): Boolean {
+        val modDir = File("/data/adb/modules/hivirtus_zygisk_mode")
+        if (!modDir.isDirectory) return false
+        if (File(modDir, "disable").exists() || File(modDir, "remove").exists()) return false
+        val hasZygiskLib = File(modDir, "zygisk/arm64-v8a.so").exists() ||
+            File(modDir, "zygisk/armeabi-v7a.so").exists()
+        if (!hasZygiskLib) return false
+        return File("/data/local/tmp/hivirtus_zygisk_native.active").canRead() ||
+            File("/data/local/tmp/hivirtus_module_installed.flag").canRead()
     }
 
     private fun markReady() {

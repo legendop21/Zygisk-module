@@ -39,6 +39,8 @@ date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
 chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
+echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
+chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 # Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
 HIDE_ROOT=$(read_bool "hide_root")

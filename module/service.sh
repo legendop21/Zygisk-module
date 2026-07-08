@@ -5,7 +5,7 @@ MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ACTIVE_PKG="/data/local/tmp/hivirtus_active_hook_pkg.txt"
-RESTART_FLAG="/data/local/tmp/hivirtus_restart_upi.flag"
+NATIVE_FLAG="/data/local/tmp/hivirtus_zygisk_native.active"
 
 # Built-in UPI / loan packages (match native upi_registry.cpp)
 UPI_PACKAGES="
@@ -100,6 +100,8 @@ get_foreground_pkg() {
 mark_active() {
   echo "$1" > "$ACTIVE_PKG"
   chmod 644 "$ACTIVE_PKG" 2>/dev/null
+  echo "1" > "$NATIVE_FLAG"
+  chmod 644 "$NATIVE_FLAG" 2>/dev/null
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
 }
 
@@ -113,13 +115,6 @@ sync_config
     if [ -n "$FG" ] && is_upi_pkg "$FG"; then
       if [ "$FG" != "$LAST" ]; then
         mark_active "$FG"
-        # First open after boot — restart app so Zygisk hooks load in process
-        if [ ! -f "$RESTART_FLAG/$FG" ]; then
-          mkdir -p "$RESTART_FLAG" 2>/dev/null
-          touch "$RESTART_FLAG/$FG" 2>/dev/null
-          am force-stop "$FG" 2>/dev/null
-          monkey -p "$FG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-        fi
         LAST="$FG"
       fi
     fi

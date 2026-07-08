@@ -2,8 +2,8 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.22.0  "
-ui_print "   Hivirtus Menu — MotaGian style  "
+ui_print "   Hivirtus Zygisk Mode v2.24.0  "
+ui_print "   Zygisk Next + LSPosed safe  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -64,8 +64,11 @@ fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
+echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
+chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print "- Module installed successfully"
 ui_print "- Reboot → open any UPI app (KreditBee, PhonePe…)"
 ui_print "- Hook + bottom status pill auto show hoga"
+ui_print "- LSPosed me Hivirtus DISABLE rakho (ZIP-only mode)"
 ui_print "- Edit $MODPATH/config.json for Telegram token"

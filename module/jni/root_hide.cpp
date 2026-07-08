@@ -40,7 +40,7 @@ const char* kUniversalSuPaths[] = {
     "/system/bin/su", "/system/xbin/su", "/sbin/su", "/vendor/bin/su",
     "/data/local/su", "/data/local/bin/su", "/data/local/xbin/su",
     "/cache/su", "/system/app/Superuser.apk", "/system/app/SuperSU",
-    "/data/adb/modules", nullptr
+    nullptr
 };
 
 const char* kRootPackages[] = {
@@ -66,11 +66,23 @@ bool contains_keyword(const char* path, const char* keyword) {
     return path && keyword && strcasestr(path, keyword) != nullptr;
 }
 
+// Zygisk Next / LSPosed framework paths — inhe kabhi hide mat karo (crash/boot loop).
+bool is_framework_whitelist(const char* path) {
+    if (!path) return false;
+    if (contains_keyword(path, "/data/misc/zygisk")) return true;
+    if (contains_keyword(path, "/data/adb/lspd")) return true;
+    if (contains_keyword(path, "/data/adb/modules/zygisk")) return true;
+    if (contains_keyword(path, "zygisk-next") || contains_keyword(path, "rezygisk")) return true;
+    if (contains_keyword(path, "org.lsposed")) return true;
+    if (contains_keyword(path, "hivirtus_zygisk_mode")) return true;
+    return false;
+}
+
 bool is_blocked_path(const char* path) {
     if (!path || !g_config || !g_config->hide_root) return false;
+    if (is_framework_whitelist(path)) return false;
 
-    if (contains_keyword(path, "hivirtus_zygisk") ||
-        contains_keyword(path, "com.hivirtus.zygiskmode")) {
+    if (contains_keyword(path, "com.hivirtus.zygiskmode")) {
         return true;
     }
 
@@ -101,9 +113,9 @@ bool is_blocked_path(const char* path) {
     if (g_config->hide_all_root_apps) {
         if (path_in_list(path, kUniversalSuPaths)) return true;
         if (contains_keyword(path, "supersu") || contains_keyword(path, "superuser")) return true;
-        if (contains_keyword(path, "xposed") || contains_keyword(path, "lsposed")) return true;
-        if (contains_keyword(path, "zygisk") && contains_keyword(path, "module")) return true;
+        // xposed/lsposed/zygisk framework paths whitelist me hain — yahan block mat karo.
         for (const char** pkg = kRootPackages; *pkg; ++pkg) {
+            if (strcmp(*pkg, "org.lsposed.manager") == 0) continue;
             if (strstr(path, *pkg) != nullptr) return true;
         }
     }
@@ -202,7 +214,8 @@ int hook___system_property_get(const char* name, char* value) {
             strcpy(value, "0");
             return 1;
         }
-        if (strstr(name, "magisk") || strstr(name, "kernelsu") || strstr(name, "zygisk")) {
+        // zygisk props blank mat karo — Zygisk Next runtime break ho sakta hai.
+        if (strstr(name, "magisk") || strstr(name, "kernelsu")) {
             value[0] = '\0';
             return 0;
         }
