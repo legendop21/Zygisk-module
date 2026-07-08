@@ -15,6 +15,7 @@ object SmsSenderRewriter {
     private val recentKeys = mutableSetOf<String>()
 
     fun shouldRewrite(actualPeer: String, config: ModuleConfig): Boolean {
+        if (!config.overrideIncomingSender) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (senderId.isBlank()) return false
         if (!SmsMatcher.isIndianMobileNumber(actualPeer) && !SmsMatcher.isNumericSender(actualPeer)) {

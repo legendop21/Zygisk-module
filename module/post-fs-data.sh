@@ -35,6 +35,9 @@ fi
 echo "$ROOT_TYPE" > "$ROOT_TYPE_FILE"
 chmod 644 "$ROOT_TYPE_FILE"
 
+date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
+chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
+
 HIDE_ROOT=$(read_bool "hide_root")
 HIDE_DEV=$(read_bool "hide_developer")
 

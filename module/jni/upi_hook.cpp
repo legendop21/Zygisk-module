@@ -41,7 +41,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
 
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    g_bonus_ms = config.upi_timer_bonus_seconds * 1000;
+    g_bonus_ms = config.timer_bonus_for_package(package_name) * 1000;
     if (g_bonus_ms <= 0) g_bonus_ms = 20000;
 
     install_timer_hook(env, api);

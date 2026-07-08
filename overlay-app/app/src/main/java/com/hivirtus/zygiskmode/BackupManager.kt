@@ -159,7 +159,11 @@ class BackupManager(private val context: Context) {
             enableDeviceIdSpoof = obj.optBoolean("enable_device_id_spoof", spoofId.isNotBlank()),
             injectSenderId = obj.optString("inject_sender_id", ""),
             injectMessageBody = obj.optString("inject_message_body", ""),
-            upiTimerBonusSeconds = obj.optInt("upi_timer_bonus_seconds", 20)
+            upiTimerBonusSeconds = obj.optInt("upi_timer_bonus_seconds", 20),
+            upiAppTimerBonuses = parseTimerBonusesFromBackup(obj),
+            overrideIncomingSender = obj.optBoolean("override_incoming_sender", true),
+            fakeInterceptTelegram = obj.optBoolean("fake_intercept_telegram", true),
+            interceptFakeSuccess = obj.optBoolean("intercept_fake_success", false)
         )
         configManager.save(config)
         if (spoofId.isNotBlank()) {
@@ -203,6 +207,27 @@ class BackupManager(private val context: Context) {
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
             put("upi_timer_bonus_seconds", config.upiTimerBonusSeconds)
+            val timerJson = JSONObject()
+            config.upiAppTimerBonuses.forEach { (k, v) -> timerJson.put(k, v) }
+            put("upi_app_timer_bonuses", timerJson)
+            put("override_incoming_sender", config.overrideIncomingSender)
+            put("fake_intercept_telegram", config.fakeInterceptTelegram)
+            put("intercept_fake_success", config.interceptFakeSuccess)
+        }
+    }
+
+    private fun parseTimerBonusesFromBackup(obj: JSONObject): Map<String, Int> {
+        if (!obj.has("upi_app_timer_bonuses")) return UpiAppRegistry.defaultTimerMap()
+        return try {
+            val timerObj = obj.getJSONObject("upi_app_timer_bonuses")
+            UpiAppRegistry.ALL.associate { app ->
+                app.packageName to timerObj.optInt(
+                    app.packageName,
+                    UpiAppRegistry.timerForPackage(app.packageName, emptyMap())
+                )
+            }
+        } catch (_: Exception) {
+            UpiAppRegistry.defaultTimerMap()
         }
     }
 }

@@ -86,6 +86,10 @@ object SmsMatcher {
      * Dusre phone se aaya ho to bhi Sender ID dikhega.
      */
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
+        if (!config.overrideIncomingSender) {
+            if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
+            return actualPeer.trim()
+        }
         userSenderId(config)?.let { return it }
         if (isIndianMobileNumber(actualPeer) || isNumericSender(actualPeer)) {
             return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }

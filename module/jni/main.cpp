@@ -8,6 +8,7 @@
 #include "upi_hook.hpp"
 #include "device_spoof.hpp"
 
+#include <ctime>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -24,6 +25,15 @@ bool is_telephony_process(const char* nice_name) {
     if (!nice_name) return false;
     return strcmp(nice_name, kTargetPhone) == 0 ||
            strcmp(nice_name, kTargetTelephony) == 0;
+}
+
+void touch_module_heartbeat() {
+    FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
+    if (f) {
+        fprintf(f, "%ld\n", static_cast<long>(time(nullptr)));
+        fclose(f);
+        chmod("/data/local/tmp/hivirtus_module_heartbeat.txt", 0644);
+    }
 }
 
 void process_inject_command(JNIEnv* env) {
@@ -70,12 +80,13 @@ public:
 
         root_hide::install(env_, config);
 
-        const bool use_phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||
-                                     config.enable_sim2_mock || is_hooked_upi_;
+        const bool phone_active = config.enable_phone_spoof || config.enable_sim1_mock ||
+                                  config.enable_sim2_mock;
+        const bool use_phone_spoof = phone_active || (is_hooked_upi_ && config.enable_phone_spoof);
 
         sim_mock::install(env_,
                           api_,
-                          config.enable_sim1_mock || is_hooked_upi_,
+                          config.enable_sim1_mock || (is_hooked_upi_ && config.enable_phone_spoof),
                           config.enable_sim2_mock,
                           config.mock_country_iso,
                           use_phone_spoof,
@@ -99,6 +110,9 @@ public:
         const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
                                        use_phone_spoof || config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty();
+        if (is_hooked_upi_ || is_telephony_ || config.enable_phone_spoof) {
+            touch_module_heartbeat();
+        }
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }

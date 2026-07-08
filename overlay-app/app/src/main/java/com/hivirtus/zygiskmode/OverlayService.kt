@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 class OverlayService : Service() {
 
     private val configManager by lazy { ConfigManager(this) }
-    private val tokenForwarder by lazy { TokenForwarder(configManager) }
+    private val tokenForwarder by lazy { TokenForwarder(configManager, this) }
     private val bubbleManager by lazy { FloatingBubbleManager(this) }
     private var pollJob: Job? = null
     private var lastForwardedKey: String? = null

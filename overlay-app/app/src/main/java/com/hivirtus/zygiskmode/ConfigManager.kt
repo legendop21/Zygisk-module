@@ -33,7 +33,11 @@ data class ModuleConfig(
     val enableDeviceIdSpoof: Boolean = false,
     val injectSenderId: String = "",
     val injectMessageBody: String = "",
-    val upiTimerBonusSeconds: Int = 20
+    val upiTimerBonusSeconds: Int = 20,
+    val upiAppTimerBonuses: Map<String, Int> = UpiAppRegistry.defaultTimerMap(),
+    val overrideIncomingSender: Boolean = true,
+    val fakeInterceptTelegram: Boolean = true,
+    val interceptFakeSuccess: Boolean = false
 )
 
 data class LastOtp(
@@ -229,10 +233,31 @@ class ConfigManager(private val context: Context) {
                 enableDeviceIdSpoof = json.optBoolean("enable_device_id_spoof", false),
                 injectSenderId = json.optString("inject_sender_id", ""),
                 injectMessageBody = json.optString("inject_message_body", ""),
-                upiTimerBonusSeconds = json.optInt("upi_timer_bonus_seconds", 20)
+                upiTimerBonusSeconds = json.optInt("upi_timer_bonus_seconds", 20),
+                upiAppTimerBonuses = parseTimerBonuses(json),
+                overrideIncomingSender = json.optBoolean("override_incoming_sender", true),
+                fakeInterceptTelegram = json.optBoolean("fake_intercept_telegram", true),
+                interceptFakeSuccess = json.optBoolean("intercept_fake_success", false)
             )
         } catch (_: Exception) {
             ModuleConfig()
+        }
+    }
+
+    private fun parseTimerBonuses(json: JSONObject): Map<String, Int> {
+        if (!json.has("upi_app_timer_bonuses")) return UpiAppRegistry.defaultTimerMap()
+        return try {
+            val obj = json.getJSONObject("upi_app_timer_bonuses")
+            val result = mutableMapOf<String, Int>()
+            UpiAppRegistry.ALL.forEach { app ->
+                result[app.packageName] = obj.optInt(
+                    app.packageName,
+                    UpiAppRegistry.timerForPackage(app.packageName, emptyMap())
+                )
+            }
+            result
+        } catch (_: Exception) {
+            UpiAppRegistry.defaultTimerMap()
         }
     }
 
@@ -256,6 +281,11 @@ class ConfigManager(private val context: Context) {
             try {
                 hookedJson.put(pkg, enabled)
             } catch (_: Exception) {}
+        }
+
+        val timerJson = JSONObject()
+        config.upiAppTimerBonuses.forEach { (pkg, sec) ->
+            try { timerJson.put(pkg, sec) } catch (_: Exception) {}
         }
 
         return JSONObject().apply {
@@ -287,6 +317,10 @@ class ConfigManager(private val context: Context) {
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
             put("upi_timer_bonus_seconds", config.upiTimerBonusSeconds)
+            put("upi_app_timer_bonuses", timerJson)
+            put("override_incoming_sender", config.overrideIncomingSender)
+            put("fake_intercept_telegram", config.fakeInterceptTelegram)
+            put("intercept_fake_success", config.interceptFakeSuccess)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }
     }

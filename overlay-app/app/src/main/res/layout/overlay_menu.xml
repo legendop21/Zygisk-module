@@ -387,6 +387,41 @@
             android:text="@string/hook_outgoing_sms"
             android:textColor="@color/text_primary" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchOverrideIncomingSender"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/override_incoming_sender"
+            android:textColor="@color/text_primary" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchInterceptFakeSuccess"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/intercept_fake_success"
+            android:textColor="@color/text_primary" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/intercept_fake_success_warn"
+            android:textColor="@color/accent_red"
+            android:textSize="10sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchAutoExtractOtp"
+            style="@style/HivirtusSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/auto_extract_otp"
+            android:textColor="@color/text_primary" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -543,6 +578,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/auto_forward_token"
+                android:textColor="@color/text_primary" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchFakeInterceptTg"
+                style="@style/HivirtusSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/fake_intercept_telegram"
                 android:textColor="@color/text_primary" />
 
             <TextView

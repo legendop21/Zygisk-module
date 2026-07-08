@@ -48,6 +48,7 @@ bool should_spoof_property_key(const std::string& key) {
     if (lower.find("msisdn") != std::string::npos) return true;
     if (lower.find("subscriber") != std::string::npos) return true;
     if (lower.find("simnum") != std::string::npos) return true;
+    if (lower.find("phone_number") != std::string::npos) return true;
     if (lower.find("operator.numeric") != std::string::npos) return true;
     if (lower.find("operator.alpha") != std::string::npos) return true;
     if (lower.find("icc_id") != std::string::npos) return true;

