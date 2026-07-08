@@ -1,14 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.HivirtusZygiskMode" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/menu_blue</item>
-        <item name="colorSecondary">@color/menu_blue_dark</item>
-        <item name="colorPrimaryContainer">@color/menu_blue_dark</item>
+        <item name="colorPrimary">@color/gold_primary</item>
+        <item name="colorOnPrimary">@color/button_text_on_gold</item>
+        <item name="colorSecondary">@color/gold_dark</item>
+        <item name="colorPrimaryContainer">@color/tab_bg_active</item>
+        <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:statusBarColor">@color/background_dark</item>
+        <item name="android:navigationBarColor">@color/background_dark</item>
     </style>
 
     <style name="HivirtusSwitch" parent="Widget.MaterialComponents.CompoundButton.Switch">
-        <item name="thumbTint">@color/menu_blue</item>
+        <item name="thumbTint">@color/gold_primary</item>
         <item name="trackTint">@color/switch_track</item>
+    </style>
+
+    <style name="HivirtusGoldButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:background">@drawable/button_gradient</item>
+        <item name="android:textColor">@color/button_text_on_gold</item>
+        <item name="backgroundTint">@null</item>
     </style>
 </resources>

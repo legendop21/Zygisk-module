@@ -40,7 +40,7 @@ class OverlayActivity : AppCompatActivity() {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(Color.parseColor("#CC12151C"))
+                setBackgroundColor(Color.parseColor("#CC000000"))
                 setOnClickListener { minimizeMenu() }
             }
 

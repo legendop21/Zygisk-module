@@ -19,7 +19,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/close"
             android:src="@drawable/ic_close"
-            app:tint="@color/text_primary" />
+            app:tint="@color/gold_primary" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -53,7 +53,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="@string/dev_credit"
-                android:textColor="@color/menu_blue"
+                android:textColor="@color/gold_primary"
                 android:textSize="10sp"
                 android:textStyle="italic" />
         </LinearLayout>
@@ -261,7 +261,7 @@
                 android:layout_marginTop="16dp"
                 android:background="@drawable/button_gradient"
                 android:text="@string/save_sim_settings"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/button_text_on_gold"
                 app:backgroundTint="@null" />
 
             <View
@@ -634,7 +634,7 @@
                 android:layout_marginTop="8dp"
                 android:background="@drawable/button_gradient"
                 android:text="@string/test_telegram"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/button_text_on_gold"
                 app:backgroundTint="@null" />
 
             <com.google.android.material.button.MaterialButton
@@ -644,7 +644,7 @@
                 android:layout_marginTop="12dp"
                 android:background="@drawable/button_gradient"
                 android:text="@string/save_telegram_config"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/button_text_on_gold"
                 app:backgroundTint="@null" />
         </LinearLayout>
     </ScrollView>

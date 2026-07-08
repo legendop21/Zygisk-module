@@ -5,55 +5,47 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
 
-    <!-- Black background -->
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M256,8 C398,8 504,114 504,256 C504,398 398,504 256,504 C114,504 8,398 8,256 C8,114 114,8 256,8 Z" />
 
-    <!-- Red glow ring -->
     <path
         android:fillColor="#00000000"
         android:pathData="M256,60 m-160,0 a160,160 0 1,1 320,0 a160,160 0 1,1 -320,0"
-        android:strokeColor="#FF2233"
+        android:strokeColor="#FFD700"
         android:strokeWidth="18" />
 
-    <!-- Inner sharingan circle -->
     <path
-        android:fillColor="#CC0000"
+        android:fillColor="#C9A84C"
         android:pathData="M256,100 m-120,0 a120,120 0 1,1 240,0 a120,120 0 1,1 -240,0" />
 
-    <!-- Tomoe 1 -->
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M256,145 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M256,118 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0" />
 
-    <!-- Tomoe 2 -->
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M186,290 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M200,268 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0" />
 
-    <!-- Tomoe 3 -->
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M326,290 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M312,268 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0" />
 
-    <!-- Center pupil -->
     <path
-        android:fillColor="#0A0A0A"
+        android:fillColor="#000000"
         android:pathData="M256,256 m-35,0 a35,35 0 1,1 70,0 a35,35 0 1,1 -70,0" />
 
-    <!-- HIVIRTUS bar -->
     <path
-        android:fillColor="#2B60FF"
+        android:fillColor="#FFD700"
         android:pathData="M80,430 L432,430 L432,478 L80,478 Z" />
 
 </vector>
