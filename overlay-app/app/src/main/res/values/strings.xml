@@ -69,7 +69,6 @@
     <string name="module_retry_check">Module Check (Retry)</string>
     <string name="module_exit_app">Exit App</string>
     <string name="fake_number_on">Fake Number ON: %1$s</string>
-    <string name="mock_phone_sim1">Verify Number (app registered — SIM ka nahi):</string>
     <string name="mock_phone_sim2">Fake Number SIM 2:</string>
     <string name="save_sim_settings">Save SIM Settings</string>
     <string name="sim_settings_saved">SIM settings saved — KreditBee/UPI band karke dubara kholo</string>
