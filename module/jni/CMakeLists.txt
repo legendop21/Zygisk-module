@@ -8,18 +8,6 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     main.cpp
     config.cpp
     logger.cpp
-    otp_parser.cpp
-    forwarder.cpp
-    sms_hook.cpp
-    inject_sms.cpp
-    sender_spoof.cpp
-    root_hide.cpp
-    sim_mock.cpp
-    upi_hook.cpp
-    telephony_spoof.cpp
-    outgoing_sms_hook.cpp
-    device_spoof.cpp
-    zygisk_utils.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

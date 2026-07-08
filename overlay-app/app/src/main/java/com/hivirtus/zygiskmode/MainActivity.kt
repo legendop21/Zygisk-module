@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -31,30 +32,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val smsPermissions = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        updatePermissionStatus()
-        val granted = result[Manifest.permission.READ_SMS] == true &&
-            result[Manifest.permission.RECEIVE_SMS] == true
-        if (granted && pendingStart) {
-            openOverlayMenu()
-        } else if (pendingStart && !granted) {
-            Toast.makeText(this, R.string.grant_sms_permission, Toast.LENGTH_LONG).show()
-            pendingStart = false
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         if (ModuleGate.blockIfNeeded(this)) return
-
-        if (!LicenseManager.isLicensed(this)) {
-            startActivity(Intent(this, LicenseActivity::class.java))
-            finish()
-            return
-        }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -69,15 +50,6 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startActivity(PermissionHelper.notificationSettingsIntent(this))
             }
-        }
-
-        binding.btnGrantSms.setOnClickListener {
-            smsPermissions.launch(
-                arrayOf(
-                    Manifest.permission.READ_SMS,
-                    Manifest.permission.RECEIVE_SMS
-                )
-            )
         }
 
         binding.btnMiuiAutostart.setOnClickListener {
@@ -108,16 +80,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 return@setOnClickListener
             }
-            if (!PermissionHelper.smsReady(this)) {
-                pendingStart = true
-                smsPermissions.launch(
-                    arrayOf(
-                        Manifest.permission.READ_SMS,
-                        Manifest.permission.RECEIVE_SMS
-                    )
-                )
-                return@setOnClickListener
-            }
             if (!PermissionHelper.canDrawOverlay(this)) {
                 pendingStart = true
                 startActivity(PermissionHelper.overlaySettingsIntent(this))
@@ -133,6 +95,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.miuiSection.isVisible = PermissionHelper.isXiaomiFamily()
+        binding.tvSmsStatus.visibility = View.GONE
+        binding.btnGrantSms.visibility = View.GONE
+        binding.tvVipStatus.text = getString(R.string.edu_open_access)
         updatePermissionStatus()
     }
 
@@ -140,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePermissionStatus()
         if (pendingStart && PermissionHelper.hasNotificationPermission(this) &&
-            PermissionHelper.smsReady(this) && PermissionHelper.canDrawOverlay(this)
+            PermissionHelper.canDrawOverlay(this)
         ) {
             pendingStart = false
             openOverlayMenu()
@@ -152,22 +117,16 @@ class MainActivity : AppCompatActivity() {
         val notifOk = PermissionHelper.hasNotificationPermission(this)
         val batteryOk = PermissionHelper.isBatteryUnrestricted(this)
 
-        val smsOk = PermissionHelper.smsReady(this)
-
         binding.tvOverlayStatus.text = getString(
             if (overlayOk) R.string.permission_overlay_ok else R.string.permission_overlay_missing
         )
         binding.tvNotificationStatus.text = getString(
             if (notifOk) R.string.permission_notification_ok else R.string.permission_notification_missing
         )
-        binding.tvSmsStatus.text = getString(
-            if (smsOk) R.string.permission_sms_ok else R.string.permission_sms_missing
-        )
         binding.tvMiuiStatus.text = getString(
             if (batteryOk) R.string.miui_battery_ok else R.string.miui_battery_missing
         )
-        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.smsReady(this) &&
-            PermissionHelper.canDrawOverlay(this)
+        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.canDrawOverlay(this)
     }
 
     private fun openOverlayMenu() {
@@ -192,9 +151,6 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.hook_start_not_loaded)
                 }
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
-            }
-            if (!PermissionHelper.canDrawOverlay(this)) {
-                Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             Toast.makeText(
