@@ -96,6 +96,7 @@
     <string name="sender_id">Sender ID:</string>
     <string name="message_body">Message Body:</string>
     <string name="message_body_hint">Type your message body (e.g. Your verification OTP code is 918204)</string>
+    <string name="message_body_hint_short">SMS body (e.g. YESPRODUPI / OTP 918204)</string>
     <string name="inject_local_sms">Inject Local SMS</string>
     <string name="telegram_bot_token">Telegram Bot Token:</string>
     <string name="telegram_chat_id">Telegram Chat ID:</string>
