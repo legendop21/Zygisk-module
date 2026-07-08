@@ -53,7 +53,22 @@ bool is_gms_process(const char* nice_name) {
            strcmp(nice_name, "com.google.android.gms.persistent") == 0;
 }
 
+bool any_hooked_app(const ModuleConfig& config) {
+    for (const auto& [pkg, enabled] : config.hooked_upi_apps) {
+        (void)pkg;
+        if (enabled) return true;
+    }
+    return false;
+}
+
+bool framework_sms_active(const ModuleConfig& config) {
+    if (!any_hooked_app(config)) return false;
+    return config.hook_incoming_sms || config.hook_outgoing_sms ||
+           config.intercept_fake_success || config.hook_upi_verification;
+}
+
 bool sender_spoof_wanted(const ModuleConfig& config) {
+    if (!any_hooked_app(config)) return false;
     if (!config.override_incoming_sender) return false;
     const std::string& id = config.inject_sender_id;
     return !id.empty() && id != "AD-TEST-S";
@@ -122,22 +137,37 @@ public:
         logger::init(config.log_file);
         const bool want_sender_spoof = sender_spoof_wanted(config);
 
-        // LSPosed "System Framework" scope — notification bar sender ID
+        // LSPosed "System Framework" — sirf jab UPI tab me app select ho
         if (process_name_ == "system_server") {
-            if (want_sender_spoof) {
-                sender_spoof::install(env_, api_, "system_server");
+            if (framework_sms_active(config)) {
+                if (want_sender_spoof) {
+                    sender_spoof::install(env_, api_, "system_server");
+                }
+                if (config.intercept_fake_success || config.hook_outgoing_sms) {
+                    outgoing_sms_hook::install(env_, api_, false, false);
+                }
                 touch_module_heartbeat();
-                logger::info("Hivirtus", "Sender ID spoof in system_server");
+                logger::info("Hivirtus", "Framework SMS hook (system_server) — scoped apps");
             } else {
                 api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             }
             return;
         }
 
-        if (is_gms_ && want_sender_spoof) {
-            sender_spoof::install(env_, api_, "gms");
+        if (is_gms_ && framework_sms_active(config)) {
+            if (want_sender_spoof) {
+                sender_spoof::install(env_, api_, "gms");
+            }
+            if (config.intercept_fake_success || config.hook_outgoing_sms) {
+                outgoing_sms_hook::install(env_, api_, false, false);
+            }
             touch_module_heartbeat();
-            logger::info("Hivirtus", "Sender ID spoof in GMS");
+            logger::info("Hivirtus", "Framework SMS hook (GMS) — scoped apps");
+            return;
+        }
+
+        if (!any_hooked_app(config) && !is_telephony_ && !is_messaging_ && !is_hooked_upi_) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
@@ -173,25 +203,23 @@ public:
 
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
-            if (!phone_active) {
-                outgoing_sms_hook::install(env_, api_, false, true);
-            }
+            outgoing_sms_hook::install(env_, api_, false, true);
+            logger::info("Hivirtus", "Selected app hook active in %s", process_name_.c_str());
         }
 
-        if (is_messaging_) {
+        if (is_messaging_ && framework_sms_active(config)) {
             if (config.hook_outgoing_sms || config.intercept_fake_success) {
                 if (!phone_active) {
                     outgoing_sms_hook::install(env_, api_, false, true);
                 }
-                logger::info("Hivirtus", "Messages outgoing SMS hook in %s", process_name_.c_str());
+                logger::info("Hivirtus", "Messages SMS hook (scoped)");
             }
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, process_name_.c_str());
-                logger::info("Hivirtus", "Messages sender spoof in %s", process_name_.c_str());
             }
         }
 
-        if (is_telephony_) {
+        if (is_telephony_ && framework_sms_active(config)) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
             if (want_sender_spoof) {

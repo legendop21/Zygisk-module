@@ -46,7 +46,8 @@
     <string name="select_all_upi">Select All Apps</string>
     <string name="deselect_all_upi">Deselect All</string>
     <string name="save_upi_hooks">Save UPI Hooks</string>
-    <string name="upi_hooks_saved">UPI hooks saved — ab START HOOK dabao</string>
+    <string name="upi_framework_scope_hint">Save = LSPosed jaisa: sirf selected app + Framework/Messages/GMS auto hook</string>
+    <string name="upi_hooks_saved">✅ Saved — app hooked + Framework active. Reboot, phir START HOOK.</string>
     <string name="select_upi_app_first">Pehle UPI tab me kam se kam 1 app select karo</string>
     <string name="upi_selected_count">%1$d apps selected for hook</string>
     <string name="system_sim_config">System SIM Card Configuration</string>

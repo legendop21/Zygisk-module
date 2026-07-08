@@ -112,21 +112,12 @@ class OverlayMenuController(
                 if (showToast) toast(R.string.select_upi_app_first, Toast.LENGTH_LONG)
                 return@launch
             }
-            val saved = withContext(Dispatchers.IO) {
-                val current = configManager.load()
-                configManager.saveAndFlushSync(
-                    current.copy(
-                        hookedUpiApps = selection,
-                        hookUpiVerification = menu.switchHookUpiVerification.isChecked
-                    )
-                )
+            withContext(Dispatchers.IO) {
+                FrameworkHookHelper.activateScope(appContext, configManager, selection)
             }
             updateUpiSelectedCount()
             if (showToast) {
-                toast(
-                    if (saved) R.string.upi_hooks_saved else R.string.save_failed,
-                    Toast.LENGTH_SHORT
-                )
+                toast(R.string.upi_hooks_saved, Toast.LENGTH_LONG)
             }
         }
     }

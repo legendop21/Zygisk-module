@@ -47,7 +47,7 @@ bool body_has_verify_token(const std::string& body) {
     static const char* keywords[] = {
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY",
         "SNAPMINT", "KREDIT", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
-        "HEROAXIS", "AXIS", nullptr};
+        "HEROAXIS", "AXIS", "AIRTEL", "AIRBNK", "MYAIRTEL", nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
         if (upper.find(*kw) != std::string::npos) return true;
     }
