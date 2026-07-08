@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
-    <string name="mod_menu_title">Virtus Menu</string>
+    <string name="mod_menu_title">Hivirtus Menu</string>
     <string name="menu_subtitle"></string>
     <string name="main_description">Start dabao — bubble menu khulega. Koi UPI app kholo, auto hook ON.</string>
     <string name="tab_message">MESSAGES</string>

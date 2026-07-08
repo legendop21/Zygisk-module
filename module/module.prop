@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Mode
-version=v2.21.0
-versionCode=67
+version=v2.22.0
+versionCode=68
 author=@hivirtus
 description=Zygisk Base — auto UPI hook, native bubble, Android 9-16. No APK / LSPosed.
 zygisk=1

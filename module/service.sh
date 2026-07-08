@@ -106,7 +106,7 @@ mark_active() {
 notify_hook() {
   pkg="$1"
   # Heads-up style notification via cmd (Android 9+)
-  cmd notification post -t "Virtus Zygisk" "hivirtus_hook" "Hook active: $pkg" 2>/dev/null || true
+  cmd notification post -t "Hivirtus" "hivirtus_hook" "Hivirtus hook active: $pkg" 2>/dev/null || true
 }
 
 sync_config

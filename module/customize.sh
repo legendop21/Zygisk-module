@@ -2,8 +2,8 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.21.0  "
-ui_print "   Zygisk Base — No APK needed  "
+ui_print "   Hivirtus Zygisk Mode v2.22.0  "
+ui_print "   Hivirtus Menu — MotaGian style  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
