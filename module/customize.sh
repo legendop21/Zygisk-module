@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.12.4  "
+ui_print "   Hivirtus Zygisk Mode v2.13.0  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 

@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
     <string name="mod_menu_title">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
+    <string name="menu_subtitle">Open app → Start Hook → verify SMS Telegram pe</string>
     <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
     <string name="start_overlay">Start Zygisk Hooks</string>
     <string name="stop_overlay">Stop Floating Menu</string>
@@ -139,6 +140,11 @@
     <string name="device_id_changed">Device ID change ho gayi — apps restart karein</string>
     <string name="vip_active">VIP Active</string>
     <string name="start_zygisk_hooks">▶ START ZYGISK HOOKS</string>
+    <string name="start_hook_foreground">▶ START HOOK (Open App)</string>
+    <string name="start_hook_app_success">✅ Start Successful — %1$s Hook Ready\nVerify SMS → Telegram active</string>
+    <string name="active_hook_none">Hooked App: None — pehle app kholo</string>
+    <string name="active_hook_app">Hooked App: %1$s ✅</string>
+    <string name="telegram_menu_hint">Telegram bot — verify SMS yahan forward hoga</string>
     <string name="start_hook_success">✅ Start Successful — All Hooks Ready\nZygisk injected · SMS · UPI · Root Hide · Device ID active</string>
     <string name="hook_status_idle">Tap START to activate Zygisk hooks</string>
     <string name="hook_status_ready">✅ Hook Ready — Zygisk Active</string>

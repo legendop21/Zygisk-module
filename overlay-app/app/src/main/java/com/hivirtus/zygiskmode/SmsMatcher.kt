@@ -10,7 +10,7 @@ object SmsMatcher {
     private val PLACEHOLDER_SENDER = "AD-TEST-S"
 
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
-        UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
+        UpiAppRegistry.enabledAppsFromConfig(config.hookedUpiApps)
 
     fun userSenderId(config: ModuleConfig): String? {
         val id = config.injectSenderId.trim()
@@ -48,9 +48,15 @@ object SmsMatcher {
      * YESPRO tabhi jab YesPay hook ON ho. Snapmint tabhi jab Snapmint hook ON ho.
      */
     fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
-        if (body.isBlank() || peer.isBlank()) return false
-        if (enabledHookedApps(config).isEmpty()) return false
-        return matchedHookedApp(config, peer, body) != null
+        if (body.isBlank()) return false
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return false
+        matchedHookedApp(config, peer, body)?.let { return true }
+        val active = ActiveHookManager.readActivePackage()
+        if (active != null && hooked.any { it.packageName == active }) {
+            return extractOtpDigits(body) != null || body.length >= 4
+        }
+        return false
     }
 
     fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {

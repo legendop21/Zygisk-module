@@ -75,6 +75,21 @@ object UpiAppRegistry {
     fun defaultHookMap(): Map<String, Boolean> =
         ALL.associate { it.packageName to false }
 
+    fun findByPackage(packageName: String): UpiApp? =
+        ALL.firstOrNull { it.packageName == packageName }
+
+    fun displayNameFor(packageName: String): String {
+        return findByPackage(packageName)?.displayName
+            ?: packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+    }
+
+    fun enabledAppsFromConfig(hooked: Map<String, Boolean>): List<UpiApp> {
+        val active = hooked.filter { it.value }.keys
+        return active.map { pkg ->
+            findByPackage(pkg) ?: UpiApp(pkg, displayNameFor(pkg), listOf("OTP", "UPI", "VERIFY"))
+        }
+    }
+
     fun matchAmong(apps: List<UpiApp>, sender: String, body: String): UpiApp? {
         if (apps.isEmpty()) return null
         matchAmongBySender(apps, sender)?.let { return it }
