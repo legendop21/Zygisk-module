@@ -7,10 +7,14 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
-import android.util.DisplayMetrics
+import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -40,23 +44,62 @@ class OverlayService : Service() {
     private var pollJob: Job? = null
     private var lastForwardedKey: String? = null
     private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
+    private var menuOpen = false
+    private var upiLoaded = false
+
+    private var initialX = 0
+    private var initialY = 0
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
+    private var isDragging = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        if (!LicenseManager.isLicensed(this)) {
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
             stopSelf()
-            return
+            return START_NOT_STICKY
         }
+
+        if (!LicenseManager.isLicensed(this)) {
+            Toast.makeText(this, R.string.license_required, Toast.LENGTH_SHORT).show()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         try {
             startForeground(NOTIFICATION_ID, createNotification())
-            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-            showOverlay()
-            startOtpPolling()
         } catch (e: Exception) {
+            Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show()
             stopSelf()
+            return START_NOT_STICKY
         }
+
+        if (rootBinding == null) {
+            try {
+                showOverlay()
+                startOtpPolling()
+                Handler(Looper.getMainLooper()).postDelayed({ openMenu() }, 300)
+            } catch (e: Exception) {
+                Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        } else if (intent?.action == ACTION_OPEN) {
+            openMenu()
+        }
+
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -64,30 +107,116 @@ class OverlayService : Service() {
         try {
             rootBinding?.root?.let { windowManager?.removeView(it) }
         } catch (_: Exception) {}
+        rootBinding = null
+        menuBinding = null
         super.onDestroy()
     }
 
     private fun showOverlay() {
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val root = OverlayRootBinding.inflate(LayoutInflater.from(this))
         val menu = root.menuPanel
         rootBinding = root
         menuBinding = menu
 
         setupMenu(menu)
+        setupBubble(root)
 
-        val metrics: DisplayMetrics = resources.displayMetrics
         layoutParams = WindowManager.LayoutParams(
-            metrics.widthPixels,
-            metrics.heightPixels,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.CENTER
+            gravity = Gravity.TOP or Gravity.START
+            x = 24
+            y = 280
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
         }
 
         windowManager?.addView(root.root, layoutParams)
+        collapseMenu()
+    }
+
+    private fun setupBubble(root: OverlayRootBinding) {
+        root.floatingBubble.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    initialX = layoutParams?.x ?: 0
+                    initialY = layoutParams?.y ?: 0
+                    initialTouchX = event.rawX
+                    initialTouchY = event.rawY
+                    isDragging = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - initialTouchX).toInt()
+                    val dy = (event.rawY - initialTouchY).toInt()
+                    if (dx * dx + dy * dy > 36) isDragging = true
+                    root.floatingBubble.translationX = dx.toFloat()
+                    root.floatingBubble.translationY = dy.toFloat()
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!isDragging) {
+                        if (menuOpen) collapseMenu() else openMenu()
+                    } else {
+                        root.floatingBubble.translationX = root.floatingBubble.translationX
+                        root.floatingBubble.translationY = root.floatingBubble.translationY
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        root.dimBackground.setOnClickListener { collapseMenu() }
+    }
+
+    private fun openMenu() {
+        val root = rootBinding ?: return
+        val menu = menuBinding ?: return
+        menuOpen = true
+        root.fullScreenLayer.visibility = View.VISIBLE
+        root.floatingBubble.visibility = View.GONE
+        updateWindowExpanded(true)
+        if (!upiLoaded) {
+            setupUpiApps(menu, configManager.load())
+            upiLoaded = true
+        }
+    }
+
+    private fun collapseMenu() {
+        val root = rootBinding ?: return
+        menuOpen = false
+        root.dimBackground.visibility = View.GONE
+        root.menuPanel.root.visibility = View.GONE
+        root.floatingBubble.visibility = View.VISIBLE
+        root.floatingBubble.translationX = 0f
+        root.floatingBubble.translationY = 0f
+        updateWindowExpanded(false)
+    }
+
+    private fun updateWindowExpanded(expanded: Boolean) {
+        val lp = layoutParams ?: return
+        val root = rootBinding ?: return
+        if (expanded) {
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT
+            lp.flags = lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            lp.x = 0
+            lp.y = 0
+        } else {
+            lp.width = WindowManager.LayoutParams.WRAP_CONTENT
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+            lp.flags = lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.x = 24
+            lp.y = 280
+        }
+        windowManager?.updateViewLayout(root.root, lp)
     }
 
     private fun setupMenu(menu: OverlayMenuBinding) {
@@ -114,14 +243,13 @@ class OverlayService : Service() {
         menu.switchAutoForward.isChecked = config.autoForwardToken
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
+        menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
 
-        menu.btnClose.setOnClickListener { stopSelf() }
+        menu.btnClose.setOnClickListener { collapseMenu() }
 
         menu.tabSystem.setOnClickListener { selectTab(menu, Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(menu, Tab.MESSAGE) }
-        menu.tabTelegram.setOnClickListener { selectTab(menu, Tab.TELEGRAM) }
-
-        setupUpiApps(menu, config)
+        menu.tabTelegram.setOnClickListener { selectTab(menu, Tab.MORE) }
 
         menu.btnSaveSim.setOnClickListener {
             val updated = configManager.load().copy(
@@ -239,14 +367,12 @@ class OverlayService : Service() {
             Toast.makeText(this, R.string.upi_hooks_saved, Toast.LENGTH_SHORT).show()
         }
 
-        selectTab(menu, Tab.SYSTEM)
+        selectTab(menu, Tab.MESSAGE)
     }
 
     private fun setupUpiApps(menu: OverlayMenuBinding, config: ModuleConfig) {
-        menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
         menu.upiAppsContainer.removeAllViews()
         upiAppSwitches.clear()
-
         UpiAppRegistry.ALL.forEach { app ->
             val switch = SwitchMaterial(this).apply {
                 text = app.displayName
@@ -267,12 +393,12 @@ class OverlayService : Service() {
         menu.tvDeviceId.text = getString(R.string.device_id_label, displayId)
     }
 
-    private enum class Tab { SYSTEM, MESSAGE, TELEGRAM }
+    private enum class Tab { SYSTEM, MESSAGE, MORE }
 
     private fun selectTab(menu: OverlayMenuBinding, tab: Tab) {
-        menu.panelSystem.visibility = if (tab == Tab.SYSTEM) android.view.View.VISIBLE else android.view.View.GONE
-        menu.panelMessage.visibility = if (tab == Tab.MESSAGE) android.view.View.VISIBLE else android.view.View.GONE
-        menu.panelTelegram.visibility = if (tab == Tab.TELEGRAM) android.view.View.VISIBLE else android.view.View.GONE
+        menu.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE
+        menu.panelMessage.visibility = if (tab == Tab.MESSAGE) View.VISIBLE else View.GONE
+        menu.panelTelegram.visibility = if (tab == Tab.MORE) View.VISIBLE else View.GONE
 
         val active = ContextCompat.getColor(this, R.color.tab_active)
         val inactive = ContextCompat.getColor(this, R.color.tab_inactive)
@@ -280,7 +406,7 @@ class OverlayService : Service() {
         listOf(
             menu.tabSystem to Tab.SYSTEM,
             menu.tabMessage to Tab.MESSAGE,
-            menu.tabTelegram to Tab.TELEGRAM
+            menu.tabTelegram to Tab.MORE
         ).forEach { (view, t) ->
             view.isSelected = tab == t
             view.setTextColor(if (tab == t) active else inactive)
@@ -323,15 +449,25 @@ class OverlayService : Service() {
             )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
+
+        val openIntent = Intent(this, OverlayService::class.java).setAction(ACTION_OPEN)
+        val pending = android.app.PendingIntent.getService(
+            this, 0, openIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, channelId)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.overlay_running))
+            .setContentTitle(getString(R.string.mod_menu_title))
+            .setContentText(getString(R.string.tap_bubble_hint))
             .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(pending)
             .setOngoing(true)
             .build()
     }
 
     companion object {
+        const val ACTION_STOP = "com.hivirtus.zygiskmode.STOP"
+        const val ACTION_OPEN = "com.hivirtus.zygiskmode.OPEN"
         private const val NOTIFICATION_ID = 2001
     }
 }
