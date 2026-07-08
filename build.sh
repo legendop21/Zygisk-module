@@ -75,6 +75,5 @@ ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cu
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. Sirf YE EK ZIP flash karo (Magisk → Modules)."
-echo "    Zygisk setting ON → reboot → UPI app kholo."
-echo "    Alag Zygisk Next / LSPosed / APK zip ki zaroorat NAHI."
+echo "==> Done. hivirtus-zygisk-hook ZIP — Zygisk se through run hoga."
+echo "    Zygisk ON → flash zip → reboot → UPI app → MotaGian gold pill."
