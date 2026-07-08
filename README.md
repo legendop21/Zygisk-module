@@ -1,4 +1,4 @@
-# Hivirtus Zygisk Mode v2.8.0
+# Hivirtus Zygisk Mode v2.9.0
 
 ## UPI Apps Hook + Telegram Token (Screenshot Format)
 
@@ -24,9 +24,17 @@ ppuEHZ0DauJc0g4xm-G7M)4CxwMb&uZJx?jJp +919211228947
 Magisk | KernelSU | KernelSU Next | APatch | SukiSU Ultra
 
 ### Install
+**Ready zip (no build needed):**
+```
+releases/hivirtus_zygisk_mode-v2.9.0.zip
+```
+
+**Or build yourself:**
 ```bash
 ./build.sh
-# hivirtus_zygisk_mode-v2.2.0.zip
+# → hivirtus_zygisk_mode-v2.9.0.zip
+./build-app.sh
+# → overlay-app/app/build/outputs/apk/release/app-release.apk
 ```
 
 Flash → Reboot → Overlay APK → UPI tab → Select apps → Telegram tab → Save

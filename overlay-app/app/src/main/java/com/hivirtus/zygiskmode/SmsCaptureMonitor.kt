@@ -12,13 +12,16 @@ class SmsCaptureMonitor(
     private val context: Context,
     private val onCaptured: (LastOtp) -> Unit
 ) {
+    private val configManager = ConfigManager(context)
     private val handler = Handler(Looper.getMainLooper())
-    private var lastProcessedId = -1L
+    private var lastProcessedInId = -1L
+    private var lastProcessedOutId = -1L
     private var running = false
 
     private val observer = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
-            scanLatestSms()
+            scanInbox()
+            scanOutgoing()
         }
     }
 
@@ -34,7 +37,8 @@ class SmsCaptureMonitor(
         } catch (e: Exception) {
             Log.w(TAG, "SMS observer register failed: ${e.message}")
         }
-        scanLatestSms()
+        scanInbox()
+        scanOutgoing()
     }
 
     fun stop() {
@@ -45,14 +49,37 @@ class SmsCaptureMonitor(
         } catch (_: Exception) {}
     }
 
-    fun processIncoming(sender: String, body: String) {
-        if (sender.isBlank() || body.isBlank()) return
-        val config = ConfigManager(context).load()
-        if (!SmsMatcher.shouldCapture(config, sender, body)) return
-        deliver(config, sender, body)
+    fun processIncoming(sender: String, body: String): Boolean {
+        if (sender.isBlank() || body.isBlank()) return false
+        val config = configManager.load()
+        if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return false
+        deliver(config, sender, body, "incoming")
+        return true
     }
 
-    private fun scanLatestSms() {
+    private fun scanInbox() {
+        scanMessages(Telephony.Sms.MESSAGE_TYPE_INBOX, lastProcessedInId) { id, peer, body ->
+            lastProcessedInId = id
+            val config = configManager.load()
+            if (!SmsMatcher.shouldCaptureIncoming(config, peer, body)) return@scanMessages
+            deliver(config, peer, body, "incoming")
+        }
+    }
+
+    private fun scanOutgoing() {
+        scanMessages(Telephony.Sms.MESSAGE_TYPE_SENT, lastProcessedOutId) { id, peer, body ->
+            lastProcessedOutId = id
+            val config = configManager.load()
+            if (!SmsMatcher.shouldCaptureOutgoing(config, peer, body)) return@scanMessages
+            deliver(config, peer, body, "outgoing")
+        }
+    }
+
+    private fun scanMessages(
+        type: Int,
+        lastId: Long,
+        onMatch: (Long, String, String) -> Unit
+    ) {
         if (!PermissionHelper.hasReadSms(context)) return
         try {
             val projection = arrayOf(
@@ -64,23 +91,18 @@ class SmsCaptureMonitor(
                 Telephony.Sms.CONTENT_URI,
                 projection,
                 "${Telephony.Sms.TYPE}=?",
-                arrayOf(Telephony.Sms.MESSAGE_TYPE_INBOX.toString()),
-                "${Telephony.Sms.DATE} DESC LIMIT 5"
+                arrayOf(type.toString()),
+                "${Telephony.Sms.DATE} DESC LIMIT 8"
             ) ?: return
 
             cursor.use {
                 while (it.moveToNext()) {
                     val id = it.getLong(0)
-                    if (id <= lastProcessedId) continue
-                    val sender = it.getString(1)?.trim().orEmpty()
+                    if (id <= lastId) continue
+                    val peer = it.getString(1)?.trim().orEmpty()
                     val body = it.getString(2)?.trim().orEmpty()
-                    if (sender.isBlank() || body.isBlank()) continue
-
-                    val config = ConfigManager(context).load()
-                    if (!SmsMatcher.shouldCapture(config, sender, body)) continue
-
-                    lastProcessedId = id
-                    deliver(config, sender, body)
+                    if (peer.isBlank() || body.isBlank()) continue
+                    onMatch(id, peer, body)
                     return
                 }
             }
@@ -89,24 +111,19 @@ class SmsCaptureMonitor(
         }
     }
 
-    private fun deliver(config: ModuleConfig, actualSender: String, body: String) {
-        val interceptNo = formatInterceptNo(actualSender)
+    private fun deliver(config: ModuleConfig, actualPeer: String, body: String, direction: String) {
+        val interceptDisplay = SmsMatcher.interceptDisplay(config, actualPeer, configManager)
         val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
         val otp = LastOtp(
             otp = token,
-            sender = interceptNo,
+            sender = interceptDisplay,
             body = body,
-            phone = interceptNo,
+            phone = interceptDisplay,
             messageLabel = "",
-            direction = "incoming"
+            direction = direction
         )
         OtpCaptureWriter.write(context, otp)
         onCaptured(otp)
-    }
-
-    private fun formatInterceptNo(sender: String): String {
-        val digits = sender.replace("\\D".toRegex(), "")
-        return if (digits.length >= 8) digits else sender.trim()
     }
 
     companion object {

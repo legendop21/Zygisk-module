@@ -1,11 +1,13 @@
 #pragma once
 
+#include "zygisk.hpp"
 #include <jni.h>
 #include <string>
 
 namespace sim_mock {
 
 void install(JNIEnv* env,
+             zygisk::Api* api,
              bool sim1_enabled,
              bool sim2_enabled,
              const std::string& country_iso,

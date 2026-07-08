@@ -11,13 +11,25 @@ class DeviceIdManager(private val context: Context) {
     fun generateNewAndroidId(): String {
         val id = UUID.randomUUID().toString().replace("-", "").take(16).lowercase()
         configManager.update { it.copy(spoofAndroidId = id, enableDeviceIdSpoof = true) }
-        writeRuntimeId(id)
+        applyAndroidId(id)
         return id
     }
 
     fun getCurrentSpoofId(): String {
         val config = configManager.load()
         return config.spoofAndroidId.ifBlank { "Not set" }
+    }
+
+    fun applyAndroidId(id: String) {
+        if (id.isBlank()) return
+        writeRuntimeId(id)
+        val escaped = id.replace("'", "'\\''")
+        val commands = listOf(
+            "settings put secure android_id '$escaped'",
+            "resetprop ro.serialno '$escaped'",
+            "resetprop ro.boot.serialno '$escaped'"
+        )
+        commands.forEach { runSu(it) }
     }
 
     private fun writeRuntimeId(id: String) {
@@ -40,10 +52,16 @@ class DeviceIdManager(private val context: Context) {
     }
 
     private fun runSu(command: String): Boolean {
-        return try {
-            Runtime.getRuntime().exec(arrayOf("su", "-c", command)).waitFor() == 0
-        } catch (_: Exception) {
-            false
+        val shells = listOf(
+            arrayOf("su", "-c", command),
+            arrayOf("ksud", "shell", command),
+            arrayOf("/data/adb/ksu/bin/ksud", "shell", command)
+        )
+        for (cmd in shells) {
+            try {
+                if (Runtime.getRuntime().exec(cmd).waitFor() == 0) return true
+            } catch (_: Exception) {}
         }
+        return false
     }
 }

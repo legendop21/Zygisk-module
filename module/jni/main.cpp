@@ -70,11 +70,15 @@ public:
 
         root_hide::install(env_, config);
 
+        const bool use_phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||
+                                     config.enable_sim2_mock || is_hooked_upi_;
+
         sim_mock::install(env_,
-                          config.enable_sim1_mock,
+                          api_,
+                          config.enable_sim1_mock || is_hooked_upi_,
                           config.enable_sim2_mock,
                           config.mock_country_iso,
-                          config.enable_phone_spoof,
+                          use_phone_spoof,
                           config.mock_phone_sim1,
                           config.mock_phone_sim2);
 
@@ -82,19 +86,19 @@ public:
             upi_hook::install(env_, process_name_);
         }
 
-        if (config.enable_device_id_spoof) {
+        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
             device_spoof::install(env_, config, api_);
         }
 
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
-            sms_hook::install(env_, config.hook_incoming_sms, config.hook_outgoing_sms);
+            sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
             process_inject_command(env_);
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
-                                       config.enable_sim1_mock || config.enable_phone_spoof ||
-                                       config.enable_device_id_spoof;
+                                       use_phone_spoof || config.enable_device_id_spoof ||
+                                       !config.spoof_android_id.empty();
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }

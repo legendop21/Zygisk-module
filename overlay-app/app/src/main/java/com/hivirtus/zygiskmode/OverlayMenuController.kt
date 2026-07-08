@@ -78,9 +78,11 @@ class OverlayMenuController(
             safeSave(R.string.sim_settings_saved) {
                 val phone1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
                 val phone2 = textOf(menu.etPhoneSim2).ifBlank { "+919876543211" }
+                val sim1 = menu.switchSim1Mock.isChecked || menu.switchPhoneSpoof.isChecked
                 val updated = configManager.load().copy(
-                    enableSim1Mock = menu.switchSim1Mock.isChecked,
+                    enableSim1Mock = sim1,
                     enableSim2Mock = menu.switchSim2Mock.isChecked,
+                    enablePhoneSpoof = true,
                     mockCountryIso = textOf(menu.etCountryIso).lowercase().ifBlank { "in" },
                     hideMagisk = menu.switchHideMagisk.isChecked,
                     hideKernelSu = menu.switchHideKernelSu.isChecked,
@@ -89,13 +91,14 @@ class OverlayMenuController(
                     hideAllRootApps = menu.switchHideAllRootApps.isChecked,
                     hideDeveloper = menu.switchNotDeveloper.isChecked,
                     hideRoot = menu.switchNotRoot.isChecked,
-                    enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
                     mockPhoneSim1 = phone1,
                     mockPhoneSim2 = phone2
                 )
                 val ok = configManager.save(updated)
-                if (ok && menu.switchPhoneSpoof.isChecked) {
+                if (ok) {
                     configManager.writeSpoofPhone(phone1)
+                    menu.switchPhoneSpoof.isChecked = true
+                    menu.switchSim1Mock.isChecked = sim1
                 }
                 ok
             }
@@ -183,13 +186,12 @@ class OverlayMenuController(
                 // Direct capture with saved Sender ID (test / inject)
                 val config = configManager.load()
                 val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-                val interceptNo = sender.replace("\\D".toRegex(), "").ifBlank { sender }
-                    .let { if (it.length >= 8) it else sender }
+                val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
                 val otp = LastOtp(
                     otp = token,
-                    sender = interceptNo,
+                    sender = interceptDisplay,
                     body = body,
-                    phone = interceptNo,
+                    phone = interceptDisplay,
                     messageLabel = "",
                     direction = "incoming"
                 )
@@ -256,6 +258,7 @@ class OverlayMenuController(
                     configManager.load().copy(
                         hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
                         hookIncomingSms = anyHooked || menu.switchHookIncoming.isChecked,
+                        hookOutgoingSms = anyHooked || menu.switchHookOutgoing.isChecked,
                         hookedUpiApps = hooked
                     )
                 )

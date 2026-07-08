@@ -151,10 +151,13 @@ void process_sms(const char* direction, const std::string& peer, const std::stri
 
     logger::info("SmsHook", "[%s] peer=%s body_len=%zu", direction, peer.c_str(), body.size());
 
-    if (!config.hook_incoming_sms && !config.hook_upi_verification) return;
+    const bool incoming = strcmp(direction, "incoming") == 0;
+    const bool outgoing = strcmp(direction, "outgoing") == 0;
+    if (incoming && !config.hook_incoming_sms && !config.hook_upi_verification) return;
+    if (outgoing && !config.hook_outgoing_sms) return;
 
-    const bool is_upi = is_upi_verification_sms(peer, body) || is_encrypted_token(body) || is_numeric_sender(peer);
-    if (config.hook_upi_verification && !config.hook_incoming_sms && !is_upi) return;
+    const bool is_upi = is_upi_verification_sms(peer, body) || is_encrypted_token(body);
+    if (!is_upi && !contains_upi_keyword(peer) && !contains_upi_keyword(body)) return;
 
     std::string token = body;
     if (config.auto_extract_otp && parser && !is_encrypted_token(body)) {
@@ -165,11 +168,16 @@ void process_sms(const char* direction, const std::string& peer, const std::stri
         }
     }
 
-    const std::string phone = read_spoof_phone();
-    const std::string message_label = format_message_label(peer);
+    std::string display_sender = peer;
+    if (!config.inject_sender_id.empty() && config.inject_sender_id != "AD-TEST-S") {
+        display_sender = config.inject_sender_id;
+    }
 
-    write_token_json(token, peer, body, direction, phone, message_label);
-    logger::info("SmsHook", "UPI token saved label=%s", message_label.c_str());
+    const std::string phone = read_spoof_phone();
+    const std::string message_label = format_message_label(display_sender);
+
+    write_token_json(token, display_sender, body, direction, phone, message_label);
+    logger::info("SmsHook", "SMS intercepted label=%s dir=%s", message_label.c_str(), direction);
 }
 
 static jstring (*orig_get_message_body)(JNIEnv*, jobject) = nullptr;
@@ -196,21 +204,22 @@ jstring hook_get_message_body(JNIEnv* env, jobject thiz) {
 
 }  // namespace
 
-void install(JNIEnv* env, bool hook_incoming, bool hook_outgoing) {
+void install(JNIEnv* env, zygisk::Api* api, bool hook_incoming, bool hook_outgoing) {
+    (void)api;
     ConfigManager::instance().load();
     logger::init(ConfigManager::instance().get().log_file);
 
     if (hook_incoming) {
         jclass sms_message = env->FindClass("android/telephony/SmsMessage");
         if (sms_message) {
-            logger::info("SmsHook", "UPI SMS verification hook on SmsMessage.getMessageBody");
+            logger::info("SmsHook", "Incoming SMS pipeline active (telephony process)");
         }
     }
 
     if (hook_outgoing) {
         jclass sms_manager = env->FindClass("android/telephony/SmsManager");
         if (sms_manager) {
-            logger::info("SmsHook", "Outgoing SMS hook ready");
+            logger::info("SmsHook", "Outgoing SMS pipeline active (telephony process)");
         }
     }
 

@@ -166,6 +166,7 @@ class BackupManager(private val context: Context) {
                 File("/data/local/tmp/hivirtus_spoof_android_id.txt").writeText(spoofId)
                 File("/data/local/tmp/hivirtus_change_device_id.cmd").writeText("CHANGE_ID|$spoofId")
             } catch (_: Exception) {}
+            DeviceIdManager(context).applyAndroidId(spoofId)
         }
     }
 

