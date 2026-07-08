@@ -13,7 +13,7 @@
             android:id="@+id/dimBackground"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#CC0B1513" />
+            android:background="#CC12151C" />
 
         <include
             android:id="@+id/menuPanel"
@@ -35,7 +35,7 @@
             android:layout_height="40dp"
             android:layout_gravity="center"
             android:contentDescription="@string/app_name"
-            android:src="@drawable/ic_hivirtus_wolf" />
+            android:src="@drawable/ic_hivirtus_logo" />
     </FrameLayout>
 
 </FrameLayout>

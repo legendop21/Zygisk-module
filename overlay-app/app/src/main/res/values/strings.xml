@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">hivirtus zygisk</string>
-    <string name="mod_menu_title">Hivirtus Zygisk</string>
+    <string name="mod_menu_title">Hivirtus Zygisk Mode Menu</string>
     <string name="main_description">Wolf logo bubble tap karo — menu + saari UPI apps A-Z ek baar me</string>
     <string name="start_overlay">Start Floating Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
@@ -32,7 +32,7 @@
     <string name="tab_system">SYSTEM</string>
     <string name="tab_upi">UPI</string>
     <string name="tab_message">MESSAGE</string>
-    <string name="tab_telegram">TG</string>
+    <string name="tab_telegram">TELEGRAM</string>
     <string name="upi_apps_az">UPI Apps A → Z (Select All)</string>
     <string name="upi_hook_section">UPI Apps Hook (Select Apps)</string>
     <string name="hook_upi_verification">Hook SMS Verification (All UPI)</string>
@@ -77,7 +77,7 @@
     <string name="config_saved">Config saved</string>
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
-    <string name="footer_text">Hivirtus Zygisk Injected. Developed for Android.</string>
+    <string name="footer_text">Zygisk Injected. Developed for Android.</string>
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
     <string name="tap_bubble">HV</string>
