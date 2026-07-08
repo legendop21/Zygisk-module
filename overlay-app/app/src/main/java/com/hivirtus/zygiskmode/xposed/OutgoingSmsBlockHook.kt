@@ -26,7 +26,7 @@ object OutgoingSmsBlockHook {
 
                 writeBlockedFlag(dest, body)
                 fireSentIntent(param.args)
-                param.result = null
+                param.setResult(null)
             }
         }
 

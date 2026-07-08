@@ -34,6 +34,7 @@ object StealthHook {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         val trace = param.result as? Array<StackTraceElement> ?: return
+                        @Suppress("UNCHECKED_CAST")
                         param.result = trace.filter { el ->
                             val name = el.className.lowercase()
                             hiddenPaths.none { name.contains(it) }
@@ -54,7 +55,7 @@ object StealthHook {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val pkg = param.args[0] as? String ?: return
                     if (pkg in hiddenPackages) {
-                        param.throwable = android.content.pm.PackageManager.NameNotFoundException(pkg)
+                        param.setThrowable(android.content.pm.PackageManager.NameNotFoundException(pkg))
                     }
                 }
             })
@@ -62,7 +63,7 @@ object StealthHook {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val pkg = param.args[0] as? String ?: return
                     if (pkg in hiddenPackages) {
-                        param.throwable = android.content.pm.PackageManager.NameNotFoundException(pkg)
+                        param.setThrowable(android.content.pm.PackageManager.NameNotFoundException(pkg))
                     }
                 }
             })

@@ -1,7 +1,6 @@
 package com.hivirtus.zygiskmode.xposed
 
 import com.hivirtus.zygiskmode.ModuleConfig
-import com.hivirtus.zygiskmode.SmsMatcher
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
