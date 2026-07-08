@@ -94,7 +94,6 @@
     <string name="telegram_tap_copy_hint">Telegram pe SMS ek tap me copy — code block + phone clipboard</string>
     <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>
     <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>
-    <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>
     <string name="sender_id">Sender ID:</string>
     <string name="message_body">Message Body:</string>
     <string name="message_body_hint">Type your message body (e.g. Your verification OTP code is 918204)</string>
