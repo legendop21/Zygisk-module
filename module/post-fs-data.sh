@@ -60,6 +60,7 @@ if [ "$HIDE_ROOT" = "true" ]; then
 
   case "$ROOT_TYPE" in
     Magisk)
+      # Sirf Magisk pe — KernelSU Next / Zygisk Next pe denylist enable LSPosed tod sakti hai
       magisk --denylist enable 2>/dev/null
       magisk --denylist add com.topjohnwu.magisk 2>/dev/null
       ;;

@@ -210,6 +210,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/i_am_not_root"
                     android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/lsposed_compat_hint"
+                    android:textColor="@color/text_hint"
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <LinearLayout

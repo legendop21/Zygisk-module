@@ -36,6 +36,16 @@ bool is_messaging_process(const char* nice_name) {
            strcmp(nice_name, "com.samsung.android.messaging") == 0;
 }
 
+bool is_lsposed_stack(const std::string& process) {
+    if (process.find("lsposed") != std::string::npos) return true;
+    if (process == "org.lsposed.manager") return true;
+    return false;
+}
+
+bool is_hook_target(bool telephony, bool messaging, bool hooked_upi) {
+    return telephony || messaging || hooked_upi;
+}
+
 void touch_module_heartbeat() {
     FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
     if (f) {
@@ -78,38 +88,51 @@ public:
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
 
-        if (config.hide_root) {
+        // FORCE_DENYLIST_UNMOUNT har process pe LSPosed / Zygisk Next tod deta hai —
+        // sirf hooked UPI app me optional; denylist post-fs-data se handle hoti hai.
+        if (config.hide_root && is_hooked_upi_ && !is_lsposed_stack(process_name_)) {
             api_->setOption(zygisk::Option::FORCE_DENYLIST_UNMOUNT);
         }
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
+        if (is_lsposed_stack(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
         device_spoof::install(env_, config, api_);
 
-        if (config.hide_root || config.hide_developer) {
+        const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
+
+        if ((config.hide_root || config.hide_developer) && hook_target) {
             root_hide::install(env_, config, api_);
         }
 
         const bool phone_active = config.enable_phone_spoof || config.enable_sim1_mock ||
                                   config.enable_sim2_mock;
 
-        sim_mock::install(env_,
-                          api_,
-                          config.enable_sim1_mock || config.enable_phone_spoof,
-                          config.enable_sim2_mock,
-                          config.mock_country_iso,
-                          phone_active,
-                          config.mock_phone_sim1,
-                          config.mock_phone_sim2);
+        if (phone_active && hook_target) {
+            sim_mock::install(env_,
+                              api_,
+                              config.enable_sim1_mock || config.enable_phone_spoof,
+                              config.enable_sim2_mock,
+                              config.mock_country_iso,
+                              phone_active,
+                              config.mock_phone_sim1,
+                              config.mock_phone_sim2);
+        }
 
-        if (phone_active) {
+        if (phone_active && hook_target) {
             outgoing_sms_hook::install(env_, api_, is_telephony_, is_hooked_upi_);
-            logger::info("Hivirtus", "Phone spoof binder hooks in %s (upi=%d)",
-                         process_name_.c_str(), is_hooked_upi_);
+            if (hook_target) {
+                logger::info("Hivirtus", "Phone spoof binder hooks in %s (upi=%d)",
+                             process_name_.c_str(), is_hooked_upi_);
+            }
         }
 
         if (is_hooked_upi_) {
@@ -142,7 +165,7 @@ public:
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
-                                       phone_active || config.enable_device_id_spoof ||
+                                       config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
                                        access("/data/local/tmp/hivirtus_spoof_android_id.txt", R_OK) == 0;

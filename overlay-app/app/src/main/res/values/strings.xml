@@ -85,7 +85,7 @@
     <string name="open_send_sms_float">Open Send SMS Float</string>
     <string name="message_body_hint_short">OTP / verify message body</string>
     <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
-    <string name="intercept_fake_success_warn">ON = outgoing SMS intercept + fake success to app (UPI verify)</string>
+    <string name="lsposed_compat_hint">LSPosed / Zygisk Next use karte ho? SYSTEM → Not Root + Not Developer OFF rakho.</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
     <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>
     <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>

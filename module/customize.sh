@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.14.0  "
+ui_print "   Hivirtus Zygisk Mode v2.14.1  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -68,3 +68,4 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 ui_print "- Module installed successfully"
 ui_print "- Enable Zygisk in root manager"
 ui_print "- Reboot to activate"
+ui_print "- Zygisk Next + LSPosed: SYSTEM tab me Not Root OFF rakho"
