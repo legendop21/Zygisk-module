@@ -6,6 +6,7 @@
 #include "root_hide.hpp"
 #include "sim_mock.hpp"
 #include "upi_hook.hpp"
+#include "outgoing_sms_hook.hpp"
 #include "device_spoof.hpp"
 
 #include <ctime>
@@ -94,6 +95,7 @@ public:
 
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
+            outgoing_sms_hook::install(env_, api_, false, true);
         }
 
         if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
@@ -103,6 +105,7 @@ public:
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
+            outgoing_sms_hook::install(env_, api_, true, false);
             process_inject_command(env_);
         }
 

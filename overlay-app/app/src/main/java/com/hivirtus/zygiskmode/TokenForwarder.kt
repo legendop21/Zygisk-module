@@ -48,8 +48,6 @@ class TokenForwarder(
         val config = configManager.load()
         val interceptNo = SmsMatcher.userSenderId(config)
             ?: health.spoofPhone.ifBlank { config.mockPhoneSim1 }
-        val sampleToken =
-            "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g=="
 
         val text = buildString {
             appendLine("📱 <b>Zygisk Menu</b>")
@@ -63,8 +61,6 @@ class TokenForwarder(
             appendLine("🆔 Sender ID: ${if (health.senderIdSet) "Set ✅" else "Missing — MESSAGE tab ❌"}")
             appendLine("🔐 VIP: ${if (health.licensed) "Active ✅" else "Not active ❌"}")
             appendLine("🌐 Root: ${escapeHtml(health.rootType)}")
-            appendLine("────────────────")
-            append(escapeHtml(sampleToken))
         }
         return postTelegram(botToken, chatId, text)
     }

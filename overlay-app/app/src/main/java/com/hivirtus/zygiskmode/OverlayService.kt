@@ -141,6 +141,7 @@ class OverlayService : Service() {
     private fun startOtpPolling() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
+                OutgoingSmsGuard.refresh(this@OverlayService)
                 forwardLatestOtp()
                 delay(1500)
             }

@@ -288,6 +288,7 @@ class OverlayMenuController(
                     app.packageName to if (enabled) base else 0
                 }.filterValues { it > 0 }
                 val current = configManager.load()
+                val phone1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
                 configManager.save(
                     current.copy(
                         injectSenderId = sender,
@@ -296,9 +297,17 @@ class OverlayMenuController(
                         hookOutgoingSms = anyHooked || menu.switchHookOutgoing.isChecked,
                         hookedUpiApps = hooked,
                         upiAppTimerBonuses = timerBonuses.ifEmpty { UpiAppRegistry.defaultTimerMap() },
-                        upiTimerBonusSeconds = timerBonuses.values.maxOrNull() ?: 20
+                        upiTimerBonusSeconds = timerBonuses.values.maxOrNull() ?: 20,
+                        interceptFakeSuccess = menu.switchInterceptFakeSuccess.isChecked || anyHooked,
+                        enablePhoneSpoof = menu.switchPhoneSpoof.isChecked || anyHooked,
+                        enableSim1Mock = menu.switchSim1Mock.isChecked || anyHooked,
+                        mockPhoneSim1 = phone1.ifBlank { current.mockPhoneSim1 }
                     )
                 )
+                if (anyHooked) {
+                    val spoof = phone1.ifBlank { current.mockPhoneSim1 }
+                    configManager.writeSpoofPhone(spoof)
+                }
             }
         }
     }

