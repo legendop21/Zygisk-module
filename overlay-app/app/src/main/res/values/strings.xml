@@ -86,7 +86,7 @@
     <string name="vip_access_title">◆ VIP ACCESS ◆</string>
     <string name="developer_hide_saved">Developer mode hide saved — apps restart karo</string>
     <string name="root_hide_saved">Root hide saved — stealth active</string>
-    <string name="backup_created_path">Backup saved: %1$s</string>
+    <string name="backup_created_path">Backup #%2$d saved: %1$s</string>
     <string name="bubble_need_overlay">Side bubble ke liye Overlay permission ON karo</string>
     <string name="save_message_settings">Save Message Settings</string>
     <string name="message_settings_saved">Message settings saved</string>
@@ -114,8 +114,8 @@
     <string name="license_hint">Key format: HIVIRTUS-XXXX-XXXX-XXXX\n@hivirtus @liqdy se key lo</string>
     <string name="license_required">VIP license required — app band ho jayega</string>
     <string name="backup_section">Unlimited Device Backup</string>
-    <string name="backup_now">Backup Now</string>
-    <string name="restore_backup">Restore All Settings</string>
+    <string name="backup_now">Create Unlimited Backup</string>
+    <string name="restore_backup">Restore Backup</string>
     <string name="change_device_id">Change Device ID</string>
     <string name="device_id_label">Spoof Android ID: %1$s</string>
     <string name="backup_created">Backup saved — clear data ke baad restore kar sakte ho</string>

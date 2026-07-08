@@ -117,10 +117,17 @@ class OverlayMenuController(
 
         menu.btnBackupNow.setOnClickListener {
             scope.launch {
-                val path = withContext(Dispatchers.IO) { backupManager.createBackup() }
+                val result = withContext(Dispatchers.IO) { backupManager.createBackup() }
                 toast(
-                    if (path != null) appContext.getString(R.string.backup_created_path, path)
-                    else appContext.getString(R.string.backup_failed),
+                    if (result.path != null) {
+                        appContext.getString(
+                            R.string.backup_created_path,
+                            result.path,
+                            result.totalBackups
+                        )
+                    } else {
+                        appContext.getString(R.string.backup_failed)
+                    },
                     Toast.LENGTH_LONG
                 )
             }
@@ -244,9 +251,11 @@ class OverlayMenuController(
         menu.btnSaveUpiHooks.setOnClickListener {
             safeSave(R.string.upi_hooks_saved) {
                 val hooked = upiAppSwitches.mapValues { it.value.isChecked }
+                val anyHooked = hooked.values.any { it }
                 configManager.save(
                     configManager.load().copy(
-                        hookUpiVerification = menu.switchHookUpiVerification.isChecked,
+                        hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
+                        hookIncomingSms = anyHooked || menu.switchHookIncoming.isChecked,
                         hookedUpiApps = hooked
                     )
                 )

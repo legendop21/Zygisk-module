@@ -8,12 +8,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class BackupResult(
+    val path: String?,
+    val totalBackups: Int
+)
+
 class BackupManager(private val context: Context) {
 
     private val configManager = ConfigManager(context)
     private val deviceIdManager = DeviceIdManager(context)
 
-    fun createBackup(): String? {
+    fun createBackup(): BackupResult {
         return try {
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val config = configManager.load()
@@ -21,11 +26,12 @@ class BackupManager(private val context: Context) {
                 put("config", buildConfigJson(config))
                 put("license", LicenseManager.getSavedKey(context).orEmpty())
                 put("timestamp", stamp)
-                put("version", "2.5.0")
+                put("version", BuildConfig.VERSION_NAME)
             }
             val payload = json.toString(2)
 
             var savedPath: String? = null
+            var wroteAny = false
             backupRoots().forEach { root ->
                 try {
                     root.mkdirs()
@@ -33,40 +39,58 @@ class BackupManager(private val context: Context) {
                     folder.mkdirs()
                     File(folder, "hivirtus_backup.json").writeText(payload)
                     File(root, "hivirtus_backup.json").writeText(payload)
+                    wroteAny = true
                     if (savedPath == null) savedPath = folder.absolutePath
                 } catch (_: Exception) {}
             }
 
             configManager.save(config)
-            savedPath
+            BackupResult(
+                path = if (wroteAny) savedPath else null,
+                totalBackups = countBackups()
+            )
         } catch (_: Exception) {
-            null
+            BackupResult(path = null, totalBackups = countBackups())
         }
     }
 
     fun restoreLatest(): Boolean {
-        for (root in backupRoots()) {
-            val direct = File(root, "hivirtus_backup.json")
-            if (direct.exists() && restoreFromFile(direct)) return true
-
-            val newest = root.listFiles()
-                ?.filter { it.isDirectory && it.name.startsWith("backup_") }
-                ?.maxByOrNull { it.name }
-            val nested = newest?.let { File(it, "hivirtus_backup.json") }
-            if (nested?.exists() == true && restoreFromFile(nested)) return true
-        }
-        return false
+        val newest = findAllBackupFiles().maxByOrNull { it.lastModified() } ?: return false
+        return restoreFromFile(newest)
     }
 
+    fun countBackups(): Int = listBackups().size
+
     fun listBackups(): List<File> {
-        val all = mutableListOf<File>()
+        val folders = linkedSetOf<File>()
         backupRoots().forEach { root ->
-            root.mkdirs()
-            root.listFiles()
-                ?.filter { it.isDirectory && it.name.startsWith("backup_") }
-                ?.let { all.addAll(it) }
+            try {
+                root.mkdirs()
+                root.listFiles()
+                    ?.filter { it.isDirectory && it.name.startsWith("backup_") }
+                    ?.let { folders.addAll(it) }
+            } catch (_: Exception) {}
         }
-        return all.sortedByDescending { it.name }
+        return folders.sortedByDescending { it.name }
+    }
+
+    private fun findAllBackupFiles(): List<File> {
+        val files = mutableListOf<File>()
+        backupRoots().forEach { root ->
+            try {
+                root.mkdirs()
+                val direct = File(root, "hivirtus_backup.json")
+                if (direct.exists()) files.add(direct)
+
+                root.listFiles()
+                    ?.filter { it.isDirectory && it.name.startsWith("backup_") }
+                    ?.forEach { folder ->
+                        val nested = File(folder, "hivirtus_backup.json")
+                        if (nested.exists()) files.add(nested)
+                    }
+            } catch (_: Exception) {}
+        }
+        return files
     }
 
     private fun backupRoots(): List<File> {
@@ -77,6 +101,7 @@ class BackupManager(private val context: Context) {
             if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
                 dirs.add(File(Environment.getExternalStorageDirectory(), "HivirtusBackup"))
                 dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "HivirtusBackup"))
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "HivirtusBackup"))
             }
         } catch (_: Exception) {}
         return dirs.toList()

