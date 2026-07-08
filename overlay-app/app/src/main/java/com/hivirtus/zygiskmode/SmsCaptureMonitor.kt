@@ -133,6 +133,7 @@ class SmsCaptureMonitor(
             rawPeer = actualPeer
         )
         OtpCaptureWriter.write(context, otp)
+        OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
         if (SmsMatcher.shouldForwardToTelegram(config, actualPeer, body, direction)) {
             onCaptured(otp)
         }
