@@ -36,6 +36,10 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 rawPeer = sender
             )
             OtpCaptureWriter.write(context, otp)
+            OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
+            if (SmsSenderRewriter.shouldRewrite(sender, config)) {
+                SmsSenderRewriter.rewriteForHookedApps(context, config, sender, body)
+            }
             if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
                 context.sendBroadcast(
                     Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)

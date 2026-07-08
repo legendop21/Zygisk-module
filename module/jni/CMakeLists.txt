@@ -12,6 +12,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     forwarder.cpp
     sms_hook.cpp
     inject_sms.cpp
+    sender_spoof.cpp
     root_hide.cpp
     sim_mock.cpp
     upi_hook.cpp

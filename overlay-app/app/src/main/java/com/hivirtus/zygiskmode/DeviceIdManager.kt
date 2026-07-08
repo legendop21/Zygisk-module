@@ -51,17 +51,5 @@ class DeviceIdManager(private val context: Context) {
         }
     }
 
-    private fun runSu(command: String): Boolean {
-        val shells = listOf(
-            arrayOf("su", "-c", command),
-            arrayOf("ksud", "shell", command),
-            arrayOf("/data/adb/ksu/bin/ksud", "shell", command)
-        )
-        for (cmd in shells) {
-            try {
-                if (Runtime.getRuntime().exec(cmd).waitFor() == 0) return true
-            } catch (_: Exception) {}
-        }
-        return false
-    }
+    private fun runSu(command: String): Boolean = ShellHelper.runSu(command)
 }

@@ -1,6 +1,7 @@
 #include "upi_hook.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "sender_spoof.hpp"
 #include "zygisk.hpp"
 
 #include <cstdio>
@@ -44,6 +45,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     if (g_bonus_ms <= 0) g_bonus_ms = 20000;
 
     install_timer_hook(env, api);
+    sender_spoof::install(env, api, package_name.c_str());
 
     jclass sms_message = env->FindClass("android/telephony/SmsMessage");
     jclass sms_retriever = env->FindClass("com/google/android/gms/auth/api/phone/SmsRetrieverClient");

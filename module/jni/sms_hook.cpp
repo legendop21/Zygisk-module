@@ -3,6 +3,7 @@
 #include "logger.hpp"
 #include "otp_parser.hpp"
 #include "forwarder.hpp"
+#include "sender_spoof.hpp"
 #include "zygisk_utils.hpp"
 
 #include <memory>
@@ -210,6 +211,7 @@ void install(JNIEnv* env, zygisk::Api* api, bool hook_incoming, bool hook_outgoi
     logger::init(ConfigManager::instance().get().log_file);
 
     if (hook_incoming) {
+        sender_spoof::install(env, api, "telephony");
         jclass sms_message = env->FindClass("android/telephony/SmsMessage");
         if (sms_message) {
             logger::info("SmsHook", "Incoming SMS pipeline active (telephony process)");
