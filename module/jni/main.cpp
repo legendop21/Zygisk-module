@@ -92,6 +92,11 @@ bool framework_sms_active(const ModuleConfig& config) {
     return any_hooked_app(config);
 }
 
+// system_server/GMS PLT hooks → Zygisk Next + APatch pe zygote crash. Telephony enough.
+bool hook_system_framework(const ModuleConfig&) {
+    return false;
+}
+
 bool sender_spoof_wanted(const ModuleConfig& config) {
     if (!any_hooked_app(config)) return false;
     if (!config.override_incoming_sender) return false;
@@ -162,8 +167,7 @@ public:
         logger::init(config.log_file);
         const bool want_sender_spoof = sender_spoof_wanted(config);
 
-        // LSPosed "System Framework" — sirf jab UPI tab me app select ho
-        if (process_name_ == "system_server") {
+        if (hook_system_framework(config) && process_name_ == "system_server") {
             if (framework_sms_active(config)) {
                 if (want_sender_spoof) {
                     sender_spoof::install(env_, api_, "system_server");
@@ -172,14 +176,14 @@ public:
                     outgoing_sms_hook::install(env_, api_, false, false);
                 }
                 touch_module_heartbeat();
-                logger::info("Hivirtus", "Framework SMS hook (system_server) — scoped apps");
+                logger::info("Hivirtus", "Framework SMS hook (system_server)");
             } else {
                 api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             }
             return;
         }
 
-        if (is_gms_ && framework_sms_active(config)) {
+        if (hook_system_framework(config) && is_gms_ && framework_sms_active(config)) {
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, "gms");
             }
@@ -197,7 +201,9 @@ public:
         }
 
         mark_zygisk_native_active();
-        device_spoof::install(env_, config, api_);
+        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
+            device_spoof::install(env_, config, api_);
+        }
 
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
 
@@ -271,6 +277,11 @@ public:
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }
+    }
+
+    void postServerSpecialize(const zygisk::ServerSpecializeArgs* args) override {
+        (void)args;
+        api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
     }
 
 private:

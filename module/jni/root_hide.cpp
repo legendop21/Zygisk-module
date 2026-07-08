@@ -1,6 +1,6 @@
 #include "root_hide.hpp"
 #include "logger.hpp"
-#include "zygisk_utils.hpp"
+#include "plt_hook.hpp"
 
 #include <dlfcn.h>
 #include <errno.h>
@@ -240,28 +240,29 @@ int hook___system_property_get(const char* name, char* value) {
 }
 
 void install_plt_hooks(zygisk::Api* api) {
-    if (!api || !api->pltHookRegister || !api->pltHookCommit) return;
-
-    api->pltHookRegister(".*libc\\.so$", "access",
-                         reinterpret_cast<void*>(hook_access),
-                         reinterpret_cast<void**>(&orig_access));
-    api->pltHookRegister(".*libc\\.so$", "stat",
-                         reinterpret_cast<void*>(hook_stat),
-                         reinterpret_cast<void**>(&orig_stat));
-    api->pltHookRegister(".*libc\\.so$", "lstat",
-                         reinterpret_cast<void*>(hook_lstat),
-                         reinterpret_cast<void**>(&orig_lstat));
-    api->pltHookRegister(".*libc\\.so$", "faccessat",
-                         reinterpret_cast<void*>(hook_faccessat),
-                         reinterpret_cast<void**>(&orig_faccessat));
-    api->pltHookRegister(".*libc\\.so$", "fopen",
-                         reinterpret_cast<void*>(hook_fopen),
-                         reinterpret_cast<void**>(&orig_fopen));
-    api->pltHookRegister(".*libc\\.so$", "__system_property_get",
-                         reinterpret_cast<void*>(hook___system_property_get),
-                         reinterpret_cast<void**>(&orig___system_property_get));
-    api->pltHookCommit();
-    logger::info("RootHide", "PLT hooks committed (access/stat/fopen/props)");
+    if (!api) return;
+    plt_hook::set_api(api);
+    plt_hook::register_regex(".*/libc\\.so$", "access",
+                             reinterpret_cast<void*>(hook_access),
+                             reinterpret_cast<void**>(&orig_access));
+    plt_hook::register_regex(".*/libc\\.so$", "stat",
+                             reinterpret_cast<void*>(hook_stat),
+                             reinterpret_cast<void**>(&orig_stat));
+    plt_hook::register_regex(".*/libc\\.so$", "lstat",
+                             reinterpret_cast<void*>(hook_lstat),
+                             reinterpret_cast<void**>(&orig_lstat));
+    plt_hook::register_regex(".*/libc\\.so$", "faccessat",
+                             reinterpret_cast<void*>(hook_faccessat),
+                             reinterpret_cast<void**>(&orig_faccessat));
+    plt_hook::register_regex(".*/libc\\.so$", "fopen",
+                             reinterpret_cast<void*>(hook_fopen),
+                             reinterpret_cast<void**>(&orig_fopen));
+    plt_hook::register_regex(".*/libc\\.so$", "__system_property_get",
+                             reinterpret_cast<void*>(hook___system_property_get),
+                             reinterpret_cast<void**>(&orig___system_property_get));
+    if (plt_hook::commit()) {
+        logger::info("RootHide", "PLT hooks committed (access/stat/fopen/props)");
+    }
 }
 
 }  // namespace

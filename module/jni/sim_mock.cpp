@@ -117,7 +117,7 @@ jlong hook_SystemProperties_getLong(JNIEnv* env, jclass clazz, jstring key_j, jl
 }
 
 void install_system_properties_hooks(JNIEnv* env) {
-    if (!g_api || !g_api->hookJniNativeMethods) return;
+    if (!g_api) return;
 
     JNINativeMethod get_methods[] = {
         {"get", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",

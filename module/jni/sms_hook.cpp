@@ -212,7 +212,7 @@ void install(JNIEnv* env, zygisk::Api* api, bool hook_incoming, bool hook_outgoi
 
     if (hook_incoming) {
         sender_spoof::install(env, api, "telephony");
-        if (api && api->hookJniNativeMethods) {
+        if (api) {
             JNINativeMethod body_methods[] = {
                 {"getMessageBody", "()Ljava/lang/String;",
                  reinterpret_cast<void*>(hook_get_message_body)},

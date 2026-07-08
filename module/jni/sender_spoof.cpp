@@ -74,7 +74,7 @@ jstring hook_get_display_originating_address(JNIEnv* env, jobject thiz) {
 }
 
 void install_sms_message_hooks(JNIEnv* env) {
-    if (!g_api || !g_api->hookJniNativeMethods || is_placeholder(g_sender_id)) return;
+    if (!g_api || is_placeholder(g_sender_id)) return;
 
     JNINativeMethod addr_methods[] = {
         {"getOriginatingAddress", "()Ljava/lang/String;",

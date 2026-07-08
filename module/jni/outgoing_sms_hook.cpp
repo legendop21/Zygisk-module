@@ -1,6 +1,7 @@
 #include "outgoing_sms_hook.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "plt_hook.hpp"
 #include "sms_hook.hpp"
 #include "telephony_spoof.hpp"
 #include "zygisk_utils.hpp"
@@ -244,23 +245,24 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
 }
 
 void install_plt_hooks(JNIEnv* env) {
-    if (!g_api || !g_api->pltHookRegister || !g_api->pltHookCommit) return;
+    (void)env;
+    if (!g_api) return;
     static bool committed = false;
     if (committed) return;
     committed = true;
 
-    g_api->pltHookRegister(".*libandroid_runtime\\.so$",
-                           "Java_android_app_Instrumentation_execStartActivity",
-                           reinterpret_cast<void*>(hook_execStartActivity),
-                           reinterpret_cast<void**>(&orig_execStartActivity));
-
-    g_api->pltHookRegister(".*libandroid_runtime\\.so$",
-                           "Java_android_os_BinderProxy_transact",
-                           reinterpret_cast<void*>(hook_BinderProxy_transact),
-                           reinterpret_cast<void**>(&orig_BinderProxy_transact));
-
-    g_api->pltHookCommit();
-    logger::info("OutgoingSms", "execStartActivity + BinderProxy hooks committed");
+    plt_hook::set_api(g_api);
+    plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                             "Java_android_app_Instrumentation_execStartActivity",
+                             reinterpret_cast<void*>(hook_execStartActivity),
+                             reinterpret_cast<void**>(&orig_execStartActivity));
+    plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                             "Java_android_os_BinderProxy_transact",
+                             reinterpret_cast<void*>(hook_BinderProxy_transact),
+                             reinterpret_cast<void**>(&orig_BinderProxy_transact));
+    if (plt_hook::commit()) {
+        logger::info("OutgoingSms", "execStartActivity + BinderProxy hooks committed");
+    }
 }
 
 }  // namespace

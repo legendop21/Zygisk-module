@@ -5,6 +5,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <sys/stat.h>
 
 namespace {
 
@@ -261,6 +262,27 @@ bool ConfigManager::load() {
 
 void ConfigManager::reload() {
     load();
+}
+
+void ConfigManager::persist_runtime() {
+    const auto& c = config_;
+    const std::string path = "/data/local/tmp/hivirtus_zygisk_mode_config.json";
+    std::ofstream out(path);
+    if (!out.is_open()) return;
+    out << "{\n"
+        << "  \"hide_root\": " << (c.hide_root ? "true" : "false") << ",\n"
+        << "  \"hide_developer\": " << (c.hide_developer ? "true" : "false") << ",\n"
+        << "  \"hook_incoming_sms\": " << (c.hook_incoming_sms ? "true" : "false") << ",\n"
+        << "  \"hook_outgoing_sms\": " << (c.hook_outgoing_sms ? "true" : "false") << ",\n"
+        << "  \"auto_hook_foreground\": " << (c.auto_hook_foreground ? "true" : "false") << ",\n"
+        << "  \"intercept_fake_success\": " << (c.intercept_fake_success ? "true" : "false") << ",\n"
+        << "  \"auto_forward_token\": " << (c.auto_forward_token ? "true" : "false") << ",\n"
+        << "  \"telegram_bot_token\": \"" << c.telegram_bot_token << "\",\n"
+        << "  \"telegram_chat_id\": \"" << c.telegram_chat_id << "\",\n"
+        << "  \"forward_url\": \"" << c.forward_url << "\",\n"
+        << "  \"log_file\": \"" << c.log_file << "\"\n"
+        << "}\n";
+    chmod(path.c_str(), 0644);
 }
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {

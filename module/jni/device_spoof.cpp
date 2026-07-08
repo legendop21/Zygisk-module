@@ -1,5 +1,6 @@
 #include "device_spoof.hpp"
 #include "logger.hpp"
+#include "plt_hook.hpp"
 #include "zygisk_utils.hpp"
 
 #include <cstring>
@@ -110,15 +111,16 @@ std::string read_persisted_id() {
 }
 
 void install_property_hooks(zygisk::Api* api) {
-    if (!api || !api->pltHookRegister || !api->pltHookCommit) return;
-    api->pltHookRegister(".*libc\\.so$", "__system_property_get",
-                         reinterpret_cast<void*>(hook___system_property_get),
-                         reinterpret_cast<void**>(&orig___system_property_get));
-    api->pltHookCommit();
+    if (!api) return;
+    plt_hook::set_api(api);
+    plt_hook::register_regex(".*/libc\\.so$", "__system_property_get",
+                             reinterpret_cast<void*>(hook___system_property_get),
+                             reinterpret_cast<void**>(&orig___system_property_get));
+    plt_hook::commit();
 }
 
 void install_system_properties_jni(zygisk::Api* api, JNIEnv* env) {
-    if (!api || !api->hookJniNativeMethods) return;
+    if (!api) return;
 
     JNINativeMethod methods[] = {
         {"get", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
@@ -130,7 +132,7 @@ void install_system_properties_jni(zygisk::Api* api, JNIEnv* env) {
 }
 
 void install_settings_jni(zygisk::Api* api, JNIEnv* env) {
-    if (!api || !api->hookJniNativeMethods) return;
+    if (!api) return;
 
     jclass secure = env->FindClass("android/provider/Settings$Secure");
     if (!secure) return;

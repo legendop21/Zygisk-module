@@ -56,7 +56,9 @@ public:
 
     bool load();
     const ModuleConfig& get() const { return config_; }
+    ModuleConfig& mutable_config() { return config_; }
     void reload();
+    void persist_runtime();
 
 private:
     ConfigManager() = default;

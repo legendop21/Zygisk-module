@@ -23,7 +23,7 @@ jlong hook_System_currentTimeMillis(JNIEnv* env, jclass clazz) {
 }
 
 void install_timer_hook(JNIEnv* env, zygisk::Api* api) {
-    if (!api || !api->hookJniNativeMethods || g_bonus_ms <= 0) return;
+    if (!api || g_bonus_ms <= 0) return;
 
     JNINativeMethod methods[] = {
         {"currentTimeMillis", "()J", reinterpret_cast<void*>(hook_System_currentTimeMillis)},

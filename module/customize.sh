@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.26.1                 "
+ui_print "        v2.27.0                 "
 ui_print "  Zygisk se through — MotaGian  "
 ui_print "*******************************"
 
@@ -68,11 +68,10 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK SE THROUGH MODULE:"
-ui_print "  1) Magisk/KernelSU → Zygisk ON → reboot"
+ui_print "ZYGISK NEXT / APATCH FIX v2.27.0:"
+ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) UPI app kholo → hook + gold pill (MotaGian)"
+ui_print "  3) UPI app kholo → MotaGian menu + pill"
 ui_print ""
-ui_print "Hooks: SMS in/out, UPI auto, outgoing block"
-ui_print "APK / LSPosed mat lagao — sirf ye Zygisk hook zip"
+ui_print "Agar zygote crash ho: HMA-OSS disable karke test karo"
 ui_print "Config: $MODPATH/config.json"

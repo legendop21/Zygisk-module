@@ -21,6 +21,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     device_spoof.cpp
     upi_registry.cpp
     overlay_ui.cpp
+    plt_hook.cpp
     zygisk_utils.cpp
 )
 

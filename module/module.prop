@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.26.1
-versionCode=73
+version=v2.27.0
+versionCode=74
 author=@hivirtus
-description=Zygisk se through run — UPI/SMS hook, MotaGian pill. APK/LSPosed nahi chahiye.
+description=Zygisk Next/APatch fix — MotaGian menu + SMS/UPI hooks. Official Zygisk API.
 zygisk=1
