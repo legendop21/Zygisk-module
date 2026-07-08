@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import com.hivirtus.zygiskmode.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -40,7 +41,6 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnGrantOverlay.setOnClickListener {
             startActivity(PermissionHelper.overlaySettingsIntent(this))
-            Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
         }
 
         binding.btnGrantNotification.setOnClickListener {
@@ -48,6 +48,24 @@ class MainActivity : AppCompatActivity() {
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 startActivity(PermissionHelper.notificationSettingsIntent(this))
+            }
+        }
+
+        binding.btnMiuiAutostart.setOnClickListener {
+            val intent = PermissionHelper.miuiAutostartIntent(this)
+            if (intent != null) {
+                startActivity(intent)
+                Toast.makeText(this, R.string.miui_autostart_hint, Toast.LENGTH_LONG).show()
+            } else {
+                startActivity(PermissionHelper.overlaySettingsIntent(this))
+            }
+        }
+
+        binding.btnBattery.setOnClickListener {
+            try {
+                startActivity(PermissionHelper.batterySettingsIntent(this))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.open_app_settings_battery, Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -64,7 +82,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     startActivity(PermissionHelper.notificationSettingsIntent(this))
                 }
-                Toast.makeText(this, R.string.grant_notification_permission, Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             startOverlayService()
@@ -75,6 +92,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.overlay_stopped, Toast.LENGTH_SHORT).show()
         }
 
+        binding.miuiSection.isVisible = PermissionHelper.isXiaomiFamily()
         updatePermissionStatus()
     }
 
@@ -90,12 +108,16 @@ class MainActivity : AppCompatActivity() {
     private fun updatePermissionStatus() {
         val overlayOk = PermissionHelper.canDrawOverlay(this)
         val notifOk = PermissionHelper.hasNotificationPermission(this)
+        val batteryOk = PermissionHelper.isBatteryUnrestricted(this)
 
         binding.tvOverlayStatus.text = getString(
             if (overlayOk) R.string.permission_overlay_ok else R.string.permission_overlay_missing
         )
         binding.tvNotificationStatus.text = getString(
             if (notifOk) R.string.permission_notification_ok else R.string.permission_notification_missing
+        )
+        binding.tvMiuiStatus.text = getString(
+            if (batteryOk) R.string.miui_battery_ok else R.string.miui_battery_missing
         )
         binding.btnStartOverlay.isEnabled = overlayOk && notifOk
     }
@@ -104,14 +126,10 @@ class MainActivity : AppCompatActivity() {
         pendingStart = false
         try {
             val intent = Intent(this, OverlayService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            // POCO/MIUI: startService zyada reliable hai startForegroundService se
+            startService(intent)
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
-            // Do NOT background app immediately — wait for service to startForeground
-            binding.root.postDelayed({ moveTaskToBack(true) }, 800)
+            binding.root.postDelayed({ moveTaskToBack(true) }, 1200)
         } catch (e: Exception) {
             Toast.makeText(
                 this,

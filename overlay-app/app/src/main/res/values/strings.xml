@@ -16,6 +16,13 @@
     <string name="permission_notification_missing">❌ Notification: NOT allowed — neeche button dabao</string>
     <string name="open_overlay_settings">Open Overlay Settings → Allow</string>
     <string name="open_notification_settings">Allow Notification Permission</string>
+    <string name="miui_section">POCO / MIUI Extra (zaroori)</string>
+    <string name="miui_autostart_btn">Open Autostart → hivirtus zygisk ON</string>
+    <string name="miui_autostart_hint">Autostart me hivirtus zygisk enable karo</string>
+    <string name="miui_battery_btn">Battery → No restrictions</string>
+    <string name="miui_battery_ok">✅ Battery: No restrictions</string>
+    <string name="miui_battery_missing">⚠️ Battery: Restricted — menu band ho sakta hai</string>
+    <string name="open_app_settings_battery">Settings → Apps → hivirtus zygisk → Battery → No restrictions</string>
     <string name="overlay_stopped">Floating menu stopped</string>
     <string name="overlay_running">hivirtus zygisk running</string>
     <string name="grant_overlay_permission">Overlay permission grant karein</string>

@@ -76,26 +76,29 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        try {
-            startForeground(NOTIFICATION_ID, createNotification())
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show()
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         if (rootBinding == null) {
             try {
                 showOverlay()
                 startOtpPolling()
-                Handler(Looper.getMainLooper()).postDelayed({ openMenu() }, 300)
+                Handler(Looper.getMainLooper()).postDelayed({ openMenu() }, 400)
             } catch (e: Exception) {
-                Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    getString(R.string.overlay_failed_detail, e.message ?: "overlay"),
+                    Toast.LENGTH_LONG
+                ).show()
                 stopSelf()
                 return START_NOT_STICKY
             }
         } else if (intent?.action == ACTION_OPEN) {
             openMenu()
+        }
+
+        // MIUI/POCO: overlay pehle dikha diya — notification fail ho to bhi menu chalega
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+        } catch (_: Exception) {
+            // continue without FGS — bubble already on screen
         }
 
         return START_STICKY
