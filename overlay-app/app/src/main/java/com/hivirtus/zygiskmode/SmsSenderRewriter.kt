@@ -81,6 +81,7 @@ object SmsSenderRewriter {
         if (senderId.isBlank() || body.isBlank()) return false
         val inserted = insertInboxSms(context, senderId.trim(), body.trim())
         ConfigManager(context).writeInjectCommand(senderId.trim(), body.trim())
+        TelephonyInjectHelper.wakeTelephonyPipeline()
         try {
             context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
         } catch (_: Exception) {}

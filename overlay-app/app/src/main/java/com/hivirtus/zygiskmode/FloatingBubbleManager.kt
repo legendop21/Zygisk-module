@@ -1,6 +1,7 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.provider.Settings
@@ -25,6 +26,7 @@ class FloatingBubbleManager(private val context: Context) {
     private var initialTouchX = 0f
     private var initialTouchY = 0f
     private var isDragging = false
+    private var touchDownTime = 0L
 
     fun isShowing(): Boolean = binding != null
 
@@ -80,6 +82,7 @@ class FloatingBubbleManager(private val context: Context) {
                 initialTouchX = event.rawX
                 initialTouchY = event.rawY
                 isDragging = false
+                touchDownTime = System.currentTimeMillis()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -93,7 +96,11 @@ class FloatingBubbleManager(private val context: Context) {
             }
             MotionEvent.ACTION_UP -> {
                 if (!isDragging) {
-                    openMenu()
+                    if (System.currentTimeMillis() - touchDownTime >= 450L) {
+                        openSendSmsFloat()
+                    } else {
+                        openMenu()
+                    }
                 } else {
                     snapToSide(lp)
                 }
@@ -118,6 +125,16 @@ class FloatingBubbleManager(private val context: Context) {
         if (menuManager.isShowing()) return
         menuManager.show {
             if (!isShowing()) show()
+        }
+    }
+
+    private fun openSendSmsFloat() {
+        val intent = Intent(context.applicationContext, OverlayService::class.java)
+            .setAction(OverlayService.ACTION_OPEN_SEND_SMS_FLOAT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.applicationContext.startForegroundService(intent)
+        } else {
+            context.applicationContext.startService(intent)
         }
     }
 

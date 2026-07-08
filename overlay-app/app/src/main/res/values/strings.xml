@@ -77,7 +77,14 @@
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
     <string name="override_incoming_sender">Override Sender ID</string>
-    <string name="intercept_fake_success">Intercept &amp; Fake Success (outgoing)</string>
+    <string name="send_sms_title">Send SMS</string>
+    <string name="sms_sender_label">Sms Sender</string>
+    <string name="clear">Clear</string>
+    <string name="paste_and_send">Paste &amp; send</string>
+    <string name="send_virtual_sms">Send SMS</string>
+    <string name="open_send_sms_float">Open Send SMS Float</string>
+    <string name="message_body_hint_short">OTP / verify message body</string>
+    <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
     <string name="intercept_fake_success_warn">ON = outgoing SMS intercept + fake success to app (UPI verify)</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
     <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>

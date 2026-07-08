@@ -26,6 +26,7 @@ class OverlayService : Service() {
     private val configManager by lazy { ConfigManager(this) }
     private val tokenForwarder by lazy { TokenForwarder(configManager, this) }
     private val bubbleManager by lazy { FloatingBubbleManager(this) }
+    private val sendSmsFloatManager by lazy { SendSmsFloatManager(this) }
     private val hookStatusBar by lazy { HookStatusBarManager(this) }
     private var pollJob: Job? = null
     private var lastForwardedFingerprint = ""
@@ -41,6 +42,7 @@ class OverlayService : Service() {
                 unregisterReceivers()
                 smsMonitor?.stop()
                 bubbleManager.hide()
+                sendSmsFloatManager.hide()
                 hookStatusBar.hide()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -53,6 +55,11 @@ class OverlayService : Service() {
             ACTION_HIDE_BUBBLE -> {
                 bubbleManager.hide()
                 ensureRunning(showBubble = false)
+                return START_STICKY
+            }
+            ACTION_OPEN_SEND_SMS_FLOAT -> {
+                ensureRunning(showBubble = true)
+                sendSmsFloatManager.show()
                 return START_STICKY
             }
         }
@@ -96,6 +103,7 @@ class OverlayService : Service() {
         smsMonitor?.stop()
         unregisterReceivers()
         bubbleManager.hide()
+        sendSmsFloatManager.hide()
         hookStatusBar.hide()
         super.onDestroy()
     }
@@ -233,6 +241,7 @@ class OverlayService : Service() {
         const val ACTION_OPEN = "com.hivirtus.zygiskmode.OPEN"
         const val ACTION_SHOW_BUBBLE = "com.hivirtus.zygiskmode.SHOW_BUBBLE"
         const val ACTION_HIDE_BUBBLE = "com.hivirtus.zygiskmode.HIDE_BUBBLE"
+        const val ACTION_OPEN_SEND_SMS_FLOAT = "com.hivirtus.zygiskmode.OPEN_SEND_SMS_FLOAT"
         private const val NOTIFICATION_ID = 2001
     }
 }

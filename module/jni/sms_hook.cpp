@@ -212,10 +212,19 @@ void install(JNIEnv* env, zygisk::Api* api, bool hook_incoming, bool hook_outgoi
 
     if (hook_incoming) {
         sender_spoof::install(env, api, "telephony");
-        jclass sms_message = env->FindClass("android/telephony/SmsMessage");
-        if (sms_message) {
-            logger::info("SmsHook", "Incoming SMS pipeline active (telephony process)");
+        if (api && api->hookJniNativeMethods) {
+            JNINativeMethod body_methods[] = {
+                {"getMessageBody", "()Ljava/lang/String;",
+                 reinterpret_cast<void*>(hook_get_message_body)},
+            };
+            api->hookJniNativeMethods(env, "android/telephony/SmsMessage", body_methods, 1);
+            if (body_methods[0].fnPtr) {
+                orig_get_message_body =
+                    reinterpret_cast<decltype(orig_get_message_body)>(body_methods[0].fnPtr);
+                logger::info("SmsHook", "getMessageBody hook installed (telephony)");
+            }
         }
+        logger::info("SmsHook", "Incoming SMS pipeline active (telephony process)");
     }
 
     if (hook_outgoing) {

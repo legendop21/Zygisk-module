@@ -1,6 +1,8 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -58,6 +60,7 @@ class OverlayMenuController(
         menu.switchInterceptFakeSuccess.isChecked = config.interceptFakeSuccess
         menu.switchAutoExtractOtp.isChecked = config.autoExtractOtp
         menu.etSenderId.setText(config.injectSenderId)
+        menu.etMessageBody.setText(config.injectMessageBody)
         menu.switchAutoForward.isChecked = config.autoForwardToken
         menu.switchFakeInterceptTg.isChecked = false
         menu.etBotToken.setText(config.telegramBotToken)
@@ -67,6 +70,8 @@ class OverlayMenuController(
     private fun setupClickListeners() {
         menu.btnClose.setOnClickListener { onMinimize() }
         menu.btnStartHook.setOnClickListener { startZygiskHooks() }
+        menu.btnOpenSendSmsFloat.setOnClickListener { openSendSmsFloat() }
+        menu.btnInjectLocalSms.setOnClickListener { injectLocalSms() }
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
         menu.tabTelegram.setOnClickListener { selectTab(Tab.TG) }
@@ -106,6 +111,13 @@ class OverlayMenuController(
         autoToggle(menu.switchOverrideIncomingSender) { checked ->
             savePartial { it.copy(overrideIncomingSender = checked) }
         }
+        autoToggle(menu.switchInterceptFakeSuccess) { checked ->
+            savePartial { it.copy(interceptFakeSuccess = checked) }
+            scope.launch(Dispatchers.IO) { OutgoingSmsGuard.refresh(appContext) }
+        }
+        autoToggle(menu.switchAutoExtractOtp) { checked ->
+            savePartial { it.copy(autoExtractOtp = checked) }
+        }
         autoToggle(menu.switchAutoForward) { checked ->
             savePartial { it.copy(autoForwardToken = checked) }
         }
@@ -120,6 +132,7 @@ class OverlayMenuController(
         }
         menu.etPhoneSim1.addTextChangedListener(textWatcher)
         menu.etSenderId.addTextChangedListener(textWatcher)
+        menu.etMessageBody.addTextChangedListener(textWatcher)
         menu.etBotToken.addTextChangedListener(textWatcher)
         menu.etChatId.addTextChangedListener(textWatcher)
     }
@@ -160,6 +173,7 @@ class OverlayMenuController(
             val chatId = textOf(menu.etChatId)
             val phone = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
             val sender = textOf(menu.etSenderId)
+            val messageBody = textOf(menu.etMessageBody)
             val forwardUrl = if (token.isNotBlank() && chatId.isNotBlank()) {
                 "https://api.telegram.org/bot$token/sendMessage"
             } else {
@@ -169,6 +183,7 @@ class OverlayMenuController(
                 configManager.load().copy(
                     mockPhoneSim1 = phone,
                     injectSenderId = sender,
+                    injectMessageBody = messageBody,
                     telegramBotToken = token,
                     telegramChatId = chatId,
                     forwardUrl = forwardUrl,
@@ -177,6 +192,7 @@ class OverlayMenuController(
                     hookIncomingSms = menu.switchHookIncoming.isChecked,
                     hookOutgoingSms = menu.switchHookOutgoing.isChecked,
                     overrideIncomingSender = menu.switchOverrideIncomingSender.isChecked,
+                    interceptFakeSuccess = menu.switchInterceptFakeSuccess.isChecked,
                     autoForwardToken = menu.switchAutoForward.isChecked,
                     fakeInterceptTelegram = false
                 )
@@ -274,6 +290,7 @@ class OverlayMenuController(
             menu.switchHookIncoming.isChecked = true
             menu.switchHookOutgoing.isChecked = true
             menu.switchOverrideIncomingSender.isChecked = true
+            menu.switchInterceptFakeSuccess.isChecked = true
 
             withContext(Dispatchers.IO) { OutgoingSmsGuard.refresh(appContext) }
             HookStatusBarManager(appContext).refresh()
@@ -320,6 +337,51 @@ class OverlayMenuController(
                     )
                 )
             }
+        }
+    }
+
+    private fun openSendSmsFloat() {
+        onMinimize()
+        val intent = Intent(appContext, OverlayService::class.java)
+            .setAction(OverlayService.ACTION_OPEN_SEND_SMS_FLOAT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            appContext.startForegroundService(intent)
+        } else {
+            appContext.startService(intent)
+        }
+    }
+
+    private fun injectLocalSms() {
+        scope.launch {
+            val sender = textOf(menu.etSenderId)
+            val body = textOf(menu.etMessageBody)
+            if (sender.isBlank()) {
+                toast(R.string.set_sender_id_first, Toast.LENGTH_LONG)
+                selectTab(Tab.MESSAGE)
+                return@launch
+            }
+            if (body.isBlank()) {
+                toast(R.string.enter_message_body, Toast.LENGTH_LONG)
+                selectTab(Tab.MESSAGE)
+                return@launch
+            }
+
+            val ok = withContext(Dispatchers.IO) {
+                configManager.save(
+                    configManager.load().copy(
+                        injectSenderId = sender,
+                        injectMessageBody = body,
+                        hookIncomingSms = true,
+                        overrideIncomingSender = true,
+                        interceptFakeSuccess = menu.switchInterceptFakeSuccess.isChecked
+                    )
+                )
+                VirtualSmsPipeline.injectIncoming(appContext, sender, body)
+            }
+            toast(
+                if (ok) R.string.sms_injected else R.string.save_failed,
+                Toast.LENGTH_SHORT
+            )
         }
     }
 
