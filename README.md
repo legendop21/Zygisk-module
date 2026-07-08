@@ -1,4 +1,4 @@
-# Hivirtus Zygisk Mode v2.2
+# Hivirtus Zygisk Mode v2.8.0
 
 ## UPI Apps Hook + Telegram Token (Screenshot Format)
 

