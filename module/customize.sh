@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.14.1  "
+ui_print "   Hivirtus Zygisk Mode v2.14.2  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -29,8 +29,8 @@ if [ ! -f "$MODPATH/config.json" ]; then
   ui_print "- Creating default config"
   cat > "$MODPATH/config.json" << 'EOF'
 {
-  "hide_root": true,
-  "hide_developer": true,
+  "hide_root": false,
+  "hide_developer": false,
   "hide_magisk": true,
   "hide_kernelsu": true,
   "hide_apatch": true,

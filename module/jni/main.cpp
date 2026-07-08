@@ -38,6 +38,7 @@ bool is_messaging_process(const char* nice_name) {
 
 bool is_lsposed_stack(const std::string& process) {
     if (process.find("lsposed") != std::string::npos) return true;
+    if (process.find("zygisk") != std::string::npos) return true;
     if (process == "org.lsposed.manager") return true;
     return false;
 }
@@ -88,15 +89,19 @@ public:
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
 
-        // FORCE_DENYLIST_UNMOUNT har process pe LSPosed / Zygisk Next tod deta hai —
-        // sirf hooked UPI app me optional; denylist post-fs-data se handle hoti hai.
-        if (config.hide_root && is_hooked_upi_ && !is_lsposed_stack(process_name_)) {
-            api_->setOption(zygisk::Option::FORCE_DENYLIST_UNMOUNT);
-        }
+        // Denylist unmount LSPosed / Zygisk Next ke saath use mat karo.
+        (void)config;
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
         if (is_lsposed_stack(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
+        // Zygote / system — koi hook nahi, turant unload
+        if (process_name_ == "zygote" || process_name_ == "zygote64" ||
+            process_name_ == "system_server") {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }

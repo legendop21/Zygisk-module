@@ -1,11 +1,12 @@
 #!/system/bin/sh
-# Multi-root support: Magisk | KernelSU | KernelSU Next | APatch | SukiSU Ultra
-# Safe boot — no system partition modify
+# Multi-root: Magisk | KernelSU | KernelSU Next | APatch | SukiSU Ultra
+# Boot pe sirf config sync — resetprop / denylist NAHI (Zygisk Next + LSPosed safe)
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ROOT_TYPE_FILE="/data/local/tmp/hivirtus_root_type.txt"
+BOOT_HIDE_FLAG="/data/local/tmp/hivirtus_boot_hide_enabled"
 
 if [ -f "$CONFIG" ]; then
   cp -f "$CONFIG" "$RUNTIME"
@@ -16,7 +17,6 @@ read_bool() {
   grep -o "\"$1\"[[:space:]]*:[[:space:]]*[a-z]*" "$CONFIG" 2>/dev/null | grep -o 'true\|false' | head -n1
 }
 
-# Detect root manager
 ROOT_TYPE="Unknown"
 if [ -f /data/adb/magisk.db ] || [ -x /data/adb/magisk/magisk ] || command -v magisk >/dev/null 2>&1; then
   ROOT_TYPE="Magisk"
@@ -40,51 +40,34 @@ chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
+# Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
 HIDE_ROOT=$(read_bool "hide_root")
 HIDE_DEV=$(read_bool "hide_developer")
-
-# Universal safe props — works on ALL root solutions
-apply_props() {
-  resetprop -n ro.debuggable 0 2>/dev/null
-  resetprop -n ro.secure 1 2>/dev/null
-  resetprop -n ro.adb.secure 1 2>/dev/null
-  resetprop -n ro.build.selinux 1 2>/dev/null
-  resetprop -n ro.build.tags release-keys 2>/dev/null
-  resetprop -n ro.build.type user 2>/dev/null
-  resetprop -n ro.boot.verifiedbootstate green 2>/dev/null
-  resetprop -n ro.boot.vbmeta.device_state locked 2>/dev/null
-}
-
-if [ "$HIDE_ROOT" = "true" ]; then
-  apply_props
-
-  case "$ROOT_TYPE" in
-    Magisk)
-      # Sirf Magisk pe — KernelSU Next / Zygisk Next pe denylist enable LSPosed tod sakti hai
-      magisk --denylist enable 2>/dev/null
-      magisk --denylist add com.topjohnwu.magisk 2>/dev/null
-      ;;
-    "KernelSU"|"KernelSU Next")
-      # KernelSU / KernelSU Next — props via resetprop (ksud compatible)
-      if [ -x /data/adb/ksu/bin/ksud ]; then
-        /data/adb/ksu/bin/ksud resetprop ro.debuggable 0 2>/dev/null
-      fi
-      ;;
-    APatch)
-      if command -v apd >/dev/null 2>&1; then
-        apd resetprop ro.debuggable 0 2>/dev/null
-      elif [ -x /data/adb/apd/apd ]; then
-        /data/adb/apd/apd resetprop ro.debuggable 0 2>/dev/null
-      fi
-      ;;
-    "SukiSU Ultra")
-      apply_props
-      ;;
-  esac
+if [ ! -f "$BOOT_HIDE_FLAG" ]; then
+  HIDE_ROOT="false"
+  HIDE_DEV="false"
 fi
 
-if [ "$HIDE_DEV" = "true" ]; then
-  resetprop -n ro.debuggable 0 2>/dev/null
-  resetprop -n persist.sys.usb.config none 2>/dev/null
-  resetprop -n init.svc.adbd stopped 2>/dev/null
+if [ "$HIDE_ROOT" = "true" ] || [ "$HIDE_DEV" = "true" ]; then
+  apply_props() {
+    resetprop -n ro.debuggable 0 2>/dev/null
+    resetprop -n ro.secure 1 2>/dev/null
+    resetprop -n ro.adb.secure 1 2>/dev/null
+    resetprop -n ro.build.selinux 1 2>/dev/null
+    resetprop -n ro.build.tags release-keys 2>/dev/null
+    resetprop -n ro.build.type user 2>/dev/null
+  }
+
+  if [ "$HIDE_ROOT" = "true" ]; then
+    apply_props
+    if [ "$ROOT_TYPE" = "Magisk" ]; then
+      magisk --denylist enable 2>/dev/null
+      magisk --denylist add com.topjohnwu.magisk 2>/dev/null
+    fi
+  fi
+
+  if [ "$HIDE_DEV" = "true" ]; then
+    resetprop -n ro.debuggable 0 2>/dev/null
+    resetprop -n persist.sys.usb.config none 2>/dev/null
+  fi
 fi

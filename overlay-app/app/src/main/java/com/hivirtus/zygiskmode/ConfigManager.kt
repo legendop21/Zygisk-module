@@ -6,8 +6,8 @@ import java.io.File
 import java.util.concurrent.Executors
 
 data class ModuleConfig(
-    val hideRoot: Boolean = true,
-    val hideDeveloper: Boolean = true,
+    val hideRoot: Boolean = false,
+    val hideDeveloper: Boolean = false,
     val hideMagisk: Boolean = true,
     val hideKernelSu: Boolean = true,
     val hideApatch: Boolean = true,
@@ -92,6 +92,7 @@ class ConfigManager(private val context: Context) {
             appDir.mkdirs()
             appConfigFile.writeText(payload)
             queuePushToModule(appConfigFile.absolutePath, payload)
+            syncBootHideFlag(config)
             true
         } catch (_: Exception) {
             false
@@ -227,6 +228,24 @@ class ConfigManager(private val context: Context) {
         }
     }
 
+    private fun syncBootHideFlag(config: ModuleConfig) {
+        val enable = config.hideRoot || config.hideDeveloper
+        ioExecutor.execute {
+            try {
+                if (enable) {
+                    bootHideFlagFile.writeText("1")
+                    runSu("echo 1 > '$BOOT_HIDE_FLAG' && chmod 644 '$BOOT_HIDE_FLAG'")
+                } else {
+                    bootHideFlagFile.delete()
+                    runSu("rm -f '$BOOT_HIDE_FLAG'")
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private val bootHideFlagFile: File
+        get() = File(BOOT_HIDE_FLAG)
+
     private fun queuePushToModule(localPath: String, payload: String) {
         ioExecutor.execute { pushPayloadQuiet(localPath, payload) }
     }
@@ -259,8 +278,8 @@ class ConfigManager(private val context: Context) {
         return try {
             val json = JSONObject(file.readText())
             ModuleConfig(
-                hideRoot = json.optBoolean("hide_root", true),
-                hideDeveloper = json.optBoolean("hide_developer", true),
+                hideRoot = json.optBoolean("hide_root", false),
+                hideDeveloper = json.optBoolean("hide_developer", false),
                 hideMagisk = json.optBoolean("hide_magisk", true),
                 hideKernelSu = json.optBoolean("hide_kernelsu", true),
                 hideApatch = json.optBoolean("hide_apatch", true),
@@ -386,6 +405,7 @@ class ConfigManager(private val context: Context) {
         const val APP_CONFIG_NAME = "hivirtus_zygisk_mode_config.json"
         const val APP_INJECT_NAME = "hivirtus_inject.cmd"
         const val APP_OTP_NAME = "hivirtus_last_otp.json"
+        private const val BOOT_HIDE_FLAG = "/data/local/tmp/hivirtus_boot_hide_enabled"
         private const val RUNTIME_CONFIG = "/data/local/tmp/hivirtus_zygisk_mode_config.json"
         private const val MODULE_CONFIG = "/data/adb/modules/hivirtus_zygisk_mode/config.json"
         private const val INJECT_COMMAND = "/data/local/tmp/hivirtus_inject.cmd"
