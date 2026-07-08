@@ -1,16 +1,11 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 
 class OverlayActivity : AppCompatActivity() {
 
@@ -34,31 +29,9 @@ class OverlayActivity : AppCompatActivity() {
                 Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_HIDE_BUBBLE)
             )
 
-            val menuBinding = OverlayMenuBinding.inflate(layoutInflater)
-            val menuHeight = (resources.displayMetrics.heightPixels * 0.52f).toInt()
-
-            val container = FrameLayout(this).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setBackgroundColor(Color.parseColor("#99000000"))
-                setOnClickListener { minimizeMenu() }
-            }
-
-            menuBinding.root.setOnClickListener { /* menu area */ }
-
-            container.addView(
-                menuBinding.root,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    menuHeight,
-                    Gravity.BOTTOM
-                )
-            )
-            setContentView(container)
-
-            OverlayMenuController(this, menuBinding) { minimizeMenu() }.bind()
+            val host = MenuOverlayLayout.build(this, onClose = { minimizeMenu() }, dismissOnBackgroundTap = true)
+            setContentView(host.root)
+            host.controller.bind()
 
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {

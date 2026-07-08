@@ -72,12 +72,41 @@ jstring hook_Settings_Secure_getString(JNIEnv* env, jclass clazz, jobject resolv
 }
 
 void write_runtime_marker(const std::string& id) {
-    FILE* f = fopen("/data/local/tmp/hivirtus_spoof_android_id.txt", "w");
-    if (f) {
-        fprintf(f, "%s\n", id.c_str());
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_spoof_android_id.txt", 0644);
+    const char* paths[] = {
+        "/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt",
+        "/data/local/tmp/hivirtus_spoof_android_id.txt",
+        nullptr
+    };
+    for (const char** p = paths; *p; ++p) {
+        FILE* f = fopen(*p, "w");
+        if (f) {
+            fprintf(f, "%s\n", id.c_str());
+            fclose(f);
+            chmod(*p, 0644);
+        }
     }
+}
+
+std::string read_persisted_id() {
+    const char* paths[] = {
+        "/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt",
+        "/data/local/tmp/hivirtus_spoof_android_id.txt",
+        nullptr
+    };
+    char buf[64] = {};
+    for (const char** p = paths; *p; ++p) {
+        FILE* f = fopen(*p, "r");
+        if (!f) continue;
+        if (fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            std::string id = buf;
+            if (!id.empty() && id.back() == '\n') id.pop_back();
+            if (!id.empty()) return id;
+        } else {
+            fclose(f);
+        }
+    }
+    return {};
 }
 
 void install_property_hooks(zygisk::Api* api) {
@@ -124,14 +153,7 @@ void install(JNIEnv* env, const ModuleConfig& config, zygisk::Api* api) {
     g_config = &config;
     g_spoof_id = config.spoof_android_id;
     if (g_spoof_id.empty()) {
-        char buf[32] = {};
-        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_android_id.txt", "r");
-        if (f) {
-            fgets(buf, sizeof(buf), f);
-            fclose(f);
-            g_spoof_id = buf;
-            if (!g_spoof_id.empty() && g_spoof_id.back() == '\n') g_spoof_id.pop_back();
-        }
+        g_spoof_id = read_persisted_id();
     }
     if (g_spoof_id.empty()) return;
 

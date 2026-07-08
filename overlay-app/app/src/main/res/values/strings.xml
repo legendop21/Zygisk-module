@@ -3,7 +3,7 @@
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
     <string name="mod_menu_title">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
     <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
-    <string name="start_overlay">Open Mod Menu</string>
+    <string name="start_overlay">Start Zygisk Hooks</string>
     <string name="stop_overlay">Stop Floating Menu</string>
     <string name="overlay_started">Menu khul gaya — band karoge to side bubble dikhega</string>
     <string name="overlay_failed">Menu start fail — dono permission allow karo</string>
@@ -138,4 +138,15 @@
     <string name="backup_restore_failed">Koi backup nahi mila — pehle backup lo</string>
     <string name="device_id_changed">Device ID change ho gayi — apps restart karein</string>
     <string name="vip_active">VIP Active</string>
+    <string name="start_zygisk_hooks">▶ START ZYGISK HOOKS</string>
+    <string name="start_hook_success">✅ Start Successful — All Hooks Ready\nZygisk injected · SMS · UPI · Root Hide · Device ID active</string>
+    <string name="hook_status_idle">Tap START to activate Zygisk hooks</string>
+    <string name="hook_status_ready">✅ Hook Ready — Zygisk Active</string>
+    <string name="hook_status_no_module">❌ Module not flashed — install ZIP first</string>
+    <string name="hook_status_not_loaded">⚠️ Zygisk not loaded — reboot + enable Zygisk</string>
+    <string name="hook_status_no_sender">⚠️ Sender ID missing — MESSAGE tab me daalo</string>
+    <string name="hook_status_partial">⚠️ Partial setup — check Sender ID + Telegram</string>
+    <string name="hook_start_no_module">Zygisk module flash karo pehle — hivirtus_zygisk_mode.zip</string>
+    <string name="hook_start_not_loaded">Zygisk load nahi hua — Magisk/KernelSU me Zygisk ON + reboot</string>
+    <string name="device_id_persist_note">Clear data ke baad bhi same ID — module level spoof active</string>
 </resources>

@@ -9,6 +9,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import com.hivirtus.zygiskmode.databinding.ActivityMainBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -176,7 +180,19 @@ class MainActivity : AppCompatActivity() {
                 startService(serviceIntent)
             }
             startActivity(Intent(this, OverlayActivity::class.java))
-            Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
+            CoroutineScope(Dispatchers.Main).launch {
+                val health = withContext(Dispatchers.IO) {
+                    ModuleHealthChecker.check(applicationContext)
+                }
+                val message = if (health.moduleInstalled && health.zygiskLoaded) {
+                    getString(R.string.start_hook_success)
+                } else if (!health.moduleInstalled) {
+                    getString(R.string.hook_start_no_module)
+                } else {
+                    getString(R.string.hook_start_not_loaded)
+                }
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+            }
             if (!PermissionHelper.canDrawOverlay(this)) {
                 Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_LONG).show()
             }

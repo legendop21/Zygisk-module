@@ -34,7 +34,8 @@ class OverlayMenuController(
             setupClickListeners()
             listenersAttached = true
         }
-        selectTab(Tab.UPI)
+        selectTab(Tab.MESSAGE)
+        updateHookStatus()
     }
 
     private fun refreshFields() {
@@ -72,6 +73,8 @@ class OverlayMenuController(
 
     private fun setupClickListeners() {
         menu.btnClose.setOnClickListener { onMinimize() }
+
+        menu.btnStartHook.setOnClickListener { startZygiskHooks() }
 
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
@@ -310,6 +313,55 @@ class OverlayMenuController(
                 }
                 saved
             }
+        }
+    }
+
+    private fun updateHookStatus() {
+        scope.launch {
+            val health = withContext(Dispatchers.IO) { ModuleHealthChecker.check(appContext) }
+            val status = when {
+                health.activated -> appContext.getString(R.string.hook_status_ready)
+                !health.moduleInstalled -> appContext.getString(R.string.hook_status_no_module)
+                !health.zygiskLoaded -> appContext.getString(R.string.hook_status_not_loaded)
+                !health.senderIdSet -> appContext.getString(R.string.hook_status_no_sender)
+                else -> appContext.getString(R.string.hook_status_partial)
+            }
+            menu.tvHookStatus.text = status
+        }
+    }
+
+    private fun startZygiskHooks() {
+        scope.launch {
+            val health = withContext(Dispatchers.IO) { ModuleHealthChecker.check(appContext) }
+            if (!health.moduleInstalled) {
+                toast(R.string.hook_start_no_module, Toast.LENGTH_LONG)
+                menu.tvHookStatus.text = appContext.getString(R.string.hook_status_no_module)
+                return@launch
+            }
+            if (!health.zygiskLoaded) {
+                toast(R.string.hook_start_not_loaded, Toast.LENGTH_LONG)
+                menu.tvHookStatus.text = appContext.getString(R.string.hook_status_not_loaded)
+                return@launch
+            }
+            val config = configManager.load()
+            val saved = withContext(Dispatchers.IO) {
+                configManager.save(
+                    config.copy(
+                        hookIncomingSms = menu.switchHookIncoming.isChecked || config.hookIncomingSms,
+                        hookOutgoingSms = menu.switchHookOutgoing.isChecked || config.hookOutgoingSms,
+                        hideRoot = menu.switchNotRoot.isChecked || config.hideRoot,
+                        hideDeveloper = menu.switchNotDeveloper.isChecked || config.hideDeveloper,
+                        enableDeviceIdSpoof = config.enableDeviceIdSpoof ||
+                            config.spoofAndroidId.isNotBlank()
+                    )
+                )
+            }
+            if (!saved) {
+                toast(R.string.save_failed, Toast.LENGTH_LONG)
+                return@launch
+            }
+            menu.tvHookStatus.text = appContext.getString(R.string.hook_status_ready)
+            toast(R.string.start_hook_success, Toast.LENGTH_LONG)
         }
     }
 

@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:background="@drawable/overlay_background"
     android:orientation="vertical"
     android:padding="16dp">
@@ -124,22 +124,49 @@
         android:layout_marginTop="4dp"
         android:background="@color/divider" />
 
-    <!-- SYSTEM tab — screenshot style -->
     <ScrollView
+        android:id="@+id/tabContentScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="420dp"
+        android:fillViewport="true"
+        android:scrollbars="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+    <!-- SYSTEM tab — screenshot style -->
+    <LinearLayout
         android:id="@+id/panelSystem"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="280dp"
+        android:orientation="vertical"
         android:paddingTop="12dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStartHook"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/button_gradient"
+                android:text="@string/start_zygisk_hooks"
+                android:textColor="@color/button_text_on_gold"
+                app:backgroundTint="@null" />
+
+            <TextView
+                android:id="@+id/tvHookStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="@string/hook_status_idle"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
                 android:text="@string/system_sim_config"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
@@ -330,6 +357,14 @@
                 android:textColor="@color/primary_blue"
                 android:textSize="11sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/device_id_persist_note"
+                android:textColor="@color/gold_muted"
+                android:textSize="10sp" />
+
             <!-- hidden advanced toggles kept for config -->
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switchHideMagisk"
@@ -366,8 +401,7 @@
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:visibility="gone" />
-        </LinearLayout>
-    </ScrollView>
+    </LinearLayout>
 
     <!-- MESSAGE tab -->
     <LinearLayout
@@ -491,18 +525,13 @@
     </LinearLayout>
 
     <!-- UPI tab — all apps A to Z -->
-    <ScrollView
+    <LinearLayout
         android:id="@+id/panelUpi"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="300dp"
+        android:orientation="vertical"
         android:paddingTop="12dp"
         android:visibility="gone">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
 
             <TextView
                 android:layout_width="match_parent"
@@ -563,22 +592,16 @@
                 android:textColor="@color/text_primary"
                 android:textSize="12sp"
                 app:backgroundTint="@null" />
-        </LinearLayout>
-    </ScrollView>
+    </LinearLayout>
 
     <!-- TELEGRAM tab -->
-    <ScrollView
+    <LinearLayout
         android:id="@+id/panelTelegram"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="280dp"
+        android:orientation="vertical"
         android:paddingTop="12dp"
         android:visibility="gone">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/switchAutoForward"
@@ -654,7 +677,9 @@
                 android:text="@string/save_telegram_config"
                 android:textColor="@color/button_text_on_gold"
                 app:backgroundTint="@null" />
-        </LinearLayout>
+    </LinearLayout>
+
+        </FrameLayout>
     </ScrollView>
 
     <ImageButton

@@ -79,9 +79,7 @@ public:
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
-        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
-            device_spoof::install(env_, config, api_);
-        }
+        device_spoof::install(env_, config, api_);
 
         if (config.hide_root || config.hide_developer) {
             root_hide::install(env_, config, api_);
@@ -113,7 +111,9 @@ public:
 
         const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
                                        phone_active || config.enable_device_id_spoof ||
-                                       !config.spoof_android_id.empty();
+                                       !config.spoof_android_id.empty() ||
+                                       access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
+                                       access("/data/local/tmp/hivirtus_spoof_android_id.txt", R_OK) == 0;
         touch_module_heartbeat();
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
