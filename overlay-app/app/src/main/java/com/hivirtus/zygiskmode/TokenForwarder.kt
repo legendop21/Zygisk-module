@@ -30,7 +30,7 @@ class TokenForwarder(
             return forwardWebhook(config.forwardUrl, config.forwardMethod, otp)
         }
 
-        return forwardTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
+        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
     }
 
     fun forwardFakeIntercept(otp: LastOtp): Boolean {
@@ -39,7 +39,7 @@ class TokenForwarder(
         val botToken = config.telegramBotToken
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
-        return forwardTelegram(botToken, chatId, buildZygiskMenuMessage(otp, fakeIntercept = true))
+        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp, fakeIntercept = true))
     }
 
     fun sendTestMessage(botToken: String, chatId: String, health: ModuleHealth): Boolean {

@@ -1,10 +1,9 @@
 #!/system/bin/sh
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
-SKIPUNZIP=1
-
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.11.2  "
+ui_print "   Hivirtus Zygisk Mode v2.11.3  "
+ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -12,24 +11,18 @@ if [ -z "$MODPATH" ]; then
   abort "Installation failed"
 fi
 
-ui_print "- Extracting module files..."
-
-unzip -o "$ZIPFILE" 'module.prop' -d "$MODPATH" >&2
-unzip -o "$ZIPFILE" 'config.json' -d "$MODPATH" >&2
-unzip -o "$ZIPFILE" 'post-fs-data.sh' -d "$MODPATH" >&2
-unzip -o "$ZIPFILE" 'service.sh' -d "$MODPATH" >&2
-unzip -o "$ZIPFILE" 'customize.sh' -d "$MODPATH" >&2
-unzip -o "$ZIPFILE" 'zygisk/*' -d "$MODPATH" >&2
+ui_print "- Installing to $MODPATH"
 
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
-set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
-set_perm "$MODPATH/service.sh" 0 0 0755
-set_perm "$MODPATH/customize.sh" 0 0 0755
-set_perm "$MODPATH/config.json" 0 0 0644
+[ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
+[ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
+[ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
+[ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
+[ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
 
 if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
-  ui_print "! WARNING: No Zygisk native libs found in zip"
-  ui_print "! Make sure Zygisk is enabled in root manager"
+  ui_print "! WARNING: No Zygisk native libs in module"
+  ui_print "! Rebuild zip with ./build.sh"
 fi
 
 if [ ! -f "$MODPATH/config.json" ]; then
@@ -45,6 +38,7 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "hide_all_root_apps": true,
   "enable_sim1_mock": false,
   "enable_sim2_mock": false,
+  "enable_phone_spoof": false,
   "mock_country_iso": "in",
   "hook_incoming_sms": true,
   "hook_outgoing_sms": true,
@@ -57,20 +51,20 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "log_file": "/data/local/tmp/hivirtus_zygisk_mode.log"
 }
 EOF
+  set_perm "$MODPATH/config.json" 0 0 0644
 fi
 
-# Detect root manager
 if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
-  ui_print "- KernelSU / KSU Next detected"
+  ui_print "- KernelSU detected"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
 elif [ -d /data/adb/apatch ]; then
   ui_print "- APatch detected"
 fi
 
-ui_print "- Module installed: $MODPATH"
-ui_print "- Enable Zygisk in root settings"
-ui_print "- Reboot to activate"
-
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
+
+ui_print "- Module installed successfully"
+ui_print "- Enable Zygisk in root manager"
+ui_print "- Reboot to activate"

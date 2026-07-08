@@ -62,8 +62,13 @@ cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
+cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
+if [ -d "$MODULE_DIR/META-INF" ]; then
+  cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
+fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
+[ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
 ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
