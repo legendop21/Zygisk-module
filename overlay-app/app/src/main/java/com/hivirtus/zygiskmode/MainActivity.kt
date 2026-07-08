@@ -2,15 +2,11 @@ package com.hivirtus.zygiskmode
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import com.hivirtus.zygiskmode.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -21,6 +17,7 @@ class MainActivity : AppCompatActivity() {
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        updatePermissionStatus()
         if (granted && pendingStart) {
             startOverlayService()
         } else if (pendingStart) {
@@ -41,23 +38,33 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.btnGrantOverlay.setOnClickListener {
+            startActivity(PermissionHelper.overlaySettingsIntent(this))
+            Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
+        }
+
+        binding.btnGrantNotification.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                startActivity(PermissionHelper.notificationSettingsIntent(this))
+            }
+        }
+
         binding.btnStartOverlay.setOnClickListener {
-            if (!Settings.canDrawOverlays(this)) {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    )
-                )
+            if (!PermissionHelper.canDrawOverlay(this)) {
+                startActivity(PermissionHelper.overlaySettingsIntent(this))
                 Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (!PermissionHelper.hasNotificationPermission(this)) {
                 pendingStart = true
-                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    startActivity(PermissionHelper.notificationSettingsIntent(this))
+                }
+                Toast.makeText(this, R.string.grant_notification_permission, Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             startOverlayService()
@@ -67,19 +74,30 @@ class MainActivity : AppCompatActivity() {
             stopService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_STOP))
             Toast.makeText(this, R.string.overlay_stopped, Toast.LENGTH_SHORT).show()
         }
+
+        updatePermissionStatus()
     }
 
     override fun onResume() {
         super.onResume()
-        if (pendingStart && Settings.canDrawOverlays(this)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                == PackageManager.PERMISSION_GRANTED
-            ) {
-                pendingStart = false
-                startOverlayService()
-            }
+        updatePermissionStatus()
+        if (pendingStart && PermissionHelper.allGranted(this)) {
+            pendingStart = false
+            startOverlayService()
         }
+    }
+
+    private fun updatePermissionStatus() {
+        val overlayOk = PermissionHelper.canDrawOverlay(this)
+        val notifOk = PermissionHelper.hasNotificationPermission(this)
+
+        binding.tvOverlayStatus.text = getString(
+            if (overlayOk) R.string.permission_overlay_ok else R.string.permission_overlay_missing
+        )
+        binding.tvNotificationStatus.text = getString(
+            if (notifOk) R.string.permission_notification_ok else R.string.permission_notification_missing
+        )
+        binding.btnStartOverlay.isEnabled = overlayOk && notifOk
     }
 
     private fun startOverlayService() {
@@ -92,9 +110,14 @@ class MainActivity : AppCompatActivity() {
                 startService(intent)
             }
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
-            moveTaskToBack(true)
+            // Do NOT background app immediately — wait for service to startForeground
+            binding.root.postDelayed({ moveTaskToBack(true) }, 800)
         } catch (e: Exception) {
-            Toast.makeText(this, R.string.overlay_failed, Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                getString(R.string.overlay_failed_detail, e.message ?: "unknown"),
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 }

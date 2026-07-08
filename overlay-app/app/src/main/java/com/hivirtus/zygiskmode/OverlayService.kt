@@ -191,8 +191,7 @@ class OverlayService : Service() {
     private fun collapseMenu() {
         val root = rootBinding ?: return
         menuOpen = false
-        root.dimBackground.visibility = View.GONE
-        root.menuPanel.root.visibility = View.GONE
+        root.fullScreenLayer.visibility = View.GONE
         root.floatingBubble.visibility = View.VISIBLE
         root.floatingBubble.translationX = 0f
         root.floatingBubble.translationY = 0f
