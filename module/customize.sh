@@ -1,9 +1,9 @@
 #!/system/bin/sh
-# Hivirtus — Magisk/KernelSU module (native .so Zygisk se app me inject hota hai)
+# Hivirtus — normal Magisk/KernelSU module (hooks Zygisk pipeline se inject hote hain)
 
 ui_print "*******************************"
-ui_print "        Hivirtus v2.25.0        "
-ui_print "  Magisk ZIP → Zygisk inject    "
+ui_print "   Hivirtus Magisk Module       "
+ui_print "        v2.26.0                 "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -11,7 +11,7 @@ if [ -z "$MODPATH" ]; then
   abort "Installation failed"
 fi
 
-ui_print "- Installing to $MODPATH"
+ui_print "- Install path: $MODPATH"
 
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
@@ -21,8 +21,7 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
 
 if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
-  ui_print "! WARNING: No Zygisk native libs in module"
-  ui_print "! Rebuild zip with ./build.sh"
+  ui_print "! WARNING: Native lib missing — ./build.sh se dubara banao"
 fi
 
 if [ ! -f "$MODPATH/config.json" ]; then
@@ -67,13 +66,20 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
-ui_print "- Module install ho gaya"
 ui_print ""
-ui_print "YE MAGISK MODULE HAI — Zygisk ke THROUGH chalega:"
-ui_print "  1) Magisk/KernelSU me Zygisk ON rakho"
-ui_print "  2) Reboot karo"
-ui_print "  3) Koi UPI app kholo (PhonePe, KreditBee…)"
-ui_print "  → Native hook + bottom pill auto aayega"
+ui_print "=========================================="
+ui_print "  SIRF YE EK ZIP FLASH KARO — bas itna"
+ui_print "=========================================="
 ui_print ""
-ui_print "APK ya LSPosed ki zaroorat NAHI hai"
+ui_print "Ye Zygisk Next / Zygisk installer ZIP NAHI hai."
+ui_print "Ye normal Magisk module hai Modules list me."
+ui_print ""
+ui_print "Steps:"
+ui_print "  1) Magisk/KernelSU → Settings → Zygisk ON"
+ui_print "     (jo pehle se use karte ho — alag zip nahi)"
+ui_print "  2) Reboot"
+ui_print "  3) PhonePe / KreditBee kholo"
+ui_print "  → Hook + neeche gold pill auto"
+ui_print ""
+ui_print "APK install NAHI | LSPosed enable NAHI"
 ui_print "Config: $MODPATH/config.json"

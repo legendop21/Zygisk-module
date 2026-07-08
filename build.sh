@@ -28,7 +28,7 @@ if [[ ! -f "$TOOLCHAIN" ]]; then
   exit 1
 fi
 
-echo "==> Building Zygisk native module"
+echo "==> Building Hivirtus Magisk module (native lib → zygisk/ folder)"
 rm -rf "$OUTPUT_DIR" "$ROOT_DIR/build"
 mkdir -p "$OUTPUT_DIR/zygisk"
 
@@ -70,10 +70,11 @@ fi
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
-ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
+ZIP_NAME="hivirtus-magisk-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. Magisk/KernelSU module ZIP (Zygisk se native inject)."
-echo "    Zygisk ON → flash zip → reboot → UPI app kholo. APK/LSPosed nahi chahiye."
+echo "==> Done. Sirf YE EK ZIP flash karo (Magisk → Modules)."
+echo "    Zygisk setting ON → reboot → UPI app kholo."
+echo "    Alag Zygisk Next / LSPosed / APK zip ki zaroorat NAHI."

@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
-name=Hivirtus
-version=v2.25.0
-versionCode=71
+name=Hivirtus Magisk Module
+version=v2.26.0
+versionCode=72
 author=@hivirtus
-description=Magisk/KernelSU module — native hooks Zygisk se inject. No APK, no LSPosed.
+description=Sirf ek Magisk module ZIP flash karo. Zygisk ON pe native hook auto inject. APK/LSPosed nahi.
 zygisk=1
