@@ -127,7 +127,7 @@
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
     <string name="dev_credit">dev by @hivirtus</string>
-    <string name="dev_credit_footer">@hivirtus</string>
+    <string name="dev_credit_footer">Dev: Hivirtus</string>
     <string name="vip_access_title">◆ VIP ACCESS ◆</string>
     <string name="developer_hide_saved">Developer mode hide saved — apps restart karo</string>
     <string name="root_hide_saved">Root hide saved — stealth active</string>

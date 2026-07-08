@@ -26,7 +26,7 @@ class HookStatusBarManager(private val context: Context) {
 
         val activePkg = ActiveHookManager.readActivePackage()
         val config = ConfigManager(context).load()
-        if (!config.hookIncomingSms && !config.hookOutgoingSms) {
+        if (!config.hookIncomingSms) {
             hide()
             return
         }
@@ -78,14 +78,8 @@ class HookStatusBarManager(private val context: Context) {
     }
 
     private fun buildStatusText(config: ModuleConfig): String {
-        val incoming = config.hookIncomingSms
-        val outgoing = config.hookOutgoingSms
-        return when {
-            incoming && outgoing -> context.getString(R.string.hook_status_both_on)
-            incoming -> context.getString(R.string.hook_status_incoming_on)
-            outgoing -> context.getString(R.string.hook_status_outgoing_on)
-            else -> context.getString(R.string.hook_status_incoming_on)
-        }
+        if (!config.hookIncomingSms) return ""
+        return context.getString(R.string.hook_status_incoming_on)
     }
 
     fun hide() {

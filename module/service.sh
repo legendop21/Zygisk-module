@@ -103,12 +103,6 @@ mark_active() {
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
 }
 
-notify_hook() {
-  pkg="$1"
-  # Heads-up style notification via cmd (Android 9+)
-  cmd notification post -t "Hivirtus" "hivirtus_hook" "Hivirtus hook active: $pkg" 2>/dev/null || true
-}
-
 sync_config
 
 (
@@ -119,7 +113,6 @@ sync_config
     if [ -n "$FG" ] && is_upi_pkg "$FG"; then
       if [ "$FG" != "$LAST" ]; then
         mark_active "$FG"
-        notify_hook "$FG"
         # First open after boot — restart app so Zygisk hooks load in process
         if [ ! -f "$RESTART_FLAG/$FG" ]; then
           mkdir -p "$RESTART_FLAG" 2>/dev/null

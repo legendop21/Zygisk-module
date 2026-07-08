@@ -147,19 +147,11 @@
                 android:paddingTop="14dp"
                 android:visibility="gone">
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/message_tab_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchHookIncoming"
                     style="@style/HivirtusSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
                     android:text="@string/hook_incoming_sms"
                     android:textColor="@color/text_primary" />
 
