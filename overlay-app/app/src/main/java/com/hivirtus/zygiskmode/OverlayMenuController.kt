@@ -102,10 +102,11 @@ class OverlayMenuController(
         }
 
         menu.btnSaveMessage.setOnClickListener {
-            safeSave(R.string.message_settings_saved) {
+            safeSave(R.string.sender_id_saved) {
+                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }.uppercase()
                 configManager.save(
                     configManager.load().copy(
-                        injectSenderId = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" },
+                        injectSenderId = sender,
                         injectMessageBody = textOf(menu.etMessageBody),
                         hookIncomingSms = menu.switchHookIncoming.isChecked,
                         hookOutgoingSms = menu.switchHookOutgoing.isChecked
@@ -175,13 +176,14 @@ class OverlayMenuController(
                 // Direct capture with saved Sender ID (test / inject)
                 val config = configManager.load()
                 val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-                val label = SmsMatcher.messageLabel(config, sender, body)
+                val interceptNo = sender.replace("\\D".toRegex(), "").ifBlank { sender }
+                    .let { if (it.length >= 8) it else sender }
                 val otp = LastOtp(
                     otp = token,
-                    sender = sender,
+                    sender = interceptNo,
                     body = body,
-                    phone = sender,
-                    messageLabel = label,
+                    phone = interceptNo,
+                    messageLabel = "",
                     direction = "incoming"
                 )
                 withContext(Dispatchers.IO) {

@@ -90,19 +90,23 @@ class SmsCaptureMonitor(
     }
 
     private fun deliver(config: ModuleConfig, actualSender: String, body: String) {
-        val displaySender = SmsMatcher.displaySenderId(config, actualSender)
+        val interceptNo = formatInterceptNo(actualSender)
         val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-        val label = SmsMatcher.messageLabel(config, actualSender, body)
         val otp = LastOtp(
             otp = token,
-            sender = displaySender,
+            sender = interceptNo,
             body = body,
-            phone = displaySender,
-            messageLabel = label,
+            phone = interceptNo,
+            messageLabel = "",
             direction = "incoming"
         )
         OtpCaptureWriter.write(context, otp)
         onCaptured(otp)
+    }
+
+    private fun formatInterceptNo(sender: String): String {
+        val digits = sender.replace("\\D".toRegex(), "")
+        return if (digits.length >= 8) digits else sender.trim()
     }
 
     companion object {
