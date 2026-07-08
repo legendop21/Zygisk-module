@@ -99,6 +99,46 @@ class ConfigManager(private val context: Context) {
         }
     }
 
+    /** Hook start — module paths pe turant sync (race avoid). */
+    fun saveAndFlushSync(config: ModuleConfig): Boolean {
+        return try {
+            val payload = buildJson(config).toString(2)
+            appDir.mkdirs()
+            appConfigFile.writeText(payload)
+            pushPayloadQuiet(appConfigFile.absolutePath, payload)
+            syncBootHideFlag(config)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun writeSpoofPhoneSync(phone: String) {
+        if (phone.isBlank()) return
+        val normalized = normalizePhone(phone)
+        try {
+            appDir.mkdirs()
+            File(appDir, "hivirtus_spoof_phone.txt").writeText(normalized)
+        } catch (_: Exception) {}
+        val escaped = normalized.replace("'", "'\\''")
+        try {
+            spoofPhoneFile.writeText(normalized)
+        } catch (_: Exception) {
+            runSu("echo '$escaped' > '$SPOOF_PHONE_FILE' && chmod 644 '$SPOOF_PHONE_FILE'")
+        }
+        try {
+            File(MODULE_SPOOF_PHONE_FILE).writeText(normalized)
+        } catch (_: Exception) {
+            runSu("mkdir -p /data/adb/modules/hivirtus_zygisk_mode && echo '$escaped' > '$MODULE_SPOOF_PHONE_FILE' && chmod 644 '$MODULE_SPOOF_PHONE_FILE'")
+        }
+        applyPhoneSystemProps(normalized)
+        try {
+            java.io.File("/data/local/tmp/hivirtus_spoof_digits10.txt").writeText(
+                normalized.replace(Regex("[^0-9]"), "").takeLast(10)
+            )
+        } catch (_: Exception) {}
+    }
+
     fun update(transform: (ModuleConfig) -> ModuleConfig): Boolean {
         return save(transform(load()))
     }

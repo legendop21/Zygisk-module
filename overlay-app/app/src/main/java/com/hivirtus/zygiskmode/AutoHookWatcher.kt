@@ -20,6 +20,7 @@ object AutoHookWatcher {
 
         val fg = ForegroundAppHelper.foregroundPackage(appContext) ?: return
         if (!ActiveHookManager.isHookablePackage(appContext, fg)) return
+        if (config.hookedUpiApps[fg] != true) return
 
         val active = ActiveHookManager.readActivePackage()
         if (fg == active && config.hookedUpiApps[fg] == true) {

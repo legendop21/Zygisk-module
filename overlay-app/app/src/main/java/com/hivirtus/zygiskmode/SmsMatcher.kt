@@ -37,12 +37,19 @@ object SmsMatcher {
 
     fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String, direction: String): Boolean {
         if (!config.autoForwardToken) return false
-        val activePkg = ActiveHookManager.readActivePackage() ?: return false
-        if (config.hookedUpiApps[activePkg] != true) return false
-        return when (direction) {
-            "outgoing" -> shouldInterceptOutgoing(config, peer, body)
-            else -> shouldInterceptIncoming(config, peer, body)
+        val activePkg = ActiveHookManager.readActivePackage()
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return false
+        if (activePkg != null && config.hookedUpiApps[activePkg] == true) {
+            return when (direction) {
+                "outgoing" -> shouldInterceptOutgoing(config, peer, body)
+                else -> shouldInterceptIncoming(config, peer, body)
+            }
         }
+        if (activePkg == null && hooked.isNotEmpty()) {
+            return body.isNotBlank() && (extractOtpDigits(body) != null || body.length >= 4)
+        }
+        return false
     }
 
     /**
@@ -54,14 +61,16 @@ object SmsMatcher {
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
         matchedHookedApp(config, peer, body)?.let { return true }
-        val active = ActiveHookManager.readActivePackage() ?: return false
-        if (!hooked.any { it.packageName == active }) return false
-        if (config.overrideIncomingSender && userSenderId(config) != null) {
-            if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
-                return true
+        val active = ActiveHookManager.readActivePackage()
+        if (active != null && config.hookedUpiApps[active] == true) {
+            if (config.overrideIncomingSender && userSenderId(config) != null) {
+                if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
+                    return true
+                }
             }
+            return extractOtpDigits(body) != null || body.length >= 4
         }
-        return extractOtpDigits(body) != null || body.length >= 4
+        return false
     }
 
     private val outgoingVerifyKeywords = listOf(

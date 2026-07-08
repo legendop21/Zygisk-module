@@ -7,8 +7,9 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
-import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,10 +26,12 @@ class OverlayMenuController(
     private val configManager = ConfigManager(context)
     private var listenersAttached = false
     private var suppressAutoSave = false
+    private var upiAppAdapter: UpiAppListAdapter? = null
 
     fun bind() {
         suppressAutoSave = true
         refreshFields()
+        setupUpiPanel()
         setupRootHideToggles()
         if (!listenersAttached) {
             setupClickListeners()
@@ -62,6 +65,7 @@ class OverlayMenuController(
         menu.etSenderId.setText(config.injectSenderId)
         menu.etMessageBody.setText(config.injectMessageBody)
         menu.switchAutoForward.isChecked = config.autoForwardToken
+        menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
         menu.switchFakeInterceptTg.isChecked = false
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
@@ -73,8 +77,58 @@ class OverlayMenuController(
         menu.btnOpenSendSmsFloat.setOnClickListener { openSendSmsFloat() }
         menu.btnInjectLocalSms.setOnClickListener { injectLocalSms() }
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
+        menu.tabUpi.setOnClickListener { selectTab(Tab.UPI) }
         menu.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
         menu.tabTelegram.setOnClickListener { selectTab(Tab.TG) }
+        menu.btnSelectAllUpi.setOnClickListener {
+            upiAppAdapter?.setAll(true)
+            updateUpiSelectedCount()
+        }
+        menu.btnDeselectAllUpi.setOnClickListener {
+            upiAppAdapter?.setAll(false)
+            updateUpiSelectedCount()
+        }
+        menu.btnSaveUpiHooks.setOnClickListener { saveUpiHooks() }
+    }
+
+    private fun setupUpiPanel() {
+        val config = configManager.load()
+        val adapter = UpiAppListAdapter(UpiAppRegistry.ALL, config.hookedUpiApps)
+        upiAppAdapter = adapter
+        menu.rvUpiApps.layoutManager = LinearLayoutManager(context)
+        menu.rvUpiApps.adapter = adapter
+        updateUpiSelectedCount()
+    }
+
+    private fun updateUpiSelectedCount() {
+        val count = upiAppAdapter?.selectedCount() ?: 0
+        menu.tvUpiSelectedCount.text = appContext.getString(R.string.upi_selected_count, count)
+    }
+
+    private fun saveUpiHooks(showToast: Boolean = true) {
+        scope.launch {
+            val selection = upiAppAdapter?.selectedMap() ?: return@launch
+            if (selection.none { it.value }) {
+                if (showToast) toast(R.string.select_upi_app_first, Toast.LENGTH_LONG)
+                return@launch
+            }
+            val saved = withContext(Dispatchers.IO) {
+                val current = configManager.load()
+                configManager.saveAndFlushSync(
+                    current.copy(
+                        hookedUpiApps = selection,
+                        hookUpiVerification = menu.switchHookUpiVerification.isChecked
+                    )
+                )
+            }
+            updateUpiSelectedCount()
+            if (showToast) {
+                toast(
+                    if (saved) R.string.upi_hooks_saved else R.string.save_failed,
+                    Toast.LENGTH_SHORT
+                )
+            }
+        }
     }
 
     private fun setupAutoSaveListeners() {
@@ -120,6 +174,9 @@ class OverlayMenuController(
         }
         autoToggle(menu.switchAutoForward) { checked ->
             savePartial { it.copy(autoForwardToken = checked) }
+        }
+        autoToggle(menu.switchHookUpiVerification) { checked ->
+            savePartial { it.copy(hookUpiVerification = checked) }
         }
 
         val textWatcher = object : TextWatcher {
@@ -252,23 +309,21 @@ class OverlayMenuController(
                 return@launch
             }
 
-            persistAllFields()
-
-            val hookResult = withContext(Dispatchers.IO) {
-                ActiveHookManager.hookForegroundApp(appContext, configManager)
-            }
-
-            if (!hookResult.success) {
-                toast(hookResult.message, Toast.LENGTH_LONG)
-                menu.tvHookStatus.text = hookResult.message
+            val selection = upiAppAdapter?.selectedMap().orEmpty()
+            if (selection.none { it.value }) {
+                toast(R.string.select_upi_app_first, Toast.LENGTH_LONG)
+                selectTab(Tab.UPI)
                 return@launch
             }
 
             withContext(Dispatchers.IO) {
-                configManager.save(
-                    configManager.load().copy(
+                val current = configManager.load()
+                configManager.saveAndFlushSync(
+                    current.copy(
+                        hookedUpiApps = selection,
                         injectSenderId = sender,
                         mockPhoneSim1 = phone,
+                        hookUpiVerification = menu.switchHookUpiVerification.isChecked,
                         enablePhoneSpoof = true,
                         enableSim1Mock = true,
                         hookIncomingSms = true,
@@ -282,7 +337,16 @@ class OverlayMenuController(
                         fakeInterceptTelegram = false
                     )
                 )
-                configManager.writeSpoofPhone(phone)
+            }
+
+            val hookResult = withContext(Dispatchers.IO) {
+                ActiveHookManager.hookForegroundApp(appContext, configManager)
+            }
+
+            if (!hookResult.success) {
+                toast(hookResult.message, Toast.LENGTH_LONG)
+                menu.tvHookStatus.text = hookResult.message
+                return@launch
             }
 
             menu.switchSim1Mock.isChecked = true
@@ -396,10 +460,11 @@ class OverlayMenuController(
     private fun textOf(field: android.widget.EditText): String =
         field.text?.toString()?.trim().orEmpty()
 
-    private enum class Tab { SYSTEM, MESSAGE, TG }
+    private enum class Tab { SYSTEM, UPI, MESSAGE, TG }
 
     private fun selectTab(tab: Tab) {
         menu.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE
+        menu.panelUpi.visibility = if (tab == Tab.UPI) View.VISIBLE else View.GONE
         menu.panelMessage.visibility = if (tab == Tab.MESSAGE) View.VISIBLE else View.GONE
         menu.panelTelegram.visibility = if (tab == Tab.TG) View.VISIBLE else View.GONE
 
@@ -407,6 +472,7 @@ class OverlayMenuController(
         val inactive = ContextCompat.getColor(context, R.color.tab_inactive)
         listOf(
             menu.tabSystem to Tab.SYSTEM,
+            menu.tabUpi to Tab.UPI,
             menu.tabMessage to Tab.MESSAGE,
             menu.tabTelegram to Tab.TG
         ).forEach { (view, t) ->

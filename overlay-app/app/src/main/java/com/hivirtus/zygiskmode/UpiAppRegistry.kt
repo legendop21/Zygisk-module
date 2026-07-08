@@ -70,6 +70,19 @@ object UpiAppRegistry {
         UpiApp("com.branch_international.branch.branch_demo_android", "Branch", listOf("BRANCH"), 40),
         UpiApp("com.cashfree", "Cashfree", listOf("CASHFREE"), 25),
         UpiApp("com.razorpay.payments", "Razorpay", listOf("RAZORPAY"), 25),
+        UpiApp("com.mpokket.app", "mPokket", listOf("MPOKKET", "POKKET"), 40),
+        UpiApp("com.cashe.android", "CASHe", listOf("CASHE"), 40),
+        UpiApp("com.rupeeredee.app", "Rupeek", listOf("RUPEEK", "RUPEEREDEE"), 35),
+        UpiApp("com.loan.tap", "LoanTap", listOf("LOANTAP"), 40),
+        UpiApp("com.smartcoin", "SmartCoin", listOf("SMARTCOIN"), 40),
+        UpiApp("com.kissht.android", "Kissht", listOf("KISSHT"), 40),
+        UpiApp("com.flexsalary", "FlexSalary", listOf("FLEXSALARY"), 35),
+        UpiApp("com.nira.finance", "Nira", listOf("NIRA"), 35),
+        UpiApp("com.availfinance", "Avail Finance", listOf("AVAIL"), 35),
+        UpiApp("com.indialends.android", "IndiaLends", listOf("INDIALENDS"), 35),
+        UpiApp("com.homecredit", "Home Credit", listOf("HOMECREDIT"), 35),
+        UpiApp("com.bajajfinserv", "Bajaj Finserv", listOf("BAJAJ", "FINSERV"), 35),
+        UpiApp("com.hdbfs.hdbfsl", "HDB Financial", listOf("HDB"), 35),
     )
 
     fun defaultHookMap(): Map<String, Boolean> =

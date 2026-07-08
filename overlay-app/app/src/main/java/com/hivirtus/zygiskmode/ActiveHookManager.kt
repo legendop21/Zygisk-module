@@ -34,56 +34,23 @@ object ActiveHookManager {
 
     fun hookForegroundApp(context: Context, configManager: ConfigManager): HookResult {
         val pkg = ForegroundAppHelper.foregroundPackage(context)
-            ?: return HookResult(false, "", "", "Koi app foreground me nahi — pehle app kholo")
+            ?: return HookResult(false, "", "", "Koi app foreground me nahi — pehle UPI app kholo")
 
         if (!isHookablePackage(context, pkg)) {
             return HookResult(false, pkg, "", "Pehle UPI/loan app kholo")
         }
 
-        return hookPackage(context, configManager, pkg)
+        return HookEngine.applyHook(context, configManager, pkg, mergeSelection = true)
     }
 
     fun hookPackage(context: Context, configManager: ConfigManager, pkg: String): HookResult {
-        if (!isHookablePackage(context, pkg)) {
-            return HookResult(false, pkg, "", "Ye app hook nahi ho sakti")
-        }
+        return HookEngine.applyHook(context, configManager, pkg, mergeSelection = true)
+    }
 
-        val display = UpiAppRegistry.displayNameFor(pkg)
-        val hooked = UpiAppRegistry.defaultHookMap().mapValues { it.key == pkg }.toMutableMap()
-        hooked[pkg] = true
-
-        val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim()
-        if (phone.isBlank()) {
-            return HookResult(false, pkg, display, "Pehle SYSTEM me Verify Number daalo (app registered)")
-        }
-        val senderId = current.injectSenderId.trim()
-        val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
-        val saved = configManager.save(
-            current.copy(
-                hookedUpiApps = hooked,
-                hookUpiVerification = true,
-                hookIncomingSms = true,
-                hookOutgoingSms = true,
-                interceptFakeSuccess = true,
-                autoExtractOtp = true,
-                autoHookForeground = true,
-                overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
-                enablePhoneSpoof = true,
-                enableSim1Mock = true,
-                mockPhoneSim1 = phone
-            )
-        )
-        if (!saved) {
-            return HookResult(false, pkg, display, "Config save fail — dubara try karo")
-        }
-
-        configManager.writeSpoofPhone(phone)
+    fun forceStopOnce(pkg: String) {
         if (restartedForHook.add(pkg)) {
             ShellHelper.runSu("am force-stop $pkg")
         }
-        persistActivePackage(pkg, display)
-        return HookResult(true, pkg, display, "$display hooked — dubara kholo")
     }
 
     fun clearRestartCache() {
@@ -104,7 +71,7 @@ object ActiveHookManager {
         return UpiAppRegistry.displayNameFor(pkg)
     }
 
-    private fun persistActivePackage(pkg: String, display: String) {
+    fun persistActivePackage(pkg: String, display: String) {
         try {
             File(ACTIVE_PKG_FILE).writeText(pkg)
         } catch (_: Exception) {

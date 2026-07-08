@@ -91,10 +91,23 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="10dp"
+            android:padding="8dp"
             android:text="@string/tab_system"
             android:textColor="@color/tab_active"
-            android:textSize="12sp"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tabUpi"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/tab_selector"
+            android:gravity="center"
+            android:padding="8dp"
+            android:text="@string/tab_upi"
+            android:textColor="@color/tab_inactive"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
@@ -104,10 +117,10 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="10dp"
-            android:text="@string/tab_message"
+            android:padding="8dp"
+            android:text="@string/tab_sms"
             android:textColor="@color/tab_inactive"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
@@ -117,10 +130,10 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="10dp"
+            android:padding="8dp"
             android:text="@string/tab_telegram"
             android:textColor="@color/tab_inactive"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -218,6 +231,85 @@
                     android:text="@string/lsposed_compat_hint"
                     android:textColor="@color/text_hint"
                     android:textSize="10sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/panelUpi"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="12dp"
+                android:visibility="gone">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchHookUpiVerification"
+                    style="@style/HivirtusSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hook_upi_verification"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/upi_hook_section"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelectAllUpi"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:text="@string/select_all_upi"
+                        android:textColor="@color/gold_primary"
+                        android:textSize="10sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDeselectAllUpi"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/deselect_all_upi"
+                        android:textColor="@color/gold_primary"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvUpiApps"
+                    android:layout_width="match_parent"
+                    android:layout_height="220dp"
+                    android:layout_marginTop="6dp"
+                    android:nestedScrollingEnabled="true"
+                    android:overScrollMode="ifContentScrolls" />
+
+                <TextView
+                    android:id="@+id/tvUpiSelectedCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/text_hint"
+                    android:textSize="10sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSaveUpiHooks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/button_gradient"
+                    android:text="@string/save_upi_hooks"
+                    android:textColor="@color/button_text_on_gold"
+                    app:backgroundTint="@null" />
             </LinearLayout>
 
             <LinearLayout
