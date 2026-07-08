@@ -254,8 +254,9 @@ class OverlayMenuController(
             safeSave(R.string.upi_hooks_saved) {
                 val hooked = upiAppSwitches.mapValues { it.value.isChecked }
                 val anyHooked = hooked.values.any { it }
+                val current = configManager.load()
                 configManager.save(
-                    configManager.load().copy(
+                    current.copy(
                         hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
                         hookIncomingSms = anyHooked || menu.switchHookIncoming.isChecked,
                         hookOutgoingSms = anyHooked || menu.switchHookOutgoing.isChecked,

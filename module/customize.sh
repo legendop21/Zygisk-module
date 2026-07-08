@@ -4,7 +4,7 @@
 SKIPUNZIP=1
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.9.0  "
+ui_print "   Hivirtus Zygisk Mode v2.9.1  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
