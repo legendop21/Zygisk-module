@@ -41,7 +41,8 @@ data class LastOtp(
     val body: String = "",
     val phone: String = "",
     val messageLabel: String = "",
-    val direction: String = "incoming"
+    val direction: String = "incoming",
+    val rawPeer: String = ""
 )
 
 class ConfigManager(private val context: Context) {
@@ -160,7 +161,8 @@ class ConfigManager(private val context: Context) {
                 body = json.optString("body", ""),
                 phone = json.optString("phone", readSpoofPhone()),
                 messageLabel = json.optString("message_label", ""),
-                direction = json.optString("direction", "incoming")
+                direction = json.optString("direction", "incoming"),
+                rawPeer = json.optString("raw_peer", "")
             )
         } catch (_: Exception) {
             null
