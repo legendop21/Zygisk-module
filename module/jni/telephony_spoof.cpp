@@ -3,6 +3,7 @@
 #include "logger.hpp"
 #include "zygisk_utils.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -238,12 +239,19 @@ bool phone_spoof_enabled() {
 
 bool is_telephony_binder_interface(const std::string& iface) {
     if (iface.empty()) return false;
-    return iface.find("IPhoneSubInfo") != std::string::npos ||
-           iface.find("ITelephony") != std::string::npos ||
-           iface.find("ISub") != std::string::npos ||
-           iface.find("ISubscription") != std::string::npos ||
-           iface.find("IPhoneSubInfoController") != std::string::npos ||
-           iface.find("telephony") != std::string::npos;
+    const std::string lower = [&]() {
+        std::string s = iface;
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    }();
+    return lower.find("iphonesubinfo") != std::string::npos ||
+           lower.find("itelephony") != std::string::npos ||
+           lower.find("isub") != std::string::npos ||
+           lower.find("isubscription") != std::string::npos ||
+           lower.find("subscription") != std::string::npos ||
+           lower.find("iphonesubinfocontroller") != std::string::npos ||
+           lower.find("telephony") != std::string::npos;
 }
 
 std::string read_binder_interface(JNIEnv* env, jobject data) {

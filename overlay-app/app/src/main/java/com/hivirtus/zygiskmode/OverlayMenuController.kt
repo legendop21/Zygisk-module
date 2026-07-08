@@ -240,6 +240,9 @@ class OverlayMenuController(
                 configManager.save(
                     configManager.load().copy(
                         injectSenderId = sender,
+                        mockPhoneSim1 = textOf(menu.etPhoneSim1).ifBlank { "+918279999125" },
+                        enablePhoneSpoof = true,
+                        enableSim1Mock = true,
                         hookIncomingSms = true,
                         hookOutgoingSms = true,
                         overrideIncomingSender = true,
@@ -251,8 +254,11 @@ class OverlayMenuController(
                         fakeInterceptTelegram = false
                     )
                 )
+                configManager.writeSpoofPhone(textOf(menu.etPhoneSim1).ifBlank { "+918279999125" })
             }
 
+            menu.switchSim1Mock.isChecked = true
+            menu.switchPhoneSpoof.isChecked = true
             menu.switchHookIncoming.isChecked = true
             menu.switchHookOutgoing.isChecked = true
             menu.switchOverrideIncomingSender.isChecked = true

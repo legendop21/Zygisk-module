@@ -229,9 +229,9 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
 
     if (result == 0 && reply && data && telephony_spoof::phone_spoof_enabled()) {
         const std::string iface = telephony_spoof::read_binder_interface(env, data);
-        if (telephony_spoof::is_telephony_binder_interface(iface)) {
-            const auto formats = telephony_spoof::load_formats();
-            if (!formats.digits10.empty()) {
+        const auto formats = telephony_spoof::load_formats();
+        if (!formats.digits10.empty()) {
+            if (iface.empty() || telephony_spoof::is_telephony_binder_interface(iface)) {
                 telephony_spoof::scrub_reply_parcel(env, reply, formats);
             }
         }
@@ -242,6 +242,9 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
 
 void install_plt_hooks(JNIEnv* env) {
     if (!g_api || !g_api->pltHookRegister || !g_api->pltHookCommit) return;
+    static bool committed = false;
+    if (committed) return;
+    committed = true;
 
     g_api->pltHookRegister(".*libandroid_runtime\\.so$",
                            "Java_android_app_Instrumentation_execStartActivity",
@@ -260,16 +263,15 @@ void install_plt_hooks(JNIEnv* env) {
 }  // namespace
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_hooked_upi) {
-    (void)in_telephony;
+    (void)env;
     g_api = api;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     const bool phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||
                              config.enable_sim2_mock;
-    if (!in_hooked_upi && !in_telephony && !phone_spoof) return;
-    if (!config.hook_outgoing_sms && !config.intercept_fake_success && !phone_spoof) {
-        return;
-    }
+    const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
+
+    if (!phone_spoof && !sms_block && !in_telephony && !in_hooked_upi) return;
     install_plt_hooks(env);
 }
 

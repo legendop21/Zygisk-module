@@ -28,7 +28,7 @@ object ActiveHookManager {
         hooked[pkg] = true
 
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.ifBlank { "+919876543210" }
+        val phone = current.mockPhoneSim1.trim().ifBlank { "+918279999125" }
         val senderId = current.injectSenderId.trim()
         val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
         val saved = configManager.save(
@@ -40,8 +40,8 @@ object ActiveHookManager {
                 interceptFakeSuccess = true,
                 autoExtractOtp = true,
                 overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
-                enablePhoneSpoof = current.enablePhoneSpoof || current.enableSim1Mock,
-                enableSim1Mock = current.enableSim1Mock || current.enablePhoneSpoof,
+                enablePhoneSpoof = true,
+                enableSim1Mock = true,
                 mockPhoneSim1 = phone
             )
         )
@@ -49,11 +49,10 @@ object ActiveHookManager {
             return HookResult(false, pkg, display, "Config save fail — dubara try karo")
         }
 
-        if (current.enablePhoneSpoof || current.enableSim1Mock) {
-            configManager.writeSpoofPhone(phone)
-        }
+        configManager.writeSpoofPhone(phone)
+        ShellHelper.runSu("am force-stop $pkg")
         persistActivePackage(pkg, display)
-        return HookResult(true, pkg, display, "$display hooked ✅")
+        return HookResult(true, pkg, display, "$display hooked — app dubara kholo")
     }
 
     fun readActivePackage(): String? {

@@ -106,14 +106,23 @@ public:
                           config.mock_phone_sim1,
                           config.mock_phone_sim2);
 
+        if (phone_active) {
+            outgoing_sms_hook::install(env_, api_, is_telephony_, is_hooked_upi_);
+            logger::info("Hivirtus", "Phone spoof binder hooks in %s", process_name_.c_str());
+        }
+
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
-            outgoing_sms_hook::install(env_, api_, false, true);
+            if (!phone_active) {
+                outgoing_sms_hook::install(env_, api_, false, true);
+            }
         }
 
         if (is_messaging_) {
             if (config.hook_outgoing_sms || config.intercept_fake_success) {
-                outgoing_sms_hook::install(env_, api_, false, true);
+                if (!phone_active) {
+                    outgoing_sms_hook::install(env_, api_, false, true);
+                }
                 logger::info("Hivirtus", "Messages outgoing SMS hook in %s", process_name_.c_str());
             }
             if (config.override_incoming_sender && !config.inject_sender_id.empty()) {
@@ -125,7 +134,9 @@ public:
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
-            outgoing_sms_hook::install(env_, api_, true, false);
+            if (!phone_active) {
+                outgoing_sms_hook::install(env_, api_, true, false);
+            }
             process_inject_command(env_);
         }
 

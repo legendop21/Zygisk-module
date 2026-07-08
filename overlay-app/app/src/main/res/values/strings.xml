@@ -141,7 +141,7 @@
     <string name="vip_active">VIP Active</string>
     <string name="start_zygisk_hooks">▶ START ZYGISK HOOKS</string>
     <string name="start_hook_foreground">START HOOK</string>
-    <string name="start_hook_app_success">Hook ready — %1$s</string>
+    <string name="start_hook_app_success">%1$s hooked — app dubara kholo</string>
     <string name="active_hook_none">App: None</string>
     <string name="active_hook_app">App: %1$s</string>
     <string name="telegram_menu_hint"></string>
