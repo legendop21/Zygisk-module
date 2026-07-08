@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>android</item>
+        <item>com.android.phone</item>
+        <item>com.google.android.gms</item>
+        <item>com.google.android.apps.messaging</item>
+        <item>com.myairtelapp</item>
+        <item>com.kreditbee.android</item>
+        <item>net.one97.paytm</item>
+        <item>com.phonepe.app</item>
+        <item>com.google.android.apps.nbu.paisa.user</item>
+        <item>com.yespay.next</item>
+        <item>com.snapmint.customerapp</item>
+        <item>com.stashfin.android</item>
+        <item>com.groww.app</item>
+    </string-array>
+</resources>

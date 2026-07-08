@@ -25,6 +25,19 @@
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true">
 
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="Hivirtus LSPosed Mode — SIM spoof, SMS block, invisible hook, all UPI apps" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="93" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposed_scope" />
+
         <activity
             android:name=".ModuleBlockActivity"
             android:exported="false"

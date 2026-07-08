@@ -6,14 +6,25 @@ import android.content.Intent
 import java.io.File
 
 /**
- * Zygisk module flash hone tak app block — koi license/menu nahi khulega.
+ * Zygisk module flash YA LSPosed enable — dono me se ek chahiye.
  */
 object ModuleGate {
 
     private const val INSTALLED_FLAG = "/data/local/tmp/hivirtus_module_installed.flag"
     private const val MODULE_PROP = "/data/adb/modules/hivirtus_zygisk_mode/module.prop"
+    private const val LSPOSED_READY = "/data/local/tmp/hivirtus_lsposed_hook.ready"
+
+    fun isLsposedActive(): Boolean {
+        return try {
+            File(LSPOSED_READY).canRead()
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     fun isModuleFlashed(): Boolean {
+        if (isLsposedActive()) return true
+
         try {
             val flag = File(INSTALLED_FLAG)
             if (flag.canRead()) {
@@ -25,9 +36,12 @@ object ModuleGate {
         if (File(MODULE_PROP).canRead()) return true
 
         return ShellHelper.runSu(
-            "test -f '$MODULE_PROP' || test -f '$INSTALLED_FLAG'"
+            "test -f '$MODULE_PROP' || test -f '$INSTALLED_FLAG' || test -f '$LSPOSED_READY'"
         )
     }
+
+    fun hookBackendName(): String =
+        if (isLsposedActive()) "LSPosed" else "Zygisk"
 
     fun blockIfNeeded(activity: Activity): Boolean {
         if (isModuleFlashed()) return false

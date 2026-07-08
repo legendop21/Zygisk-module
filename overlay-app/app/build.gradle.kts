@@ -11,8 +11,8 @@ android {
         applicationId = "com.hivirtus.zygiskmode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 61
-        versionName = "2.17.0"
+        versionCode = 62
+        versionName = "2.18.0"
     }
 
     buildTypes {
@@ -45,5 +45,5 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    compileOnly("de.robv.android.xposed:api:82")
 }

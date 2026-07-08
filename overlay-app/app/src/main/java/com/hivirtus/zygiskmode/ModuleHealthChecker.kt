@@ -27,7 +27,9 @@ object ModuleHealthChecker {
         val config = configManager.load()
 
         val moduleInstalled = ModuleGate.isModuleFlashed()
-        val zygiskLoaded = File(HEARTBEAT).canRead() ||
+        val lsposedActive = ModuleGate.isLsposedActive()
+        val zygiskLoaded = lsposedActive ||
+            File(HEARTBEAT).canRead() ||
             File(ZYGISK_LOG).canRead() ||
             File(ACTIVE_UPI).canRead()
 
