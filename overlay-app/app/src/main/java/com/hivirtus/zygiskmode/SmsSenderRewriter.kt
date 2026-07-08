@@ -3,6 +3,8 @@ package com.hivirtus.zygiskmode
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 
@@ -14,16 +16,35 @@ object SmsSenderRewriter {
 
     private const val TAG = "SmsSenderRewriter"
     private val recentKeys = mutableSetOf<String>()
+    private val handler = Handler(Looper.getMainLooper())
 
     fun shouldRewrite(actualPeer: String, config: ModuleConfig): Boolean {
         if (!config.overrideIncomingSender) return false
-        if (!config.hookIncomingSms && !config.hookUpiVerification) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (senderId.isBlank()) return false
         if (!SmsMatcher.isIndianMobileNumber(actualPeer) && !SmsMatcher.isNumericSender(actualPeer)) {
             return false
         }
         return true
+    }
+
+    /**
+     * SMS_RECEIVED pe — system ko +91 save karne se roko, seedha Sender ID insert karo.
+     */
+    fun rewriteOnReceive(context: Context, config: ModuleConfig, actualPeer: String, body: String): Boolean {
+        if (!shouldRewrite(actualPeer, config)) return false
+        val senderId = SmsMatcher.userSenderId(config) ?: return false
+        if (body.isBlank()) return false
+
+        val appContext = context.applicationContext
+        val inserted = insertInboxSms(appContext, senderId, body)
+        ConfigManager(appContext).writeInjectCommand(senderId, body)
+        scheduleInboxCleanup(appContext, actualPeer, body, senderId)
+        try {
+            appContext.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
+        } catch (_: Exception) {}
+        Log.i(TAG, "Receive rewrite $actualPeer -> $senderId inserted=$inserted")
+        return inserted
     }
 
     fun rewriteIncomingSender(
@@ -37,23 +58,25 @@ object SmsSenderRewriter {
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (body.isBlank()) return false
 
-        val key = "${actualPeer.trim()}|${body.trim()}|rewrite"
+        val key = "${actualPeer.trim()}|${body.trim()}|inbox"
         synchronized(recentKeys) {
             if (!recentKeys.add(key)) return false
-            if (recentKeys.size > 64) recentKeys.clear()
+            if (recentKeys.size > 128) recentKeys.clear()
         }
 
         val deleted = deleteInboxSms(context, messageId, actualPeer, body)
         val inserted = insertInboxSms(context, senderId, body)
+        if (!inserted) {
+            scheduleInboxCleanup(context.applicationContext, actualPeer, body, senderId)
+        }
         ConfigManager(context).writeInjectCommand(senderId, body)
         try {
             context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
         } catch (_: Exception) {}
-        Log.i(TAG, "Rewrote $actualPeer -> $senderId deleted=$deleted inserted=$inserted")
-        return inserted
+        Log.i(TAG, "Inbox rewrite $actualPeer -> $senderId deleted=$deleted inserted=$inserted")
+        return inserted || deleted
     }
 
-    /** MESSAGE tab inject — seedha Sender ID se inbox mein daalo */
     fun injectInboxMessage(context: Context, senderId: String, body: String): Boolean {
         if (senderId.isBlank() || body.isBlank()) return false
         val inserted = insertInboxSms(context, senderId.trim(), body.trim())
@@ -65,9 +88,61 @@ object SmsSenderRewriter {
         return inserted
     }
 
-    @Deprecated("Use rewriteIncomingSender", ReplaceWith("rewriteIncomingSender(context, config, actualPeer, body)"))
-    fun rewriteForHookedApps(context: Context, config: ModuleConfig, actualPeer: String, body: String) {
-        rewriteIncomingSender(context, config, actualPeer, body)
+    private fun scheduleInboxCleanup(
+        context: Context,
+        actualPeer: String,
+        body: String,
+        senderId: String
+    ) {
+        val delays = longArrayOf(350L, 900L, 2000L, 4500L)
+        for (delay in delays) {
+            handler.postDelayed({
+                try {
+                    deleteInboxSms(context, -1L, actualPeer, body)
+                    deletePeerVariants(context, actualPeer, body)
+                    if (!inboxHasSenderMessage(context, senderId, body)) {
+                        insertInboxSms(context, senderId, body)
+                    }
+                    context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cleanup delayed failed: ${e.message}")
+                }
+            }, delay)
+        }
+    }
+
+    private fun deletePeerVariants(context: Context, peer: String, body: String) {
+        val digits = peer.replace(Regex("[^0-9]"), "")
+        val variants = linkedSetOf(peer, digits)
+        if (digits.length == 10) {
+            variants += digits
+            variants += "+91$digits"
+            variants += "91$digits"
+            variants += "0$digits"
+        } else if (digits.length == 12 && digits.startsWith("91")) {
+            variants += digits.substring(2)
+            variants += "+$digits"
+        }
+        variants.forEach { variant ->
+            if (variant.isNotBlank()) {
+                deleteInboxSms(context, -1L, variant, body)
+            }
+        }
+    }
+
+    private fun inboxHasSenderMessage(context: Context, senderId: String, body: String): Boolean {
+        if (!PermissionHelper.hasReadSms(context)) return false
+        return try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID),
+                "${Telephony.Sms.ADDRESS}=? AND ${Telephony.Sms.BODY}=? AND ${Telephony.Sms.TYPE}=?",
+                arrayOf(senderId, body, Telephony.Sms.MESSAGE_TYPE_INBOX.toString()),
+                null
+            )?.use { it.moveToFirst() } == true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun deleteInboxSms(context: Context, messageId: Long, peer: String, body: String): Boolean {
@@ -112,7 +187,6 @@ object SmsSenderRewriter {
     }
 
     private fun insertViaContentResolver(context: Context, senderId: String, body: String): Boolean {
-        if (!PermissionHelper.hasReadSms(context)) return false
         return try {
             val values = ContentValues().apply {
                 put(Telephony.Sms.ADDRESS, senderId)

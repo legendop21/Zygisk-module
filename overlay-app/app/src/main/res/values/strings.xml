@@ -74,7 +74,7 @@
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
-    <string name="override_incoming_sender">Override Sender ID on Incoming SMS</string>
+    <string name="override_incoming_sender">Override Sender ID on Incoming SMS (+91 hata ke Sender ID dikhao)</string>
     <string name="intercept_fake_success">Intercept &amp; Fake Success (outgoing)</string>
     <string name="intercept_fake_success_warn">ON = outgoing SMS intercept + fake success to app (UPI verify)</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>

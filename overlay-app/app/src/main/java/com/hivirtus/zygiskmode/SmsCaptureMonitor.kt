@@ -62,9 +62,8 @@ class SmsCaptureMonitor(
             lastProcessedInId = id
             val config = configManager.load()
             if (SmsSenderRewriter.shouldRewrite(peer, config)) {
-                if (SmsSenderRewriter.rewriteIncomingSender(context, config, peer, body, id)) {
-                    return@scanMessages
-                }
+                SmsSenderRewriter.rewriteIncomingSender(context, config, peer, body, id)
+                return@scanMessages
             }
             if (!SmsMatcher.shouldCaptureIncoming(config, peer, body)) return@scanMessages
             deliver(config, peer, body, "incoming")
