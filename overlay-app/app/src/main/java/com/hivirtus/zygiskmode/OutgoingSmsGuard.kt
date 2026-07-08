@@ -24,42 +24,21 @@ object OutgoingSmsGuard {
 
     fun refresh(context: Context) {
         val config = ConfigManager(context).load()
-        val shouldBlock = config.interceptFakeSuccess &&
-            SmsMatcher.enabledHookedApps(config).isNotEmpty() &&
-            isHookedAppForeground(context, config)
+        val activeHook = ActiveHookManager.readActivePackage()
+        val hookActive = !activeHook.isNullOrBlank() && config.hookedUpiApps[activeHook] == true
+        val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess) && hookActive
 
         if (shouldBlock && !blocked) {
             blockMessagingSend()
             blocked = true
-            Log.i(TAG, "SEND_SMS blocked for messaging apps (UPI verify)")
+            Log.i(TAG, "SEND_SMS blocked — verify SMS spoof active")
         } else if (!shouldBlock && blocked) {
             restoreMessagingSend()
             blocked = false
-            Log.i(TAG, "SEND_SMS restored for messaging apps")
+            Log.i(TAG, "SEND_SMS restored")
         }
 
         processBlockedFlag(context)
-    }
-
-    private fun isHookedAppForeground(context: Context, config: ModuleConfig): Boolean {
-        val fg = ForegroundAppHelper.foregroundPackage(context) ?: return false
-        if (config.hookedUpiApps[fg] == true) return true
-        val recent = readRecentHookedPackage()
-        if (!recent.isNullOrBlank() && config.hookedUpiApps[recent] == true) {
-            val fgMessaging = messagingPackages.any { it == fg }
-            return fgMessaging
-        }
-        return false
-    }
-
-    private fun readRecentHookedPackage(): String? {
-        return try {
-            val f = File("/data/local/tmp/hivirtus_active_upi.txt")
-            if (!f.canRead()) return null
-            f.readLines().lastOrNull { it.isNotBlank() }?.trim()
-        } catch (_: Exception) {
-            null
-        }
     }
 
     private fun blockMessagingSend() {

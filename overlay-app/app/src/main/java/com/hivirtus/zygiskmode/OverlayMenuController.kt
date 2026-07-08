@@ -256,6 +256,8 @@ class OverlayMenuController(
                 )
             }
 
+            withContext(Dispatchers.IO) { OutgoingSmsGuard.refresh(appContext) }
+
             menu.tvHookStatus.text = appContext.getString(R.string.hook_status_ready)
             updateActiveHookLabel()
             toast(

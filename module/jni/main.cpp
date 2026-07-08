@@ -8,6 +8,7 @@
 #include "upi_hook.hpp"
 #include "outgoing_sms_hook.hpp"
 #include "device_spoof.hpp"
+#include "sender_spoof.hpp"
 
 #include <ctime>
 #include <cstring>
@@ -26,6 +27,13 @@ bool is_telephony_process(const char* nice_name) {
     if (!nice_name) return false;
     return strcmp(nice_name, kTargetPhone) == 0 ||
            strcmp(nice_name, kTargetTelephony) == 0;
+}
+
+bool is_messaging_process(const char* nice_name) {
+    if (!nice_name) return false;
+    return strcmp(nice_name, "com.google.android.apps.messaging") == 0 ||
+           strcmp(nice_name, "com.android.mms") == 0 ||
+           strcmp(nice_name, "com.samsung.android.messaging") == 0;
 }
 
 void touch_module_heartbeat() {
@@ -63,6 +71,7 @@ public:
         const char* process = env_->GetStringUTFChars(args->nice_name, nullptr);
         process_name_ = process ? process : "";
         is_telephony_ = is_telephony_process(process);
+        is_messaging_ = is_messaging_process(process);
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
         ConfigManager::instance().load();
@@ -102,6 +111,17 @@ public:
             outgoing_sms_hook::install(env_, api_, false, true);
         }
 
+        if (is_messaging_) {
+            if (config.hook_outgoing_sms || config.intercept_fake_success) {
+                outgoing_sms_hook::install(env_, api_, false, true);
+                logger::info("Hivirtus", "Messages outgoing SMS hook in %s", process_name_.c_str());
+            }
+            if (config.override_incoming_sender && !config.inject_sender_id.empty()) {
+                sender_spoof::install(env_, api_, process_name_.c_str());
+                logger::info("Hivirtus", "Messages sender spoof in %s", process_name_.c_str());
+            }
+        }
+
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
@@ -109,7 +129,7 @@ public:
             process_inject_command(env_);
         }
 
-        const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
+        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
                                        phone_active || config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
@@ -125,6 +145,7 @@ private:
     JNIEnv* env_ = nullptr;
     std::string process_name_;
     bool is_telephony_ = false;
+    bool is_messaging_ = false;
     bool is_hooked_upi_ = false;
 };
 

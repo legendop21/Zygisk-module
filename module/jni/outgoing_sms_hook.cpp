@@ -32,26 +32,36 @@ bool is_placeholder_sender(const std::string& id) {
     return id.empty() || id == "AD-TEST-S";
 }
 
-bool body_matches_hooked_upi(const ModuleConfig& config, const std::string& body) {
-    if (body.empty()) return false;
-    const std::string upper = to_upper(body);
+bool any_hooked_app(const ModuleConfig& config) {
     for (const auto& [pkg, enabled] : config.hooked_upi_apps) {
-        if (!enabled) continue;
-        static const char* keywords[] = {
-            "SNAPMINT", "YESPRO", "YESPROUPI", "PHONEPE", "PAYTM", "GPAY", "AXIS",
-            "HEROAXIS", "UPI", "VERIFY", "VERIFICATION", "OTP", "LOAN", nullptr};
-        for (const char** kw = keywords; *kw; ++kw) {
-            if (upper.find(*kw) != std::string::npos) return true;
-        }
         (void)pkg;
+        if (enabled) return true;
     }
     return false;
 }
 
+bool body_has_verify_token(const std::string& body) {
+    if (body.empty()) return false;
+    const std::string upper = to_upper(body);
+    static const char* keywords[] = {
+        "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY",
+        "SNAPMINT", "KREDIT", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
+        "HEROAXIS", "AXIS", nullptr};
+    for (const char** kw = keywords; *kw; ++kw) {
+        if (upper.find(*kw) != std::string::npos) return true;
+    }
+    return false;
+}
+
+bool body_matches_hooked_upi(const ModuleConfig& config, const std::string& body) {
+    if (!any_hooked_app(config)) return false;
+    return body_has_verify_token(body);
+}
+
 bool should_block_outgoing(const ModuleConfig& config, const std::string& body) {
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
-    if (!body_matches_hooked_upi(config, body)) return false;
-    return config.intercept_fake_success || config.hook_outgoing_sms;
+    if (!any_hooked_app(config)) return false;
+    return body_has_verify_token(body);
 }
 
 std::string read_spoof_phone() {
@@ -177,8 +187,12 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
     std::string dest;
     std::string body;
     if (read_intent_sms(env, intent, dest, body)) {
-        logger::info("OutgoingSms", "UPI compose intent dest=%s len=%zu", dest.c_str(), body.size());
-        pipeline_outgoing(env, dest, body);
+        if (should_block_outgoing(config, body)) {
+            logger::info("OutgoingSms", "Blocked compose intent dest=%s len=%zu", dest.c_str(),
+                         body.size());
+            pipeline_outgoing(env, dest, body);
+            return nullptr;
+        }
     }
 
     if (!orig_execStartActivity) return nullptr;
@@ -199,13 +213,12 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         if (iface.find("ISms") != std::string::npos) {
             std::string dest;
             std::string body;
-            if (read_isms_outgoing(env, data, dest, body)) {
+            if (read_isms_outgoing(env, data, dest, body) &&
+                should_block_outgoing(config, body)) {
+                logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
                 pipeline_outgoing(env, dest, body);
-                if (should_block_outgoing(config, body)) {
-                    logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
-                    write_ok_reply(env, reply);
-                    return 0;
-                }
+                write_ok_reply(env, reply);
+                return 0;
             }
         }
     }

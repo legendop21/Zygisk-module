@@ -45,14 +45,6 @@
                 android:textColor="@color/text_primary"
                 android:textSize="16sp"
                 android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/menu_subtitle"
-                android:textColor="@color/gold_muted"
-                android:textSize="10sp" />
         </LinearLayout>
     </FrameLayout>
 
@@ -258,7 +250,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/input_background"
-                    android:hint="@string/intercept_sender_hint"
+                    android:hint="JK-AXISBK-S"
                     android:inputType="text"
                     android:padding="12dp"
                     android:textColor="@color/text_primary"
@@ -272,13 +264,6 @@
                 android:orientation="vertical"
                 android:paddingTop="12dp"
                 android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/telegram_menu_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchAutoForward"

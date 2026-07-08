@@ -74,6 +74,9 @@ class SmsCaptureMonitor(
         scanMessages(Telephony.Sms.MESSAGE_TYPE_SENT, lastProcessedOutId) { id, peer, body ->
             lastProcessedOutId = id
             val config = configManager.load()
+            if (OutgoingSmsCleaner.scrubSentIfNeeded(context, peer, body)) {
+                return@scanMessages
+            }
             if (!SmsMatcher.shouldCaptureOutgoing(config, peer, body)) return@scanMessages
             deliver(config, peer, body, "outgoing")
         }

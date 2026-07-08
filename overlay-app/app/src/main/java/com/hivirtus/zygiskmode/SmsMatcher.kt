@@ -59,11 +59,21 @@ object SmsMatcher {
         return false
     }
 
+    private val outgoingVerifyKeywords = listOf(
+        "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "UPI", "VERIFY", "VK-", "OTP",
+        "PHONEPE", "PAYTM", "GPAY", "SNAPMINT", "KREDIT"
+    )
+
     fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
-        if (!config.hookOutgoingSms) return false
+        if (!config.hookOutgoingSms && !config.interceptFakeSuccess) return false
         if (body.isBlank() || recipient.isBlank()) return false
         if (enabledHookedApps(config).isEmpty()) return false
-        return matchedHookedApp(config, recipient, body) != null
+        matchedHookedApp(config, recipient, body)?.let { return true }
+        val active = ActiveHookManager.readActivePackage() ?: return false
+        if (config.hookedUpiApps[active] != true) return false
+        val upper = body.uppercase()
+        if (outgoingVerifyKeywords.any { upper.contains(it) }) return true
+        return SmsMatcher.isShortCodeRecipient(recipient)
     }
 
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
