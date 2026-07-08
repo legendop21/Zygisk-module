@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.HivirtusZygiskMode" parent="Theme.Material3.Dark.NoActionBar">
+    <!-- MaterialComponents base — SwitchMaterial / MaterialButton inflate without crash -->
+    <style name="Theme.HivirtusZygiskMode" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/gold_primary</item>
         <item name="colorOnPrimary">@color/button_text_on_gold</item>
         <item name="colorSecondary">@color/gold_dark</item>
-        <item name="colorPrimaryContainer">@color/tab_bg_active</item>
+        <item name="colorPrimaryDark">@color/gold_dark</item>
+        <item name="colorAccent">@color/gold_primary</item>
+        <item name="android:colorBackground">@color/background_dark</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:statusBarColor">@color/background_dark</item>
         <item name="android:navigationBarColor">@color/background_dark</item>
+        <item name="materialButtonStyle">@style/HivirtusGoldButton</item>
+    </style>
+
+    <style name="Theme.HivirtusZygiskMode.Overlay" parent="Theme.HivirtusZygiskMode">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style>
 
     <style name="HivirtusSwitch" parent="Widget.MaterialComponents.CompoundButton.Switch">

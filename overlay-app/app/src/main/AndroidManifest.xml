@@ -52,7 +52,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
             android:taskAffinity="com.hivirtus.zygiskmode.overlay"
-            android:theme="@style/Theme.HivirtusZygiskMode" />
+            android:theme="@style/Theme.HivirtusZygiskMode.Overlay" />
 
         <service
             android:name=".OverlayService"

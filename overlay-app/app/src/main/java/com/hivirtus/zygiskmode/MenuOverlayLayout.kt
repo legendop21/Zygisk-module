@@ -2,9 +2,9 @@ package com.hivirtus.zygiskmode
 
 import android.content.Context
 import android.graphics.Color
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
@@ -24,16 +24,21 @@ object MenuOverlayLayout {
         val controller: OverlayMenuController
     )
 
+    fun themedContext(context: Context): Context {
+        return ContextThemeWrapper(context, R.style.Theme_HivirtusZygiskMode)
+    }
+
     fun build(
         context: Context,
         onClose: () -> Unit,
         dismissOnBackgroundTap: Boolean = true
     ): MenuHost {
-        val metrics = context.resources.displayMetrics
+        val themed = themedContext(context)
+        val metrics = themed.resources.displayMetrics
         val menuWidthPx = (MENU_WIDTH_DP * metrics.density).toInt()
         val maxMenuHeightPx = (metrics.heightPixels * MAX_HEIGHT_FRACTION).toInt()
 
-        val root = FrameLayout(context).apply {
+        val root = FrameLayout(themed).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -44,7 +49,7 @@ object MenuOverlayLayout {
             }
         }
 
-        val menuBinding = OverlayMenuBinding.inflate(LayoutInflater.from(context))
+        val menuBinding = OverlayMenuBinding.inflate(LayoutInflater.from(themed))
         menuBinding.root.setOnClickListener { /* consume taps inside menu */ }
         val scrollMaxPx = minOf(maxMenuHeightPx, (420 * metrics.density).toInt())
         menuBinding.tabContentScroll.apply {
@@ -61,7 +66,7 @@ object MenuOverlayLayout {
             FrameLayout.LayoutParams(menuWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         )
 
-        val controller = OverlayMenuController(context.applicationContext, menuBinding, onClose)
+        val controller = OverlayMenuController(themed, menuBinding, onClose)
         return MenuHost(root, menuBinding, controller)
     }
 }
