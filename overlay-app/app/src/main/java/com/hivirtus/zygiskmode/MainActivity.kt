@@ -100,6 +100,12 @@ class MainActivity : AppCompatActivity() {
                 smsPermission.launch(Manifest.permission.READ_SMS)
                 return@setOnClickListener
             }
+            if (!PermissionHelper.canDrawOverlay(this)) {
+                pendingStart = true
+                startActivity(PermissionHelper.overlaySettingsIntent(this))
+                Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             openOverlayMenu()
         }
 
@@ -116,7 +122,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePermissionStatus()
         if (pendingStart && PermissionHelper.hasNotificationPermission(this) &&
-            PermissionHelper.hasReadSms(this)
+            PermissionHelper.hasReadSms(this) && PermissionHelper.canDrawOverlay(this)
         ) {
             pendingStart = false
             openOverlayMenu()
@@ -142,18 +148,20 @@ class MainActivity : AppCompatActivity() {
         binding.tvMiuiStatus.text = getString(
             if (batteryOk) R.string.miui_battery_ok else R.string.miui_battery_missing
         )
-        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.hasReadSms(this)
+        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.hasReadSms(this) &&
+            PermissionHelper.canDrawOverlay(this)
     }
 
     private fun openOverlayMenu() {
         pendingStart = false
         try {
-            startActivity(Intent(this, OverlayActivity::class.java))
-            try {
-                startService(Intent(this, OverlayService::class.java))
-            } catch (_: Exception) {
-                // Menu pehle — OTP service baad me bhi chal sakti hai
+            val serviceIntent = Intent(this, OverlayService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
             }
+            startActivity(Intent(this, OverlayActivity::class.java))
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
             if (!PermissionHelper.canDrawOverlay(this)) {
                 Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_LONG).show()

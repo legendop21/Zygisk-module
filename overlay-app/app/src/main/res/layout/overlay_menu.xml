@@ -400,7 +400,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/input_background"
-            android:hint="AD-TEST-S"
+            android:hint="@string/intercept_sender_hint"
             android:inputType="text"
             android:padding="12dp"
             android:textColor="@color/text_primary"

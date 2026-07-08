@@ -71,6 +71,25 @@ object UpiAppRegistry {
     fun defaultHookMap(): Map<String, Boolean> =
         ALL.associate { it.packageName to true }
 
+    fun matchAmong(apps: List<UpiApp>, sender: String, body: String): UpiApp? {
+        matchAmongBySender(apps, sender)?.let { return it }
+        return matchAmongByBody(apps, body)
+    }
+
+    fun matchAmongBySender(apps: List<UpiApp>, sender: String): UpiApp? {
+        val upper = sender.uppercase().replace("\\s".toRegex(), "")
+        return apps.firstOrNull { app ->
+            app.smsKeywords.any { kw -> upper.contains(kw) }
+        }
+    }
+
+    fun matchAmongByBody(apps: List<UpiApp>, body: String): UpiApp? {
+        val upper = body.uppercase()
+        return apps.firstOrNull { app ->
+            app.smsKeywords.any { upper.contains(it) }
+        }
+    }
+
     fun matchApp(sender: String, body: String): UpiApp? {
         matchAppBySender(sender)?.let { return it }
         return matchAppByBody(body)

