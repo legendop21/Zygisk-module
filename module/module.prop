@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
-name=Hivirtus Zygisk Mode
-version=v2.12.3
-versionCode=44
+name=Zygisk Security Edu Lab
+version=v3.0.0-edu
+versionCode=50
 author=@hivirtus
-description=Zygisk Base Mode By @Hivirtus
+description=Legal educational Zygisk lab — module status, OTP parsing demo, Telegram test only. No SMS hook or app bypass.
 zygisk=1
