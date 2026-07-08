@@ -63,6 +63,7 @@ object HookEngine {
 
         configManager.writeSpoofPhoneSync(phone)
         TelephonyInjectHelper.wakeTelephonyPipeline()
+        SmsStackRefresher.refreshAfterSenderIdChange()
         ActiveHookManager.forceStopOnce(targetPkg)
         ActiveHookManager.persistActivePackage(targetPkg, display)
         OutgoingSmsGuard.refresh(context.applicationContext)

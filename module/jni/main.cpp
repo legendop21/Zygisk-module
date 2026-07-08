@@ -47,6 +47,18 @@ bool is_hook_target(bool telephony, bool messaging, bool hooked_upi) {
     return telephony || messaging || hooked_upi;
 }
 
+bool is_gms_process(const char* nice_name) {
+    if (!nice_name) return false;
+    return strcmp(nice_name, "com.google.android.gms") == 0 ||
+           strcmp(nice_name, "com.google.android.gms.persistent") == 0;
+}
+
+bool sender_spoof_wanted(const ModuleConfig& config) {
+    if (!config.override_incoming_sender) return false;
+    const std::string& id = config.inject_sender_id;
+    return !id.empty() && id != "AD-TEST-S";
+}
+
 void touch_module_heartbeat() {
     FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
     if (f) {
@@ -83,6 +95,7 @@ public:
         process_name_ = process ? process : "";
         is_telephony_ = is_telephony_process(process);
         is_messaging_ = is_messaging_process(process);
+        is_gms_ = is_gms_process(process);
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
         ConfigManager::instance().load();
@@ -99,9 +112,7 @@ public:
             return;
         }
 
-        // Zygote / system — koi hook nahi, turant unload
-        if (process_name_ == "zygote" || process_name_ == "zygote64" ||
-            process_name_ == "system_server") {
+        if (process_name_ == "zygote" || process_name_ == "zygote64") {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
@@ -109,6 +120,26 @@ public:
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
+        const bool want_sender_spoof = sender_spoof_wanted(config);
+
+        // LSPosed "System Framework" scope — notification bar sender ID
+        if (process_name_ == "system_server") {
+            if (want_sender_spoof) {
+                sender_spoof::install(env_, api_, "system_server");
+                touch_module_heartbeat();
+                logger::info("Hivirtus", "Sender ID spoof in system_server");
+            } else {
+                api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            }
+            return;
+        }
+
+        if (is_gms_ && want_sender_spoof) {
+            sender_spoof::install(env_, api_, "gms");
+            touch_module_heartbeat();
+            logger::info("Hivirtus", "Sender ID spoof in GMS");
+            return;
+        }
 
         device_spoof::install(env_, config, api_);
 
@@ -154,7 +185,7 @@ public:
                 }
                 logger::info("Hivirtus", "Messages outgoing SMS hook in %s", process_name_.c_str());
             }
-            if (config.override_incoming_sender && !config.inject_sender_id.empty()) {
+            if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, process_name_.c_str());
                 logger::info("Hivirtus", "Messages sender spoof in %s", process_name_.c_str());
             }
@@ -163,13 +194,20 @@ public:
         if (is_telephony_) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
+            if (want_sender_spoof) {
+                sender_spoof::install(env_, api_, "telephony");
+            }
             if (!phone_active) {
                 outgoing_sms_hook::install(env_, api_, true, false);
             }
             process_inject_command(env_);
         }
 
-        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
+        if (is_hooked_upi_ && want_sender_spoof) {
+            sender_spoof::install(env_, api_, process_name_.c_str());
+        }
+
+        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_ ||
                                        config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
@@ -186,6 +224,7 @@ private:
     std::string process_name_;
     bool is_telephony_ = false;
     bool is_messaging_ = false;
+    bool is_gms_ = false;
     bool is_hooked_upi_ = false;
 };
 

@@ -41,8 +41,9 @@ bool is_numeric_sender(const std::string& sender) {
 
 std::string resolve_sender(const std::string& actual) {
     if (!g_override_incoming || is_placeholder(g_sender_id)) return actual;
-    if (is_indian_mobile(actual) || is_numeric_sender(actual)) return g_sender_id;
-    return actual;
+    // LSPosed SMS Modifier style — har incoming SMS pe saved sender ID (notification bar)
+    if (actual == g_sender_id) return actual;
+    return g_sender_id;
 }
 
 static jstring (*orig_get_originating_address)(JNIEnv*, jobject) = nullptr;

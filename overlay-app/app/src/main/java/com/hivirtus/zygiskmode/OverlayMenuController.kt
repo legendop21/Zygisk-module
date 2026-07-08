@@ -192,6 +192,25 @@ class OverlayMenuController(
         menu.etMessageBody.addTextChangedListener(textWatcher)
         menu.etBotToken.addTextChangedListener(textWatcher)
         menu.etChatId.addTextChangedListener(textWatcher)
+
+        menu.etSenderId.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressAutoSave) return
+                val id = s?.toString()?.trim().orEmpty()
+                if (id.isBlank() || id.equals("AD-TEST-S", ignoreCase = true)) return
+                scope.launch(Dispatchers.IO) {
+                    savePartial {
+                        it.copy(
+                            injectSenderId = id,
+                            overrideIncomingSender = true
+                        )
+                    }
+                    SmsStackRefresher.refreshAfterSenderIdChange()
+                }
+            }
+        })
     }
 
     private fun autoToggle(

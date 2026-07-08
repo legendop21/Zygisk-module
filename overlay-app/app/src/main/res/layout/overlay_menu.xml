@@ -365,6 +365,14 @@
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_hint" />
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/sender_id_notification_hint"
+                    android:textColor="@color/text_hint"
+                    android:textSize="10sp" />
+
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchInterceptFakeSuccess"
                     style="@style/HivirtusSwitch"

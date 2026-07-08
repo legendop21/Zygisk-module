@@ -22,10 +22,10 @@ object SmsSenderRewriter {
         if (!config.overrideIncomingSender) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (senderId.isBlank()) return false
-        if (!SmsMatcher.isIndianMobileNumber(actualPeer) && !SmsMatcher.isNumericSender(actualPeer)) {
-            return false
-        }
-        return true
+        // LSPosed-style: +91 / numeric / koi bhi incoming → saved sender ID (notification)
+        val actual = actualPeer.trim()
+        if (actual.equals(senderId, ignoreCase = true)) return false
+        return isIndianMobileNumber(actual) || isNumericSender(actual) || actual.isNotBlank()
     }
 
     /**

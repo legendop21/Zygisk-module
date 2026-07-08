@@ -30,6 +30,8 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                     abortBroadcast()
                 } catch (_: Exception) {}
                 SmsSenderRewriter.rewriteOnReceive(appContext, config, sender, body)
+                finish(pending)
+                return
             }
 
             if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return finish(pending)

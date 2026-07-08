@@ -86,7 +86,7 @@
     <string name="paste_and_send">Paste &amp; send</string>
     <string name="send_virtual_sms">Send SMS</string>
     <string name="open_send_sms_float">Open Send SMS Float</string>
-    <string name="message_body_hint_short">OTP / verify message body</string>
+    <string name="sender_id_notification_hint">ON = har SMS notification saved Sender ID se dikhega (LSPosed SMS Modifier jaisa)</string>
     <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
     <string name="lsposed_compat_hint">LSPosed / Zygisk Next use karte ho? SYSTEM → Not Root + Not Developer OFF rakho.</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
