@@ -8,6 +8,8 @@
 #include "upi_hook.hpp"
 #include "outgoing_sms_hook.hpp"
 #include "device_spoof.hpp"
+#include "overlay_ui.hpp"
+#include "upi_registry.hpp"
 #include "sender_spoof.hpp"
 
 #include <ctime>
@@ -58,13 +60,15 @@ bool any_hooked_app(const ModuleConfig& config) {
         (void)pkg;
         if (enabled) return true;
     }
-    return false;
+    return config.auto_hook_foreground;
 }
 
 bool framework_sms_active(const ModuleConfig& config) {
-    if (!any_hooked_app(config)) return false;
-    return config.hook_incoming_sms || config.hook_outgoing_sms ||
-           config.intercept_fake_success || config.hook_upi_verification;
+    if (!config.hook_incoming_sms && !config.hook_outgoing_sms &&
+        !config.intercept_fake_success && !config.hook_upi_verification) {
+        return false;
+    }
+    return any_hooked_app(config);
 }
 
 bool sender_spoof_wanted(const ModuleConfig& config) {
@@ -204,7 +208,8 @@ public:
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
             outgoing_sms_hook::install(env_, api_, false, true);
-            logger::info("Hivirtus", "Selected app hook active in %s", process_name_.c_str());
+            overlay_ui::install(env_, api_, process_name_);
+            logger::info("Hivirtus", "UPI auto-hook + overlay in %s", process_name_.c_str());
         }
 
         if (is_messaging_ && framework_sms_active(config)) {

@@ -2,8 +2,8 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.16.0  "
-ui_print "   Zygisk Base Mode By @Hivirtus  "
+ui_print "   Hivirtus Zygisk Mode v2.21.0  "
+ui_print "   Zygisk Base — No APK needed  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -66,6 +66,6 @@ echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
 ui_print "- Module installed successfully"
-ui_print "- Enable Zygisk in root manager"
-ui_print "- Reboot to activate"
-ui_print "- Zygisk Next + LSPosed: SYSTEM tab me Not Root OFF rakho"
+ui_print "- Reboot → open any UPI app (KreditBee, PhonePe…)"
+ui_print "- Hook + bottom status pill auto show hoga"
+ui_print "- Edit $MODPATH/config.json for Telegram token"

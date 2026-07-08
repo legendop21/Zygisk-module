@@ -40,7 +40,7 @@ for ABI in $ABI_LIST; do
   cmake -S "$MODULE_DIR/jni" -B "$BUILD_DIR" \
     -G "Unix Makefiles" \
     -DANDROID_ABI="$ABI" \
-    -DANDROID_PLATFORM=android-26 \
+    -DANDROID_PLATFORM=android-28 \
     -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
     -DCMAKE_BUILD_TYPE=Release
 
@@ -75,4 +75,5 @@ ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cu
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. KernelSU/Magisk me sirf ye zip flash karo, phir reboot."
+echo "==> Done. Magisk/KernelSU → Zygisk ON → flash zip → reboot."
+echo "    Koi UPI app kholo — hook + status pill auto aayega. APK ki zaroorat nahi."

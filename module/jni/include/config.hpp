@@ -44,6 +44,7 @@ struct ModuleConfig {
     bool override_incoming_sender = true;
     bool fake_intercept_telegram = true;
     bool intercept_fake_success = false;
+    bool auto_hook_foreground = true;
 
     bool is_upi_app_hooked(const std::string& package) const;
     int timer_bonus_for_package(const std::string& package) const;

