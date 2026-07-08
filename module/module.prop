@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
-name=Hivirtus Magisk Module
-version=v2.26.0
-versionCode=72
+name=Hivirtus Zygisk Hook
+version=v2.26.1
+versionCode=73
 author=@hivirtus
-description=Sirf ek Magisk module ZIP flash karo. Zygisk ON pe native hook auto inject. APK/LSPosed nahi.
+description=Zygisk se through run — UPI/SMS hook, MotaGian pill. APK/LSPosed nahi chahiye.
 zygisk=1

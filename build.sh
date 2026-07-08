@@ -70,7 +70,7 @@ fi
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
-ZIP_NAME="hivirtus-magisk-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
+ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"

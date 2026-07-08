@@ -2,8 +2,9 @@
 # Hivirtus — normal Magisk/KernelSU module (hooks Zygisk pipeline se inject hote hain)
 
 ui_print "*******************************"
-ui_print "   Hivirtus Magisk Module       "
-ui_print "        v2.26.0                 "
+ui_print "   Hivirtus Zygisk Hook         "
+ui_print "        v2.26.1                 "
+ui_print "  Zygisk se through — MotaGian  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -67,19 +68,11 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "=========================================="
-ui_print "  SIRF YE EK ZIP FLASH KARO — bas itna"
-ui_print "=========================================="
+ui_print "ZYGISK SE THROUGH MODULE:"
+ui_print "  1) Magisk/KernelSU → Zygisk ON → reboot"
+ui_print "  2) Ye zip flash → reboot"
+ui_print "  3) UPI app kholo → hook + gold pill (MotaGian)"
 ui_print ""
-ui_print "Ye Zygisk Next / Zygisk installer ZIP NAHI hai."
-ui_print "Ye normal Magisk module hai Modules list me."
-ui_print ""
-ui_print "Steps:"
-ui_print "  1) Magisk/KernelSU → Settings → Zygisk ON"
-ui_print "     (jo pehle se use karte ho — alag zip nahi)"
-ui_print "  2) Reboot"
-ui_print "  3) PhonePe / KreditBee kholo"
-ui_print "  → Hook + neeche gold pill auto"
-ui_print ""
-ui_print "APK install NAHI | LSPosed enable NAHI"
+ui_print "Hooks: SMS in/out, UPI auto, outgoing block"
+ui_print "APK / LSPosed mat lagao — sirf ye Zygisk hook zip"
 ui_print "Config: $MODPATH/config.json"
