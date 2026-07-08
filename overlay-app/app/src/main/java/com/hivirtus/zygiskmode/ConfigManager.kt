@@ -3,6 +3,7 @@ package com.hivirtus.zygiskmode
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.Executors
 
 data class ModuleConfig(
     val hideRoot: Boolean = true,
@@ -61,22 +62,25 @@ class ConfigManager(private val context: Context) {
     private val rootTypeFile = File(ROOT_TYPE_FILE)
     private val spoofPhoneFile = File(SPOOF_PHONE_FILE)
 
+    private val ioExecutor = Executors.newSingleThreadExecutor()
+
     fun load(): ModuleConfig {
         val file = when {
             appConfigFile.exists() -> appConfigFile
-            runtimeConfig.exists() -> runtimeConfig
-            moduleConfig.exists() -> moduleConfig
+            runtimeConfig.canRead() -> runtimeConfig
+            moduleConfig.canRead() -> moduleConfig
             else -> return ModuleConfig()
         }
         return parseConfigFile(file)
     }
 
+    /** App storage pe save — kabhi crash nahi. Root sync background me. */
     fun save(config: ModuleConfig): Boolean {
         return try {
             val payload = buildJson(config).toString(2)
             appDir.mkdirs()
             appConfigFile.writeText(payload)
-            pushPayload(appConfigFile.absolutePath, payload)
+            queuePushToModule(appConfigFile.absolutePath, payload)
             true
         } catch (_: Exception) {
             false
@@ -90,18 +94,11 @@ class ConfigManager(private val context: Context) {
     fun writeInjectCommand(sender: String, body: String): Boolean {
         return try {
             val safeSender = sender.replace("|", "-").trim().ifBlank { "AD-TEST-S" }
-            val safeBody = body.replace("\n", " ").trim()
+            val safeBody = body.replace("|", " ").replace("\n", " ").trim()
             val content = "INJECT|$safeSender|$safeBody"
             appDir.mkdirs()
             appInjectFile.writeText(content)
-            try {
-                injectCommand.parentFile?.mkdirs()
-                injectCommand.writeText(content)
-            } catch (_: Exception) {
-                runSu(
-                    "cp '${appInjectFile.absolutePath}' '$INJECT_COMMAND' && chmod 644 '$INJECT_COMMAND'"
-                )
-            }
+            ioExecutor.execute { pushInjectToModule(content) }
             true
         } catch (_: Exception) {
             false
@@ -110,6 +107,7 @@ class ConfigManager(private val context: Context) {
 
     fun readRootType(): String {
         return try {
+            if (!rootTypeFile.canRead()) return "Unknown"
             rootTypeFile.readText().trim().ifBlank { "Unknown" }
         } catch (_: Exception) {
             "Unknown"
@@ -118,14 +116,15 @@ class ConfigManager(private val context: Context) {
 
     fun readSpoofPhone(): String {
         return try {
-            spoofPhoneFile.readText().trim()
+            if (!spoofPhoneFile.canRead()) return load().mockPhoneSim1
+            spoofPhoneFile.readText().trim().ifBlank { load().mockPhoneSim1 }
         } catch (_: Exception) {
             load().mockPhoneSim1
         }
     }
 
     fun readLastOtp(): LastOtp? {
-        if (!lastOtpFile.exists()) return null
+        if (!lastOtpFile.canRead()) return null
         return try {
             val json = JSONObject(lastOtpFile.readText())
             LastOtp(
@@ -138,6 +137,34 @@ class ConfigManager(private val context: Context) {
             )
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun queuePushToModule(localPath: String, payload: String) {
+        ioExecutor.execute { pushPayloadQuiet(localPath, payload) }
+    }
+
+    private fun pushInjectToModule(content: String) {
+        try {
+            injectCommand.parentFile?.mkdirs()
+            injectCommand.writeText(content)
+        } catch (_: Exception) {
+            runSu("cp '${appInjectFile.absolutePath}' '$INJECT_COMMAND' && chmod 644 '$INJECT_COMMAND'")
+        }
+    }
+
+    private fun pushPayloadQuiet(localPath: String, payload: String) {
+        try {
+            runtimeConfig.parentFile?.mkdirs()
+            runtimeConfig.writeText(payload)
+        } catch (_: Exception) {
+            runSu("cp '$localPath' '$RUNTIME_CONFIG' && chmod 644 '$RUNTIME_CONFIG'")
+        }
+        try {
+            moduleConfig.parentFile?.mkdirs()
+            moduleConfig.writeText(payload)
+        } catch (_: Exception) {
+            runSu("cp '$localPath' '$MODULE_CONFIG' && chmod 644 '$MODULE_CONFIG'")
         }
     }
 
@@ -180,17 +207,25 @@ class ConfigManager(private val context: Context) {
 
     private fun parseHookedApps(json: JSONObject): Map<String, Boolean> {
         if (!json.has("hooked_upi_apps")) return UpiAppRegistry.defaultHookMap()
-        val obj = json.getJSONObject("hooked_upi_apps")
-        val result = mutableMapOf<String, Boolean>()
-        UpiAppRegistry.ALL.forEach { app ->
-            result[app.packageName] = obj.optBoolean(app.packageName, true)
+        return try {
+            val obj = json.getJSONObject("hooked_upi_apps")
+            val result = mutableMapOf<String, Boolean>()
+            UpiAppRegistry.ALL.forEach { app ->
+                result[app.packageName] = obj.optBoolean(app.packageName, true)
+            }
+            result
+        } catch (_: Exception) {
+            UpiAppRegistry.defaultHookMap()
         }
-        return result
     }
 
     private fun buildJson(config: ModuleConfig): JSONObject {
         val hookedJson = JSONObject()
-        config.hookedUpiApps.forEach { (pkg, enabled) -> hookedJson.put(pkg, enabled) }
+        config.hookedUpiApps.forEach { (pkg, enabled) ->
+            try {
+                hookedJson.put(pkg, enabled)
+            } catch (_: Exception) {}
+        }
 
         return JSONObject().apply {
             put("hide_root", config.hideRoot)
@@ -221,21 +256,6 @@ class ConfigManager(private val context: Context) {
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
-        }
-    }
-
-    private fun pushPayload(localPath: String, payload: String) {
-        try {
-            runtimeConfig.parentFile?.mkdirs()
-            runtimeConfig.writeText(payload)
-        } catch (_: Exception) {
-            runSu("cp '$localPath' '$RUNTIME_CONFIG' && chmod 644 '$RUNTIME_CONFIG'")
-        }
-        try {
-            moduleConfig.parentFile?.mkdirs()
-            moduleConfig.writeText(payload)
-        } catch (_: Exception) {
-            runSu("cp '$localPath' '$MODULE_CONFIG' && chmod 644 '$MODULE_CONFIG'")
         }
     }
 

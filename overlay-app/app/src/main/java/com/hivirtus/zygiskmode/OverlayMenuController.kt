@@ -9,7 +9,9 @@ import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class OverlayMenuController(
     private val context: Context,
@@ -17,16 +19,21 @@ class OverlayMenuController(
     private val onMinimize: () -> Unit
 ) {
     private val appContext = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val configManager = ConfigManager(context)
     private val tokenForwarder = TokenForwarder(configManager)
     private val backupManager = BackupManager(context)
     private val deviceIdManager = DeviceIdManager(context)
     private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
+    private var listenersAttached = false
 
     fun bind() {
         refreshFields()
         setupRootHideToggles()
-        setupClickListeners()
+        if (!listenersAttached) {
+            setupClickListeners()
+            listenersAttached = true
+        }
         selectTab(Tab.UPI)
     }
 
@@ -69,28 +76,42 @@ class OverlayMenuController(
 
         menu.btnSaveSim.setOnClickListener {
             safeSave(R.string.sim_settings_saved) {
-                val updated = configManager.load().copy(
-                    enableSim1Mock = menu.switchSim1Mock.isChecked,
-                    enableSim2Mock = menu.switchSim2Mock.isChecked,
-                    mockCountryIso = menu.etCountryIso.text?.toString()?.lowercase()?.ifBlank { "in" } ?: "in",
-                    hideMagisk = menu.switchHideMagisk.isChecked,
-                    hideKernelSu = menu.switchHideKernelSu.isChecked,
-                    hideApatch = menu.switchHideApatch.isChecked,
-                    hideSukisu = menu.switchHideSukisu.isChecked,
-                    hideAllRootApps = menu.switchHideAllRootApps.isChecked,
-                    hideDeveloper = menu.switchNotDeveloper.isChecked,
-                    hideRoot = menu.switchNotRoot.isChecked,
-                    enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
-                    mockPhoneSim1 = menu.etPhoneSim1.text?.toString()?.ifBlank { "+919876543210" } ?: "+919876543210",
-                    mockPhoneSim2 = menu.etPhoneSim2.text?.toString()?.ifBlank { "+919876543211" } ?: "+919876543211"
+                configManager.save(
+                    configManager.load().copy(
+                        enableSim1Mock = menu.switchSim1Mock.isChecked,
+                        enableSim2Mock = menu.switchSim2Mock.isChecked,
+                        mockCountryIso = textOf(menu.etCountryIso).lowercase().ifBlank { "in" },
+                        hideMagisk = menu.switchHideMagisk.isChecked,
+                        hideKernelSu = menu.switchHideKernelSu.isChecked,
+                        hideApatch = menu.switchHideApatch.isChecked,
+                        hideSukisu = menu.switchHideSukisu.isChecked,
+                        hideAllRootApps = menu.switchHideAllRootApps.isChecked,
+                        hideDeveloper = menu.switchNotDeveloper.isChecked,
+                        hideRoot = menu.switchNotRoot.isChecked,
+                        enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
+                        mockPhoneSim1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" },
+                        mockPhoneSim2 = textOf(menu.etPhoneSim2).ifBlank { "+919876543211" }
+                    )
                 )
-                configManager.save(updated)
+            }
+        }
+
+        menu.btnSaveMessage.setOnClickListener {
+            safeSave(R.string.message_settings_saved) {
+                configManager.save(
+                    configManager.load().copy(
+                        injectSenderId = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" },
+                        injectMessageBody = textOf(menu.etMessageBody),
+                        hookIncomingSms = menu.switchHookIncoming.isChecked,
+                        hookOutgoingSms = menu.switchHookOutgoing.isChecked
+                    )
+                )
             }
         }
 
         menu.btnBackupNow.setOnClickListener {
-            safeAction {
-                val path = backupManager.createBackup()
+            scope.launch {
+                val path = withContext(Dispatchers.IO) { backupManager.createBackup() }
                 toast(
                     if (path != null) appContext.getString(R.string.backup_created_path, path)
                     else appContext.getString(R.string.backup_failed),
@@ -100,8 +121,8 @@ class OverlayMenuController(
         }
 
         menu.btnRestoreBackup.setOnClickListener {
-            safeAction {
-                val ok = backupManager.restoreLatest()
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) { backupManager.restoreLatest() }
                 if (ok) {
                     refreshFields()
                     toast(R.string.backup_restored)
@@ -112,46 +133,45 @@ class OverlayMenuController(
         }
 
         menu.btnChangeDeviceId.setOnClickListener {
-            safeAction {
-                val newId = deviceIdManager.generateNewAndroidId()
+            scope.launch {
+                val newId = withContext(Dispatchers.IO) { deviceIdManager.generateNewAndroidId() }
                 updateDeviceIdDisplay(newId)
-                backupManager.createBackup()
+                withContext(Dispatchers.IO) { backupManager.createBackup() }
                 toast(R.string.device_id_changed)
             }
         }
 
         menu.btnInjectSms.setOnClickListener {
-            safeAction {
-                val sender = menu.etSenderId.text?.toString()?.trim()?.ifBlank { "AD-TEST-S" } ?: "AD-TEST-S"
-                val body = menu.etMessageBody.text?.toString()?.trim().orEmpty()
+            scope.launch {
+                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }
+                val body = textOf(menu.etMessageBody)
                 if (body.isBlank()) {
                     toast(R.string.enter_message_body)
-                    return@safeAction
+                    return@launch
                 }
-                val saved = configManager.update {
-                    it.copy(
-                        injectSenderId = sender,
-                        injectMessageBody = body,
-                        hookIncomingSms = menu.switchHookIncoming.isChecked,
-                        hookOutgoingSms = menu.switchHookOutgoing.isChecked
-                    )
+                val saved = withContext(Dispatchers.IO) {
+                    configManager.update {
+                        it.copy(
+                            injectSenderId = sender,
+                            injectMessageBody = body,
+                            hookIncomingSms = menu.switchHookIncoming.isChecked,
+                            hookOutgoingSms = menu.switchHookOutgoing.isChecked
+                        )
+                    }
                 }
                 if (!saved) {
                     toast(R.string.save_failed)
-                    return@safeAction
+                    return@launch
                 }
-                if (!configManager.writeInjectCommand(sender, body)) {
-                    toast(R.string.inject_queued_local)
-                } else {
-                    toast(R.string.sms_injected)
-                }
+                withContext(Dispatchers.IO) { configManager.writeInjectCommand(sender, body) }
+                toast(R.string.sms_injected)
             }
         }
 
         menu.btnSaveTelegram.setOnClickListener {
             safeSave(R.string.config_saved) {
-                val token = menu.etBotToken.text?.toString()?.trim().orEmpty()
-                val chatId = menu.etChatId.text?.toString()?.trim().orEmpty()
+                val token = textOf(menu.etBotToken)
+                val chatId = textOf(menu.etChatId)
                 val forwardUrl = if (token.isNotBlank() && chatId.isNotBlank()) {
                     "https://api.telegram.org/bot$token/sendMessage"
                 } else {
@@ -169,23 +189,21 @@ class OverlayMenuController(
         }
 
         menu.btnTestTelegram.setOnClickListener {
-            safeAction {
-                val token = menu.etBotToken.text?.toString()?.trim().orEmpty()
-                val chatId = menu.etChatId.text?.toString()?.trim().orEmpty()
-                if (token.isBlank() || chatId.isBlank()) {
-                    toast(R.string.telegram_fill_first)
-                    return@safeAction
-                }
-                CoroutineScope(Dispatchers.IO).launch {
-                    val ok = try {
+            val token = textOf(menu.etBotToken)
+            val chatId = textOf(menu.etChatId)
+            if (token.isBlank() || chatId.isBlank()) {
+                toast(R.string.telegram_fill_first)
+                return@setOnClickListener
+            }
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    try {
                         tokenForwarder.sendTestMessage()
                     } catch (_: Exception) {
                         false
                     }
-                    launch(Dispatchers.Main) {
-                        toast(if (ok) R.string.telegram_test_sent else R.string.telegram_test_failed)
-                    }
                 }
+                toast(if (ok) R.string.telegram_test_sent else R.string.telegram_test_failed)
             }
         }
 
@@ -214,6 +232,9 @@ class OverlayMenuController(
         menu.switchNotDeveloper.setOnCheckedChangeListener(null)
         menu.switchNotRoot.setOnCheckedChangeListener(null)
 
+        menu.switchNotDeveloper.isChecked = configManager.load().hideDeveloper
+        menu.switchNotRoot.isChecked = configManager.load().hideRoot
+
         menu.switchNotDeveloper.setOnCheckedChangeListener { _, checked ->
             safeSave(R.string.developer_hide_saved) {
                 configManager.save(configManager.load().copy(hideDeveloper = checked))
@@ -226,22 +247,16 @@ class OverlayMenuController(
         }
     }
 
-    private fun safeSave(successMsg: Int, block: () -> Boolean) {
-        safeAction {
-            val ok = try {
-                block()
-            } catch (_: Exception) {
-                false
+    private fun safeSave(successMsg: Int, block: suspend () -> Boolean) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try {
+                    block()
+                } catch (_: Exception) {
+                    false
+                }
             }
-            if (ok) toast(successMsg) else toast(R.string.save_failed)
-        }
-    }
-
-    private fun safeAction(block: () -> Unit) {
-        try {
-            block()
-        } catch (e: Exception) {
-            toast(appContext.getString(R.string.action_failed, e.message ?: "error"), Toast.LENGTH_LONG)
+            toast(if (ok) successMsg else R.string.save_failed)
         }
     }
 
@@ -251,6 +266,10 @@ class OverlayMenuController(
 
     private fun toast(message: String, duration: Int = Toast.LENGTH_SHORT) {
         Toast.makeText(appContext, message, duration).show()
+    }
+
+    private fun textOf(field: android.widget.EditText): String {
+        return field.text?.toString()?.trim().orEmpty()
     }
 
     private fun setupUpiApps(config: ModuleConfig) {

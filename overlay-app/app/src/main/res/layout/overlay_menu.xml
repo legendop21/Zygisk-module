@@ -32,9 +32,10 @@
 
             <ImageView
                 android:id="@+id/ivMenuLogo"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
                 android:contentDescription="@string/app_name"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_hivirtus_logo" />
 
             <TextView
@@ -384,6 +385,16 @@
             android:padding="12dp"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_hint" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/button_gradient"
+            android:text="@string/save_message_settings"
+            android:textColor="@color/text_primary"
+            app:backgroundTint="@null" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnInjectSms"

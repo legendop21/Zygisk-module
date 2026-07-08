@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Mode
-version=v2.5.2
-versionCode=15
+version=v2.5.3
+versionCode=16
 author=legendop21
 description=Hivirtus Zygisk Mode - Root hide, SIM mock, SMS OTP hook, Zygisk Mod Menu overlay. Supports Magisk, KernelSU, APatch, SukiSU.
 zygisk=1
