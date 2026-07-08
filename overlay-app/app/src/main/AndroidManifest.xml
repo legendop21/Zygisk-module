@@ -38,11 +38,19 @@
             android:exported="false"
             android:theme="@style/Theme.HivirtusZygiskMode" />
 
+        <activity
+            android:name=".OverlayActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.hivirtus.zygiskmode.overlay"
+            android:theme="@style/Theme.OverlayMenu" />
+
         <service
             android:name=".OverlayService"
             android:exported="false"
-            android:stopWithTask="false">
-        </service>
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
     </application>
 </manifest>

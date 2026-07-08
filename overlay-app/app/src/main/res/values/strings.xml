@@ -2,16 +2,16 @@
 <resources>
     <string name="app_name">hivirtus zygisk</string>
     <string name="mod_menu_title">Hivirtus Zygisk Mode Menu</string>
-    <string name="main_description">Wolf logo bubble tap karo — menu + saari UPI apps A-Z ek baar me</string>
-    <string name="start_overlay">Start Floating Menu</string>
+    <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
+    <string name="start_overlay">Open Mod Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
-    <string name="overlay_started">Menu khul gaya — UPI apps A-Z ready</string>
+    <string name="overlay_started">Menu khul gaya — UPI tab me saari apps A-Z dikhengi</string>
     <string name="overlay_failed">Menu start fail — dono permission allow karo</string>
     <string name="overlay_failed_detail">Menu start fail: %1$s</string>
     <string name="grant_notification_permission">Notification permission Allow karo</string>
     <string name="permission_section">Required Permissions (dono Allow karo)</string>
-    <string name="permission_overlay_ok">✅ Overlay: Allowed</string>
-    <string name="permission_overlay_missing">❌ Overlay: NOT allowed — neeche button dabao</string>
+    <string name="permission_overlay_ok">✅ Overlay: Allowed (optional)</string>
+    <string name="permission_overlay_missing">ℹ️ Overlay: optional — menu Activity se khulta hai</string>
     <string name="permission_notification_ok">✅ Notification: Allowed</string>
     <string name="permission_notification_missing">❌ Notification: NOT allowed — neeche button dabao</string>
     <string name="open_overlay_settings">Open Overlay Settings → Allow</string>
@@ -81,7 +81,9 @@
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
     <string name="tap_bubble">HV</string>
-    <string name="tap_bubble_hint">Tap wolf bubble — menu + UPI apps A-Z</string>
+    <string name="tap_bubble_hint">Notification tap karo — menu dubara khulega</string>
+    <string name="tap_notification_open_menu">Tap karo — menu kholo</string>
+    <string name="open_menu">Open Menu</string>
     <string name="vip_subtitle">VIP License Required</string>
     <string name="enter_license_key">Telegram se mili VIP key enter karein:</string>
     <string name="activate_vip">Activate VIP</string>

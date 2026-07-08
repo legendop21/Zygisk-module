@@ -20,7 +20,7 @@ class MainActivity : AppCompatActivity() {
     ) { granted ->
         updatePermissionStatus()
         if (granted && pendingStart) {
-            startOverlayService()
+            openOverlayMenu()
         } else if (pendingStart) {
             Toast.makeText(this, R.string.grant_notification_permission, Toast.LENGTH_LONG).show()
             pendingStart = false
@@ -70,11 +70,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStartOverlay.setOnClickListener {
-            if (!PermissionHelper.canDrawOverlay(this)) {
-                startActivity(PermissionHelper.overlaySettingsIntent(this))
-                Toast.makeText(this, R.string.grant_overlay_permission, Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
             if (!PermissionHelper.hasNotificationPermission(this)) {
                 pendingStart = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -84,7 +79,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 return@setOnClickListener
             }
-            startOverlayService()
+            openOverlayMenu()
         }
 
         binding.btnStopOverlay.setOnClickListener {
@@ -101,7 +96,7 @@ class MainActivity : AppCompatActivity() {
         updatePermissionStatus()
         if (pendingStart && PermissionHelper.allGranted(this)) {
             pendingStart = false
-            startOverlayService()
+            openOverlayMenu()
         }
     }
 
@@ -119,17 +114,15 @@ class MainActivity : AppCompatActivity() {
         binding.tvMiuiStatus.text = getString(
             if (batteryOk) R.string.miui_battery_ok else R.string.miui_battery_missing
         )
-        binding.btnStartOverlay.isEnabled = overlayOk && notifOk
+        binding.btnStartOverlay.isEnabled = notifOk
     }
 
-    private fun startOverlayService() {
+    private fun openOverlayMenu() {
         pendingStart = false
         try {
-            val intent = Intent(this, OverlayService::class.java)
-            // POCO/MIUI: startService zyada reliable hai startForegroundService se
-            startService(intent)
+            startService(Intent(this, OverlayService::class.java))
+            startActivity(Intent(this, OverlayActivity::class.java))
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
-            binding.root.postDelayed({ moveTaskToBack(true) }, 1200)
         } catch (e: Exception) {
             Toast.makeText(
                 this,

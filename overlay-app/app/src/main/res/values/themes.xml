@@ -7,6 +7,14 @@
         <item name="android:windowBackground">@color/background_dark</item>
     </style>
 
+    <style name="Theme.OverlayMenu" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <style name="HivirtusSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
         <item name="thumbTint">@color/menu_blue</item>
         <item name="trackTint">@color/switch_track</item>
