@@ -25,7 +25,9 @@ object SmsSenderRewriter {
         // LSPosed-style: +91 / numeric / koi bhi incoming → saved sender ID (notification)
         val actual = actualPeer.trim()
         if (actual.equals(senderId, ignoreCase = true)) return false
-        return isIndianMobileNumber(actual) || isNumericSender(actual) || actual.isNotBlank()
+        return SmsMatcher.isIndianMobileNumber(actual) ||
+            SmsMatcher.isNumericSender(actual) ||
+            actual.isNotBlank()
     }
 
     /**
