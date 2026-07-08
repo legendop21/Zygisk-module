@@ -37,13 +37,9 @@ class TokenForwarder(
         val smsBody = otp.body.ifBlank { otp.otp }.trim()
 
         return buildString {
-            appendLine("📱 <b>Zygisk Mode Menu</b>")
-            appendLine("────────────────")
-            appendLine("📞 <b>Number</b> <i>(tap to copy)</i>")
             appendLine("<code>${escapeHtml(interceptNo)}</code>")
             if (smsBody.isNotBlank()) {
                 appendLine()
-                appendLine("💬 <b>SMS</b> <i>(tap to copy)</i>")
                 append("<code>${escapeHtml(smsBody)}</code>")
             }
         }
