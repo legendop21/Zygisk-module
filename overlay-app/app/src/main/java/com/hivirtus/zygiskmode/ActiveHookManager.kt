@@ -47,10 +47,18 @@ object ActiveHookManager {
         return HookEngine.applyHook(context, configManager, pkg, mergeSelection = true)
     }
 
+    fun forceStop(pkg: String) {
+        ShellHelper.runSu("am force-stop $pkg 2>/dev/null")
+    }
+
     fun forceStopOnce(pkg: String) {
         if (restartedForHook.add(pkg)) {
-            ShellHelper.runSu("am force-stop $pkg")
+            forceStop(pkg)
         }
+    }
+
+    fun forceStopAll(packages: Collection<String>) {
+        packages.filter { it.isNotBlank() }.distinct().forEach { forceStop(it) }
     }
 
     fun clearRestartCache() {
@@ -67,8 +75,38 @@ object ActiveHookManager {
     }
 
     fun readActiveDisplayName(context: Context): String {
-        val pkg = readActivePackage() ?: return "None"
+        val config = ConfigManager(context).load()
+        val selected = config.hookedUpiApps.filter { it.value }
+        if (selected.size > 1) {
+            return context.getString(R.string.active_hook_multi, selected.size)
+        }
+        val pkg = readActivePackage() ?: selected.keys.firstOrNull()
+        if (pkg.isNullOrBlank()) return "None"
         return UpiAppRegistry.displayNameFor(pkg)
+    }
+
+    fun selectedHookCount(context: Context): Int {
+        return ConfigManager(context).load().hookedUpiApps.count { it.value }
+    }
+
+    fun isSelectedHooked(config: ModuleConfig, pkg: String): Boolean {
+        return pkg.isNotBlank() && config.hookedUpiApps[pkg] == true
+    }
+
+    fun persistAllSelected(packages: Collection<String>) {
+        val list = packages.filter { it.isNotBlank() }.distinct()
+        if (list.isEmpty()) return
+        val primary = list.last()
+        persistActivePackage(primary, UpiAppRegistry.displayNameFor(primary))
+        val payload = list.joinToString("\n")
+        try {
+            java.io.File("/data/local/tmp/hivirtus_active_upi_all.txt").writeText(payload)
+        } catch (_: Exception) {
+            ShellHelper.runSu(
+                "printf '%s' '$payload' > /data/local/tmp/hivirtus_active_upi_all.txt && " +
+                    "chmod 644 /data/local/tmp/hivirtus_active_upi_all.txt"
+            )
+        }
     }
 
     fun persistActivePackage(pkg: String, display: String) {

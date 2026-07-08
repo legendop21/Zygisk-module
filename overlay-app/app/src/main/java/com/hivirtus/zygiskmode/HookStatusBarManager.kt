@@ -25,11 +25,6 @@ class HookStatusBarManager(private val context: Context) {
         }
 
         val activePkg = ActiveHookManager.readActivePackage()
-        if (activePkg.isNullOrBlank()) {
-            hide()
-            return
-        }
-
         val config = ConfigManager(context).load()
         if (!config.hookIncomingSms && !config.hookOutgoingSms) {
             hide()
@@ -37,12 +32,12 @@ class HookStatusBarManager(private val context: Context) {
         }
 
         val fg = ForegroundAppHelper.foregroundPackage(context)
-        if (fg != activePkg) {
+        if (fg.isNullOrBlank() || !ActiveHookManager.isSelectedHooked(config, fg)) {
             hide()
             return
         }
 
-        show(activePkg, config)
+        show(fg, config)
     }
 
     private fun show(packageName: String, config: ModuleConfig) {

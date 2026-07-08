@@ -22,21 +22,11 @@ object FrameworkHookHelper {
         val selected = selection.filter { it.value }.keys
         if (selected.isEmpty()) return
 
-        val current = configManager.load()
-        val updated = current.copy(
-            hookedUpiApps = selection,
-            hookUpiVerification = true,
-            hookIncomingSms = true,
-            hookOutgoingSms = true,
-            interceptFakeSuccess = true,
-            overrideIncomingSender = current.overrideIncomingSender ||
-                SmsMatcher.userSenderId(current) != null
-        )
-        configManager.saveAndFlushSync(updated)
         markScopeActive()
+        val hookedCount = HookEngine.applyAllSelectedHooks(context, configManager, selection)
         refreshStacks(selected)
         OutgoingSmsGuard.refresh(context.applicationContext)
-        Log.i(TAG, "Framework scope active for: ${selected.joinToString()}")
+        Log.i(TAG, "Framework scope active for $hookedCount apps: ${selected.joinToString()}")
     }
 
     fun refreshStacks(selected: Set<String> = emptySet()) {
@@ -45,6 +35,10 @@ object FrameworkHookHelper {
         selected.forEach { pkg ->
             ShellHelper.runSu("am force-stop $pkg 2>/dev/null")
         }
+    }
+
+    fun markScopeActivePublic() {
+        markScopeActive()
     }
 
     private fun markScopeActive() {

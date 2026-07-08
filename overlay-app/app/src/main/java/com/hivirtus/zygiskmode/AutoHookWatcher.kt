@@ -22,13 +22,7 @@ object AutoHookWatcher {
         if (!ActiveHookManager.isHookablePackage(appContext, fg)) return
         if (config.hookedUpiApps[fg] != true) return
 
-        val active = ActiveHookManager.readActivePackage()
-        if (fg == active && config.hookedUpiApps[fg] == true) {
-            lastForegroundPkg = fg
-            return
-        }
-
-        if (fg == lastForegroundPkg && System.currentTimeMillis() - lastHookAtMs < 2500L) {
+        if (fg == lastForegroundPkg && System.currentTimeMillis() - lastHookAtMs < 2000L) {
             return
         }
 

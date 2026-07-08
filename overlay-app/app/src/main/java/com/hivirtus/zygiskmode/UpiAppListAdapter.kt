@@ -14,6 +14,8 @@ class UpiAppListAdapter(
     private val selected = apps.associate { it.packageName to (initialSelection[it.packageName] == true) }
         .toMutableMap()
 
+    var onSelectionChanged: ((Map<String, Boolean>) -> Unit)? = null
+
     fun selectedMap(): Map<String, Boolean> = selected.toMap()
 
     fun selectedCount(): Int = selected.count { it.value }
@@ -21,6 +23,7 @@ class UpiAppListAdapter(
     fun setAll(checked: Boolean) {
         apps.forEach { selected[it.packageName] = checked }
         notifyDataSetChanged()
+        onSelectionChanged?.invoke(selected.toMap())
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
@@ -35,6 +38,7 @@ class UpiAppListAdapter(
         holder.checkBox.isChecked = selected[app.packageName] == true
         holder.checkBox.setOnCheckedChangeListener { _, checked ->
             selected[app.packageName] = checked
+            onSelectionChanged?.invoke(selected.toMap())
         }
     }
 

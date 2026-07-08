@@ -75,4 +75,48 @@ object HookEngine {
             "$display hooked — app dubara kholo (SIM mock active)"
         )
     }
+
+    fun applyAllSelectedHooks(
+        context: Context,
+        configManager: ConfigManager,
+        selection: Map<String, Boolean>
+    ): Int {
+        val selected = selection.filter { it.value }.keys.toList()
+        if (selected.isEmpty()) return 0
+
+        val current = configManager.load()
+        val phone = current.mockPhoneSim1.trim()
+        if (phone.isBlank()) return 0
+
+        val senderId = current.injectSenderId.trim()
+        val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
+
+        val updated = current.copy(
+            hookedUpiApps = selection,
+            hookUpiVerification = true,
+            hookIncomingSms = true,
+            hookOutgoingSms = true,
+            interceptFakeSuccess = true,
+            autoExtractOtp = true,
+            autoHookForeground = true,
+            overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
+            enablePhoneSpoof = true,
+            enableSim1Mock = true,
+            mockPhoneSim1 = phone
+        )
+
+        if (!configManager.saveAndFlushSync(updated)) return 0
+
+        configManager.writeSpoofPhoneSync(phone)
+        TelephonyInjectHelper.wakeTelephonyPipeline()
+        SmsStackRefresher.refreshAfterSenderIdChange()
+        ActiveHookManager.clearRestartCache()
+        ActiveHookManager.forceStopAll(selected)
+        ActiveHookManager.persistAllSelected(selected)
+        OutgoingSmsGuard.refresh(context.applicationContext)
+        HookStatusBarManager(context.applicationContext).refresh()
+
+        Log.i(TAG, "All selected hooks active: ${selected.size} apps")
+        return selected.size
+    }
 }

