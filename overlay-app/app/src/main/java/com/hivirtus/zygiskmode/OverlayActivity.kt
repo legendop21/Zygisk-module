@@ -35,14 +35,14 @@ class OverlayActivity : AppCompatActivity() {
             )
 
             val menuBinding = OverlayMenuBinding.inflate(layoutInflater)
-            val menuWidthPx = (340f * resources.displayMetrics.density).toInt()
+            val menuHeight = (resources.displayMetrics.heightPixels * 0.52f).toInt()
 
             val container = FrameLayout(this).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(Color.parseColor("#CC000000"))
+                setBackgroundColor(Color.parseColor("#99000000"))
                 setOnClickListener { minimizeMenu() }
             }
 
@@ -50,7 +50,11 @@ class OverlayActivity : AppCompatActivity() {
 
             container.addView(
                 menuBinding.root,
-                FrameLayout.LayoutParams(menuWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    menuHeight,
+                    Gravity.BOTTOM
+                )
             )
             setContentView(container)
 

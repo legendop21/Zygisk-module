@@ -1,7 +1,6 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.provider.Settings
@@ -14,6 +13,8 @@ import com.hivirtus.zygiskmode.databinding.FloatBubbleBinding
 import kotlin.math.abs
 
 class FloatingBubbleManager(private val context: Context) {
+
+    private val menuManager = FloatingMenuManager(context)
 
     private var windowManager: WindowManager? = null
     private var binding: FloatBubbleBinding? = null
@@ -114,11 +115,14 @@ class FloatingBubbleManager(private val context: Context) {
     }
 
     private fun openMenu() {
-        hide()
-        val intent = Intent(context, OverlayActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        if (menuManager.isShowing()) return
+        menuManager.show {
+            if (!isShowing()) show()
         }
-        context.startActivity(intent)
+    }
+
+    fun hideMenu() {
+        menuManager.hide()
     }
 
     private fun overlayType(): Int {

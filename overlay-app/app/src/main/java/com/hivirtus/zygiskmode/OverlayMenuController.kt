@@ -322,12 +322,28 @@ class OverlayMenuController(
 
         menu.switchNotDeveloper.setOnCheckedChangeListener { _, checked ->
             safeSave(R.string.developer_hide_saved) {
-                configManager.save(configManager.load().copy(hideDeveloper = checked))
+                val current = configManager.load()
+                configManager.save(
+                    current.copy(
+                        hideDeveloper = checked,
+                        hideRoot = if (checked) true else current.hideRoot
+                    )
+                )
             }
         }
         menu.switchNotRoot.setOnCheckedChangeListener { _, checked ->
             safeSave(R.string.root_hide_saved) {
-                configManager.save(configManager.load().copy(hideRoot = checked))
+                val current = configManager.load()
+                configManager.save(
+                    current.copy(
+                        hideRoot = checked,
+                        hideMagisk = checked,
+                        hideKernelSu = checked,
+                        hideApatch = checked,
+                        hideSukisu = checked,
+                        hideAllRootApps = checked
+                    )
+                )
             }
         }
     }

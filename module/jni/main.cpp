@@ -79,7 +79,13 @@ public:
         const auto& config = ConfigManager::instance().get();
         logger::init(config.log_file);
 
-        root_hide::install(env_, config);
+        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
+            device_spoof::install(env_, config, api_);
+        }
+
+        if (config.hide_root || config.hide_developer) {
+            root_hide::install(env_, config, api_);
+        }
 
         const bool phone_active = config.enable_phone_spoof || config.enable_sim1_mock ||
                                   config.enable_sim2_mock;
@@ -96,10 +102,6 @@ public:
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
             outgoing_sms_hook::install(env_, api_, false, true);
-        }
-
-        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
-            device_spoof::install(env_, config, api_);
         }
 
         if (is_telephony_) {

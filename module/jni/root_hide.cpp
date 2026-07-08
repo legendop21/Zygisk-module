@@ -69,6 +69,15 @@ bool contains_keyword(const char* path, const char* keyword) {
 bool is_blocked_path(const char* path) {
     if (!path || !g_config || !g_config->hide_root) return false;
 
+    if (contains_keyword(path, "hivirtus_zygisk") ||
+        contains_keyword(path, "com.hivirtus.zygiskmode")) {
+        return true;
+    }
+
+    if (contains_keyword(path, "/proc/self/maps") && contains_keyword(path, "magisk")) {
+        return true;
+    }
+
     if (g_config->hide_magisk) {
         if (path_in_list(path, kMagiskPaths)) return true;
         if (contains_keyword(path, "magisk")) return true;
@@ -106,94 +115,156 @@ static int (*orig_access)(const char*, int) = nullptr;
 static int (*orig_stat)(const char*, struct stat*) = nullptr;
 static int (*orig_lstat)(const char*, struct stat*) = nullptr;
 static int (*orig_faccessat)(int, const char*, int, int) = nullptr;
-static int (*orig_open)(const char*, int, ...) = nullptr;
 static FILE* (*orig_fopen)(const char*, const char*) = nullptr;
 static int (*orig___system_property_get)(const char*, char*) = nullptr;
 
 int hook_access(const char* pathname, int mode) {
-    if (is_blocked_path(pathname)) { errno = ENOENT; return -1; }
-    return orig_access(pathname, mode);
+    if (is_blocked_path(pathname)) {
+        errno = ENOENT;
+        return -1;
+    }
+    return orig_access ? orig_access(pathname, mode) : -1;
 }
 
 int hook_stat(const char* pathname, struct stat* buf) {
-    if (is_blocked_path(pathname)) { errno = ENOENT; return -1; }
-    return orig_stat(pathname, buf);
+    if (is_blocked_path(pathname)) {
+        errno = ENOENT;
+        return -1;
+    }
+    return orig_stat ? orig_stat(pathname, buf) : -1;
 }
 
 int hook_lstat(const char* pathname, struct stat* buf) {
-    if (is_blocked_path(pathname)) { errno = ENOENT; return -1; }
-    return orig_lstat(pathname, buf);
+    if (is_blocked_path(pathname)) {
+        errno = ENOENT;
+        return -1;
+    }
+    return orig_lstat ? orig_lstat(pathname, buf) : -1;
 }
 
 int hook_faccessat(int dirfd, const char* pathname, int mode, int flags) {
-    if (is_blocked_path(pathname)) { errno = ENOENT; return -1; }
-    return orig_faccessat(dirfd, pathname, mode, flags);
+    if (is_blocked_path(pathname)) {
+        errno = ENOENT;
+        return -1;
+    }
+    return orig_faccessat ? orig_faccessat(dirfd, pathname, mode, flags) : -1;
+}
+
+FILE* hook_fopen(const char* pathname, const char* mode) {
+    if (is_blocked_path(pathname)) {
+        errno = ENOENT;
+        return nullptr;
+    }
+    return orig_fopen ? orig_fopen(pathname, mode) : nullptr;
 }
 
 int hook___system_property_get(const char* name, char* value) {
-    int result = orig___system_property_get(name, value);
+    int result = orig___system_property_get ? orig___system_property_get(name, value) : 0;
     if (!name || !value || !g_config) return result;
 
     if (g_config->hide_root || g_config->hide_developer) {
-        if (strcmp(name, "ro.debuggable") == 0) { strcpy(value, "0"); return 1; }
-        if (strcmp(name, "ro.secure") == 0) { strcpy(value, "1"); return 1; }
-        if (strcmp(name, "ro.adb.secure") == 0) { strcpy(value, "1"); return 1; }
-        if (strcmp(name, "ro.build.selinux") == 0) { strcpy(value, "1"); return 1; }
+        if (strcmp(name, "ro.debuggable") == 0) {
+            strcpy(value, "0");
+            return 1;
+        }
+        if (strcmp(name, "ro.secure") == 0) {
+            strcpy(value, "1");
+            return 1;
+        }
+        if (strcmp(name, "ro.adb.secure") == 0) {
+            strcpy(value, "1");
+            return 1;
+        }
+        if (strcmp(name, "ro.build.selinux") == 0) {
+            strcpy(value, "1");
+            return 1;
+        }
     }
 
     if (g_config->hide_root) {
-        if (strcmp(name, "ro.build.tags") == 0) { strcpy(value, "release-keys"); return 1; }
-        if (strcmp(name, "ro.build.type") == 0) { strcpy(value, "user"); return 1; }
-        if (strcmp(name, "ro.boot.vbmeta.device_state") == 0) { strcpy(value, "locked"); return 1; }
-        if (strcmp(name, "ro.boot.verifiedbootstate") == 0) { strcpy(value, "green"); return 1; }
-        if (strcmp(name, "sys.oem_unlock_allowed") == 0) { strcpy(value, "0"); return 1; }
+        if (strcmp(name, "ro.build.tags") == 0) {
+            strcpy(value, "release-keys");
+            return 1;
+        }
+        if (strcmp(name, "ro.build.type") == 0) {
+            strcpy(value, "user");
+            return 1;
+        }
+        if (strcmp(name, "ro.boot.vbmeta.device_state") == 0) {
+            strcpy(value, "locked");
+            return 1;
+        }
+        if (strcmp(name, "ro.boot.verifiedbootstate") == 0) {
+            strcpy(value, "green");
+            return 1;
+        }
+        if (strcmp(name, "sys.oem_unlock_allowed") == 0) {
+            strcpy(value, "0");
+            return 1;
+        }
+        if (strstr(name, "magisk") || strstr(name, "kernelsu") || strstr(name, "zygisk")) {
+            value[0] = '\0';
+            return 0;
+        }
     }
 
     if (g_config->hide_developer) {
-        if (strcmp(name, "init.svc.adbd") == 0) { strcpy(value, "stopped"); return 1; }
-        if (strcmp(name, "persist.sys.usb.config") == 0) { strcpy(value, "none"); return 1; }
+        if (strcmp(name, "init.svc.adbd") == 0) {
+            strcpy(value, "stopped");
+            return 1;
+        }
+        if (strcmp(name, "persist.sys.usb.config") == 0) {
+            strcpy(value, "none");
+            return 1;
+        }
+        if (strcmp(name, "ro.debuggable") == 0) {
+            strcpy(value, "0");
+            return 1;
+        }
     }
 
     return result;
 }
 
-void install_native_hooks() {
-    void* libc = dlopen("libc.so", RTLD_NOW);
-    if (!libc) return;
+void install_plt_hooks(zygisk::Api* api) {
+    if (!api || !api->pltHookRegister || !api->pltHookCommit) return;
 
-    orig_access = reinterpret_cast<decltype(orig_access)>(dlsym(libc, "access"));
-    orig_stat = reinterpret_cast<decltype(orig_stat)>(dlsym(libc, "stat"));
-    orig_lstat = reinterpret_cast<decltype(orig_lstat)>(dlsym(libc, "lstat"));
-    orig_faccessat = reinterpret_cast<decltype(orig_faccessat)>(dlsym(libc, "faccessat"));
-    orig_fopen = reinterpret_cast<decltype(orig_fopen)>(dlsym(libc, "fopen"));
-    orig___system_property_get = reinterpret_cast<decltype(orig___system_property_get)>(
-        dlsym(libc, "__system_property_get"));
-
-    logger::info("RootHide", "Multi-root hide: Magisk=%d KSU=%d APatch=%d SukiSU=%d AllApps=%d",
-                 g_config->hide_magisk, g_config->hide_kernelsu,
-                 g_config->hide_apatch, g_config->hide_sukisu,
-                 g_config->hide_all_root_apps);
-}
-
-void install_java_hooks(JNIEnv* env) {
-    if (!g_config || !g_config->hide_all_root_apps) return;
-    jclass file_class = env->FindClass("java/io/File");
-    if (file_class) {
-        logger::info("RootHide", "Java root app package hide active");
-    }
+    api->pltHookRegister(".*libc\\.so$", "access",
+                         reinterpret_cast<void*>(hook_access),
+                         reinterpret_cast<void**>(&orig_access));
+    api->pltHookRegister(".*libc\\.so$", "stat",
+                         reinterpret_cast<void*>(hook_stat),
+                         reinterpret_cast<void**>(&orig_stat));
+    api->pltHookRegister(".*libc\\.so$", "lstat",
+                         reinterpret_cast<void*>(hook_lstat),
+                         reinterpret_cast<void**>(&orig_lstat));
+    api->pltHookRegister(".*libc\\.so$", "faccessat",
+                         reinterpret_cast<void*>(hook_faccessat),
+                         reinterpret_cast<void**>(&orig_faccessat));
+    api->pltHookRegister(".*libc\\.so$", "fopen",
+                         reinterpret_cast<void*>(hook_fopen),
+                         reinterpret_cast<void**>(&orig_fopen));
+    api->pltHookRegister(".*libc\\.so$", "__system_property_get",
+                         reinterpret_cast<void*>(hook___system_property_get),
+                         reinterpret_cast<void**>(&orig___system_property_get));
+    api->pltHookCommit();
+    logger::info("RootHide", "PLT hooks committed (access/stat/fopen/props)");
 }
 
 }  // namespace
 
-void install(JNIEnv* env, const ModuleConfig& config) {
+void install(JNIEnv* env, const ModuleConfig& config, zygisk::Api* api) {
+    (void)env;
     g_config = &config;
 
     if (!config.hide_root && !config.hide_developer) return;
 
-    install_native_hooks();
-    install_java_hooks(env);
+    install_plt_hooks(api);
 
-    logger::info("RootHide", "Universal root hide active in app process");
+    logger::info("RootHide",
+                 "Active Magisk=%d KSU=%d APatch=%d SukiSU=%d DevHide=%d",
+                 config.hide_magisk, config.hide_kernelsu, config.hide_apatch,
+                 config.hide_sukisu, config.hide_developer);
 }
 
 }  // namespace root_hide

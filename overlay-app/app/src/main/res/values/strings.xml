@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">hivirtus zygisk</string>
-    <string name="mod_menu_title">Hivirtus Zygisk Mode Menu</string>
+    <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
+    <string name="mod_menu_title">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
     <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
     <string name="start_overlay">Open Mod Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
