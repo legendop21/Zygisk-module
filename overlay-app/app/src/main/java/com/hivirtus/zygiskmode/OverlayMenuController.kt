@@ -96,8 +96,8 @@ class OverlayMenuController(
         val config = configManager.load()
         val adapter = UpiAppListAdapter(UpiAppRegistry.ALL, config.hookedUpiApps)
         upiAppAdapter = adapter
-        adapter.onSelectionChanged = { _ ->
-            if (suppressAutoSave) return@onSelectionChanged
+        adapter.onSelectionChanged = selectionListener@ { _ ->
+            if (suppressAutoSave) return@selectionListener
             updateUpiSelectedCount()
             scope.launch {
                 delay(500)
