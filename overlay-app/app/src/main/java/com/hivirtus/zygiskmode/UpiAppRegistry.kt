@@ -83,6 +83,7 @@ object UpiAppRegistry {
         UpiApp("com.homecredit", "Home Credit", listOf("HOMECREDIT"), 35),
         UpiApp("com.bajajfinserv", "Bajaj Finserv", listOf("BAJAJ", "FINSERV"), 35),
         UpiApp("com.hdbfs.hdbfsl", "HDB Financial", listOf("HDB"), 35),
+        UpiApp("in.medibuddy", "MediBuddy", listOf("MEDIBUDDY", "VIGINI", "MEDIB"), 30),
     )
 
     fun defaultHookMap(): Map<String, Boolean> =

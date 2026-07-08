@@ -303,15 +303,17 @@ class ConfigManager(private val context: Context) {
         try {
             runtimeConfig.parentFile?.mkdirs()
             runtimeConfig.writeText(payload)
-        } catch (_: Exception) {
-            runSu("cp '$localPath' '$RUNTIME_CONFIG' && chmod 644 '$RUNTIME_CONFIG'")
-        }
+            runtimeConfig.setReadable(true, false)
+        } catch (_: Exception) {}
         try {
             moduleConfig.parentFile?.mkdirs()
             moduleConfig.writeText(payload)
-        } catch (_: Exception) {
-            runSu("cp '$localPath' '$MODULE_CONFIG' && chmod 644 '$MODULE_CONFIG'")
-        }
+        } catch (_: Exception) {}
+        runSu(
+            "cp '$localPath' '$RUNTIME_CONFIG' 2>/dev/null; chmod 666 '$RUNTIME_CONFIG' 2>/dev/null; " +
+                "mkdir -p /data/adb/modules/hivirtus_zygisk_mode 2>/dev/null; " +
+                "cp '$localPath' '$MODULE_CONFIG' 2>/dev/null; chmod 644 '$MODULE_CONFIG' 2>/dev/null"
+        )
     }
 
     private fun parseConfigFile(file: File): ModuleConfig {

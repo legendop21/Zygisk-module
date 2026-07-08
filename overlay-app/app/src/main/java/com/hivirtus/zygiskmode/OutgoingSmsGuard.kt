@@ -24,7 +24,9 @@ object OutgoingSmsGuard {
 
     fun refresh(context: Context) {
         val config = ConfigManager(context).load()
-        val hookActive = config.hookedUpiApps.any { it.value }
+        val hookActive = config.hookedUpiApps.any { it.value } ||
+            config.mockPhoneSim1.isNotBlank() ||
+            ConfigManager(context).readSpoofPhone().isNotBlank()
         val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess) && hookActive
 
         if (shouldBlock && !blocked) {
@@ -41,13 +43,21 @@ object OutgoingSmsGuard {
     }
 
     private fun blockMessagingSend() {
-        messagingPackages.forEach { pkg ->
+        val packages = messagingPackages + listOf(
+            "com.android.phone",
+            "com.android.providers.telephony"
+        )
+        packages.forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS deny 2>/dev/null")
         }
     }
 
     private fun restoreMessagingSend() {
-        messagingPackages.forEach { pkg ->
+        val packages = messagingPackages + listOf(
+            "com.android.phone",
+            "com.android.providers.telephony"
+        )
+        packages.forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS allow 2>/dev/null")
         }
     }

@@ -10,10 +10,11 @@ object XposedConfigBridge {
 
     private const val RUNTIME = "/data/local/tmp/hivirtus_zygisk_mode_config.json"
     private const val MODULE = "/data/adb/modules/hivirtus_zygisk_mode/config.json"
+    private const val SPOOF_PHONE = "/data/local/tmp/hivirtus_spoof_phone.txt"
     private const val APP_DATA =
         "/sdcard/Android/data/com.hivirtus.zygiskmode/files/hivirtus_zygisk_mode_config.json"
 
-    private val systemPackages = setOf(
+    val systemPackages = setOf(
         "android",
         "com.android.phone",
         "com.android.providers.telephony",
@@ -21,7 +22,8 @@ object XposedConfigBridge {
         "com.google.android.gms.persistent",
         "com.google.android.apps.messaging",
         "com.android.mms",
-        "com.samsung.android.messaging"
+        "com.samsung.android.messaging",
+        "com.android.mms.service"
     )
 
     @Volatile
@@ -30,53 +32,104 @@ object XposedConfigBridge {
     @Volatile
     private var cachedAt = 0L
 
-    fun load(force: Boolean = false): ModuleConfig? {
+    fun load(force: Boolean = false): ModuleConfig {
         val now = System.currentTimeMillis()
-        if (!force && cached != null && now - cachedAt < 1500L) {
-            return cached
+        if (!force && cached != null && now - cachedAt < 800L) {
+            return cached!!
         }
-        val file = listOf(RUNTIME, MODULE, APP_DATA).firstOrNull { File(it).canRead() } ?: return null
-        return try {
-            val json = JSONObject(File(file).readText())
-            parse(json).also {
-                cached = it
-                cachedAt = now
-            }
-        } catch (_: Exception) {
+        val file = listOf(RUNTIME, MODULE, APP_DATA).firstOrNull { File(it).canRead() }
+        val parsed = if (file != null) {
+            runCatching { parse(JSONObject(File(file).readText())) }.getOrNull()
+        } else {
             null
         }
+        val merged = mergeWithSpoofFile(parsed ?: ModuleConfig())
+        cached = merged
+        cachedAt = now
+        return merged
     }
 
+    fun fallbackConfig(): ModuleConfig = mergeWithSpoofFile(ModuleConfig(
+        enablePhoneSpoof = true,
+        enableSim1Mock = true,
+        interceptFakeSuccess = true,
+        hookOutgoingSms = true,
+        hookIncomingSms = true,
+        hookUpiVerification = true,
+        overrideIncomingSender = true,
+        hookedUpiApps = UpiAppRegistry.ALL.associate { it.packageName to true }
+    ))
+
     fun anyHooked(config: ModuleConfig): Boolean =
-        config.hookedUpiApps.any { it.value }
+        config.hookedUpiApps.any { it.value } || readSpoofPhone(config).isNotBlank()
 
     fun isTargetPackage(packageName: String, config: ModuleConfig): Boolean {
-        if (!anyHooked(config)) return false
         if (packageName in systemPackages) return true
-        return config.hookedUpiApps[packageName] == true
+        if (config.hookedUpiApps[packageName] == true) return true
+        val phone = readSpoofPhone(config)
+        if (phone.isBlank()) return false
+        if (config.interceptFakeSuccess || config.enablePhoneSpoof || config.enableSim1Mock) {
+            return UpiAppRegistry.ALL.any { it.packageName == packageName } ||
+                config.hookedUpiApps.any { it.key == packageName && it.value }
+        }
+        return false
     }
 
     fun isUpiApp(packageName: String, config: ModuleConfig): Boolean =
-        config.hookedUpiApps[packageName] == true
+        config.hookedUpiApps[packageName] == true ||
+            UpiAppRegistry.ALL.any { it.packageName == packageName }
 
     fun readSpoofPhone(config: ModuleConfig): String {
-        listOf(
-            "/data/local/tmp/hivirtus_spoof_phone.txt",
-            "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt"
-        ).forEach { path ->
-            try {
-                val value = File(path).readText().trim()
-                if (value.isNotBlank()) return value
-            } catch (_: Exception) {
+        listOf(SPOOF_PHONE, "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt")
+            .forEach { path ->
+                try {
+                    val value = File(path).readText().trim()
+                    if (value.isNotBlank()) return value
+                } catch (_: Exception) {
+                }
             }
-        }
         return config.mockPhoneSim1.trim()
     }
 
     fun shouldBlockOutgoing(config: ModuleConfig, dest: String, body: String): Boolean {
         if (!config.interceptFakeSuccess && !config.hookOutgoingSms) return false
-        if (!anyHooked(config)) return false
+        if (body.isBlank()) return false
+        if (!anyHooked(config) && readSpoofPhone(config).isBlank()) return false
+
+        if (config.interceptFakeSuccess) {
+            if (bodyHasVerifyToken(body)) return true
+            if (SmsMatcher.isShortCodeRecipient(dest)) return true
+            if (dest.isNotBlank() && body.length >= 4) return true
+        }
         return SmsMatcher.shouldInterceptOutgoing(config, dest, body)
+    }
+
+    fun shouldSimSpoof(config: ModuleConfig): Boolean {
+        if (readSpoofPhone(config).isNotBlank()) return true
+        return config.enablePhoneSpoof || config.enableSim1Mock || config.enableSim2Mock
+    }
+
+    private fun bodyHasVerifyToken(body: String): Boolean {
+        val upper = body.uppercase()
+        val keys = listOf(
+            "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY",
+            "SNAPMINT", "KREDIT", "UPI", "VERIFY", "OTP", "MEDIBUDDY", "HEROAXIS",
+            "AXIS", "AIRTEL", "HDFC", "VK-"
+        )
+        return keys.any { upper.contains(it) }
+    }
+
+    private fun mergeWithSpoofFile(base: ModuleConfig): ModuleConfig {
+        val phone = readSpoofPhone(base)
+        if (phone.isBlank()) return base
+        return base.copy(
+            mockPhoneSim1 = phone,
+            enablePhoneSpoof = true,
+            enableSim1Mock = true,
+            interceptFakeSuccess = true,
+            hookOutgoingSms = true,
+            hookIncomingSms = true
+        )
     }
 
     private fun parse(json: JSONObject): ModuleConfig {

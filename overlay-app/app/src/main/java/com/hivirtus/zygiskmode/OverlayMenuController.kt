@@ -341,6 +341,7 @@ class OverlayMenuController(
 
             withContext(Dispatchers.IO) {
                 val current = configManager.load()
+                configManager.writeSpoofPhoneSync(phone)
                 configManager.saveAndFlushSync(
                     current.copy(
                         hookedUpiApps = selection,
