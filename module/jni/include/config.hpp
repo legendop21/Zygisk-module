@@ -39,6 +39,8 @@ struct ModuleConfig {
     bool enable_device_id_spoof = false;
     std::string spoof_android_id;
 
+    int upi_timer_bonus_seconds = 20;
+
     bool is_upi_app_hooked(const std::string& package) const;
 };
 

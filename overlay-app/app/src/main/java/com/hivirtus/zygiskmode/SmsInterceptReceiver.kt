@@ -22,7 +22,7 @@ class SmsInterceptReceiver : BroadcastReceiver() {
 
             val configManager = ConfigManager(context)
             val config = configManager.load()
-            if (!SmsMatcher.shouldForwardToTelegram(config, sender, body)) return
+            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return
 
             val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
@@ -36,12 +36,14 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 rawPeer = sender
             )
             OtpCaptureWriter.write(context, otp)
-            context.sendBroadcast(
-                Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)
-            )
-            try {
-                abortBroadcast()
-            } catch (_: Exception) {}
+            if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
+                context.sendBroadcast(
+                    Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)
+                )
+                try {
+                    abortBroadcast()
+                } catch (_: Exception) {}
+            }
         } catch (e: Exception) {
             Log.w(TAG, "SMS intercept failed: ${e.message}")
         }

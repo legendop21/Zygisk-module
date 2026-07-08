@@ -16,7 +16,7 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
         val peer = otp.rawPeer.ifBlank { otp.sender }
         val body = otp.body.ifBlank { otp.otp }
-        if (!SmsMatcher.shouldForwardToTelegram(config, peer, body)) return false
+        if (!SmsMatcher.shouldForwardToTelegram(config, peer, body, otp.direction)) return false
 
         val botToken = config.telegramBotToken
         val chatId = config.telegramChatId

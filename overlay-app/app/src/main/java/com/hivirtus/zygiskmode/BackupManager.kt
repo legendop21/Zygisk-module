@@ -158,7 +158,8 @@ class BackupManager(private val context: Context) {
             spoofAndroidId = spoofId,
             enableDeviceIdSpoof = obj.optBoolean("enable_device_id_spoof", spoofId.isNotBlank()),
             injectSenderId = obj.optString("inject_sender_id", ""),
-            injectMessageBody = obj.optString("inject_message_body", "")
+            injectMessageBody = obj.optString("inject_message_body", ""),
+            upiTimerBonusSeconds = obj.optInt("upi_timer_bonus_seconds", 20)
         )
         configManager.save(config)
         if (spoofId.isNotBlank()) {
@@ -201,6 +202,7 @@ class BackupManager(private val context: Context) {
             put("hooked_upi_apps", hooked)
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
+            put("upi_timer_bonus_seconds", config.upiTimerBonusSeconds)
         }
     }
 }

