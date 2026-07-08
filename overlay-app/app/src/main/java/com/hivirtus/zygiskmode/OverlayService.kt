@@ -144,6 +144,7 @@ class OverlayService : Service() {
     private fun startOtpPolling() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
+                AutoHookWatcher.tick(this@OverlayService, configManager)
                 OutgoingSmsGuard.refresh(this@OverlayService)
                 hookStatusBar.refresh()
                 forwardLatestOtp()

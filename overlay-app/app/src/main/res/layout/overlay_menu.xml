@@ -166,6 +166,15 @@
                     android:text="@string/enable_phone_spoof"
                     android:textColor="@color/text_primary" />
 
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchAutoHook"
+                    style="@style/HivirtusSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/auto_hook_open_app"
+                    android:textColor="@color/text_primary" />
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

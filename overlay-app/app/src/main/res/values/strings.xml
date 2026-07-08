@@ -140,7 +140,8 @@
     <string name="device_id_changed">Device ID change ho gayi — apps restart karein</string>
     <string name="vip_active">VIP Active</string>
     <string name="start_zygisk_hooks">▶ START ZYGISK HOOKS</string>
-    <string name="start_hook_foreground">START HOOK</string>
+    <string name="auto_hook_open_app">Auto Hook Open App</string>
+    <string name="start_hook_foreground">START HOOK (Manual)</string>
     <string name="start_hook_app_success">%1$s hooked — app dubara kholo</string>
     <string name="active_hook_none">App: None</string>
     <string name="active_hook_app">App: %1$s</string>

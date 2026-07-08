@@ -43,6 +43,7 @@ class OverlayMenuController(
         val config = configManager.load()
         menu.switchSim1Mock.isChecked = config.enableSim1Mock
         menu.switchPhoneSpoof.isChecked = config.enablePhoneSpoof
+        menu.switchAutoHook.isChecked = config.autoHookForeground
         menu.etPhoneSim1.setText(config.mockPhoneSim1)
         menu.switchHideMagisk.isChecked = config.hideMagisk
         menu.switchHideKernelSu.isChecked = config.hideKernelSu
@@ -91,6 +92,10 @@ class OverlayMenuController(
                 )
             )
             if (checked) persistPhone()
+        }
+        autoToggle(menu.switchAutoHook) { checked ->
+            savePartial { it.copy(autoHookForeground = checked) }
+            if (!checked) AutoHookWatcher.reset()
         }
         autoToggle(menu.switchHookIncoming) { checked ->
             savePartial { it.copy(hookIncomingSms = checked) }

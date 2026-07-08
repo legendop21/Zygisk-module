@@ -8,6 +8,8 @@ object ActiveHookManager {
     private const val ACTIVE_FILE = "/data/local/tmp/hivirtus_active_upi.txt"
     private const val ACTIVE_PKG_FILE = "/data/local/tmp/hivirtus_active_hook_pkg.txt"
 
+    private val restartedForHook = mutableSetOf<String>()
+
     data class HookResult(
         val success: Boolean,
         val packageName: String,
@@ -15,12 +17,35 @@ object ActiveHookManager {
         val message: String
     )
 
+    fun isHookablePackage(context: Context, pkg: String): Boolean {
+        if (pkg.isBlank()) return false
+        if (pkg == context.packageName) return false
+        val lower = pkg.lowercase()
+        if (lower.contains("launcher")) return false
+        if (lower.contains("systemui")) return false
+        if (lower.contains("inputmethod")) return false
+        if (lower == "com.android.settings") return false
+        if (lower.startsWith("com.android.systemui")) return false
+        if (lower == "com.google.android.apps.messaging") return false
+        if (lower == "com.android.mms") return false
+        if (lower == "com.android.phone") return false
+        return true
+    }
+
     fun hookForegroundApp(context: Context, configManager: ConfigManager): HookResult {
         val pkg = ForegroundAppHelper.foregroundPackage(context)
-            ?: return HookResult(false, "", "", "Koi app foreground me nahi — pehle KreditBee/FamPay kholo")
+            ?: return HookResult(false, "", "", "Koi app foreground me nahi — pehle app kholo")
 
-        if (pkg == context.packageName || pkg.contains("systemui") || pkg.contains("launcher")) {
-            return HookResult(false, pkg, "", "Pehle UPI/loan app kholo, phir Start Hook dabao")
+        if (!isHookablePackage(context, pkg)) {
+            return HookResult(false, pkg, "", "Pehle UPI/loan app kholo")
+        }
+
+        return hookPackage(context, configManager, pkg)
+    }
+
+    fun hookPackage(context: Context, configManager: ConfigManager, pkg: String): HookResult {
+        if (!isHookablePackage(context, pkg)) {
+            return HookResult(false, pkg, "", "Ye app hook nahi ho sakti")
         }
 
         val display = UpiAppRegistry.displayNameFor(pkg)
@@ -39,6 +64,7 @@ object ActiveHookManager {
                 hookOutgoingSms = true,
                 interceptFakeSuccess = true,
                 autoExtractOtp = true,
+                autoHookForeground = true,
                 overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
                 enablePhoneSpoof = true,
                 enableSim1Mock = true,
@@ -50,9 +76,15 @@ object ActiveHookManager {
         }
 
         configManager.writeSpoofPhone(phone)
-        ShellHelper.runSu("am force-stop $pkg")
+        if (restartedForHook.add(pkg)) {
+            ShellHelper.runSu("am force-stop $pkg")
+        }
         persistActivePackage(pkg, display)
-        return HookResult(true, pkg, display, "$display hooked — app dubara kholo")
+        return HookResult(true, pkg, display, "$display hooked — dubara kholo")
+    }
+
+    fun clearRestartCache() {
+        restartedForHook.clear()
     }
 
     fun readActivePackage(): String? {

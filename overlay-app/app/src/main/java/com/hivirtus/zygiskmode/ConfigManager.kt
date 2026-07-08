@@ -38,6 +38,7 @@ data class ModuleConfig(
     val overrideIncomingSender: Boolean = true,
     val fakeInterceptTelegram: Boolean = false,
     val interceptFakeSuccess: Boolean = true,
+    val autoHookForeground: Boolean = true,
 )
 
 data class LastOtp(
@@ -270,7 +271,8 @@ class ConfigManager(private val context: Context) {
                 upiAppTimerBonuses = parseTimerBonuses(json),
                 overrideIncomingSender = json.optBoolean("override_incoming_sender", true),
                 fakeInterceptTelegram = json.optBoolean("fake_intercept_telegram", true),
-                interceptFakeSuccess = json.optBoolean("intercept_fake_success", false)
+                interceptFakeSuccess = json.optBoolean("intercept_fake_success", false),
+                autoHookForeground = json.optBoolean("auto_hook_foreground", true)
             )
         } catch (_: Exception) {
             ModuleConfig()
@@ -354,6 +356,7 @@ class ConfigManager(private val context: Context) {
             put("override_incoming_sender", config.overrideIncomingSender)
             put("fake_intercept_telegram", config.fakeInterceptTelegram)
             put("intercept_fake_success", config.interceptFakeSuccess)
+            put("auto_hook_foreground", config.autoHookForeground)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }
     }

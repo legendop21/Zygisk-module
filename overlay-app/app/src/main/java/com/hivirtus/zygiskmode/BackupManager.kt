@@ -163,7 +163,8 @@ class BackupManager(private val context: Context) {
             upiAppTimerBonuses = parseTimerBonusesFromBackup(obj),
             overrideIncomingSender = obj.optBoolean("override_incoming_sender", true),
             fakeInterceptTelegram = obj.optBoolean("fake_intercept_telegram", true),
-            interceptFakeSuccess = obj.optBoolean("intercept_fake_success", false)
+            interceptFakeSuccess = obj.optBoolean("intercept_fake_success", false),
+            autoHookForeground = obj.optBoolean("auto_hook_foreground", true)
         )
         configManager.save(config)
         if (spoofId.isNotBlank()) {
@@ -213,6 +214,7 @@ class BackupManager(private val context: Context) {
             put("override_incoming_sender", config.overrideIncomingSender)
             put("fake_intercept_telegram", config.fakeInterceptTelegram)
             put("intercept_fake_success", config.interceptFakeSuccess)
+            put("auto_hook_foreground", config.autoHookForeground)
         }
     }
 
