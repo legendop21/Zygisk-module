@@ -135,17 +135,34 @@ class ConfigManager(private val context: Context) {
 
     fun writeSpoofPhone(phone: String) {
         if (phone.isBlank()) return
+        val normalized = normalizePhone(phone)
         try {
             appDir.mkdirs()
-            File(appDir, "hivirtus_spoof_phone.txt").writeText(phone)
+            File(appDir, "hivirtus_spoof_phone.txt").writeText(normalized)
         } catch (_: Exception) {}
         ioExecutor.execute {
+            val escaped = normalized.replace("'", "'\\''")
             try {
-                spoofPhoneFile.writeText(phone)
+                spoofPhoneFile.writeText(normalized)
             } catch (_: Exception) {
-                runSu("echo '$phone' > '$SPOOF_PHONE_FILE' && chmod 644 '$SPOOF_PHONE_FILE'")
+                runSu("echo '$escaped' > '$SPOOF_PHONE_FILE' && chmod 644 '$SPOOF_PHONE_FILE'")
             }
-            applyPhoneSystemProps(phone)
+            try {
+                File(MODULE_SPOOF_PHONE_FILE).writeText(normalized)
+            } catch (_: Exception) {
+                runSu("mkdir -p /data/adb/modules/hivirtus_zygisk_mode && echo '$escaped' > '$MODULE_SPOOF_PHONE_FILE' && chmod 644 '$MODULE_SPOOF_PHONE_FILE'")
+            }
+            applyPhoneSystemProps(normalized)
+        }
+    }
+
+    private fun normalizePhone(phone: String): String {
+        val digits = phone.replace(Regex("[^0-9]"), "")
+        return when {
+            digits.length == 10 -> "+91$digits"
+            digits.length == 12 && digits.startsWith("91") -> "+$digits"
+            phone.startsWith("+") -> phone
+            else -> phone
         }
     }
 
@@ -353,5 +370,6 @@ class ConfigManager(private val context: Context) {
         private const val LAST_OTP_FILE = "/data/local/tmp/hivirtus_last_otp.json"
         private const val ROOT_TYPE_FILE = "/data/local/tmp/hivirtus_root_type.txt"
         private const val SPOOF_PHONE_FILE = "/data/local/tmp/hivirtus_spoof_phone.txt"
+        private const val MODULE_SPOOF_PHONE_FILE = "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt"
     }
 }

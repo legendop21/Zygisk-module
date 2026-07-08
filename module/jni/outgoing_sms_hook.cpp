@@ -2,6 +2,7 @@
 #include "config.hpp"
 #include "logger.hpp"
 #include "sms_hook.hpp"
+#include "telephony_spoof.hpp"
 #include "zygisk_utils.hpp"
 
 #include <algorithm>
@@ -213,32 +214,12 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result == 0 && reply && data) {
-        ConfigManager::instance().reload();
-        const auto& cfg = ConfigManager::instance().get();
-        const bool spoof_on = cfg.enable_phone_spoof || cfg.enable_sim1_mock || cfg.enable_sim2_mock;
-        if (spoof_on) {
-            reset_parcel(env, data);
-            const std::string iface = parcel_read_string(env, data);
-            if (iface.find("ITelephony") != std::string::npos) {
-                const std::string spoof = spoof_phone_for_config(cfg);
-                if (!spoof.empty() && spoof != "AD-TEST-S") {
-                    reset_parcel(env, reply);
-                    jclass cls = env->GetObjectClass(reply);
-                    jmethodID read_ex = env->GetMethodID(cls, "readException", "()V");
-                    if (read_ex) env->CallVoidMethod(reply, read_ex);
-                    const std::string current = parcel_read_string(env, reply);
-                    std::string digits;
-                    for (char c : current) {
-                        if (std::isdigit(static_cast<unsigned char>(c))) digits += c;
-                    }
-                    if (digits.size() >= 10) {
-                        reset_parcel(env, reply);
-                        if (read_ex) env->CallVoidMethod(reply, read_ex);
-                        parcel_write_string(env, reply, spoof);
-                        logger::info("OutgoingSms", "Spoofed line1 -> %s", spoof.c_str());
-                    }
-                }
+    if (result == 0 && reply && data && telephony_spoof::phone_spoof_enabled()) {
+        const std::string iface = telephony_spoof::read_binder_interface(env, data);
+        if (telephony_spoof::is_telephony_binder_interface(iface)) {
+            const auto formats = telephony_spoof::load_formats();
+            if (!formats.digits10.empty()) {
+                telephony_spoof::scrub_reply_parcel(env, reply, formats);
             }
         }
     }
@@ -270,9 +251,10 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_hooked_up
     g_api = api;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    if (!in_hooked_upi && !in_telephony) return;
-    if (!config.hook_outgoing_sms && !config.intercept_fake_success &&
-        !config.enable_phone_spoof && !config.enable_sim1_mock && !config.enable_sim2_mock) {
+    const bool phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||
+                             config.enable_sim2_mock;
+    if (!in_hooked_upi && !in_telephony && !phone_spoof) return;
+    if (!config.hook_outgoing_sms && !config.intercept_fake_success && !phone_spoof) {
         return;
     }
     install_plt_hooks(env);

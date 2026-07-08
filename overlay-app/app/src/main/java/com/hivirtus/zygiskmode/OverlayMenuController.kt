@@ -303,8 +303,8 @@ class OverlayMenuController(
                         upiAppTimerBonuses = timerBonuses.ifEmpty { UpiAppRegistry.defaultTimerMap() },
                         upiTimerBonusSeconds = timerBonuses.values.maxOrNull() ?: 20,
                         interceptFakeSuccess = menu.switchInterceptFakeSuccess.isChecked || anyHooked,
-                        enablePhoneSpoof = menu.switchPhoneSpoof.isChecked || anyHooked,
-                        enableSim1Mock = menu.switchSim1Mock.isChecked || anyHooked,
+                        enablePhoneSpoof = true,
+                        enableSim1Mock = true,
                         mockPhoneSim1 = phone1.ifBlank { current.mockPhoneSim1 }
                     )
                 )

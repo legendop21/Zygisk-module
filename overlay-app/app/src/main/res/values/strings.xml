@@ -59,7 +59,7 @@
     <string name="hide_all_root_apps">Hide ALL Root Apps (Universal)</string>
     <string name="phone_spoof_section">Fake Phone Number Spoof</string>
     <string name="enable_phone_spoof">Fake Phone Number — Override number shown to apps</string>
-    <string name="fake_phone_hint">Apps ko yahi number dikhega (Paytm, PhonePe, Settings SIM)</string>
+    <string name="fake_phone_hint">Wahi number daalo jo app verify kare — SIM + screen dono pe yahi dikhega (e.g. +918279999125)</string>
     <string name="module_not_flashed_title">⚠️ Zygisk Module Flash Required</string>
     <string name="module_not_flashed_body">App tab tak kaam nahi karegi jab tak hivirtus_zygisk_mode.zip flash na ho. Pehle ZIP flash karo, reboot karo, phir APK kholo.</string>
     <string name="module_flash_steps">1. Magisk/KernelSU → Install ZIP\n2. Reboot\n3. Zygisk ON\n4. Phir ye app kholo</string>
@@ -69,7 +69,7 @@
     <string name="mock_phone_sim1">Fake Number SIM 1:</string>
     <string name="mock_phone_sim2">Fake Number SIM 2:</string>
     <string name="save_sim_settings">Save SIM Settings</string>
-    <string name="sim_settings_saved">SIM settings saved — reboot apps to apply</string>
+    <string name="sim_settings_saved">SIM settings saved — KreditBee/UPI band karke dubara kholo</string>
     <string name="root_hide_active">Root hide active on all apps</string>
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
