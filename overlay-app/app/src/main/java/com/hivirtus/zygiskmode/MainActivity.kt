@@ -120,8 +120,12 @@ class MainActivity : AppCompatActivity() {
     private fun openOverlayMenu() {
         pendingStart = false
         try {
-            startService(Intent(this, OverlayService::class.java))
             startActivity(Intent(this, OverlayActivity::class.java))
+            try {
+                startService(Intent(this, OverlayService::class.java))
+            } catch (_: Exception) {
+                // Menu pehle — OTP service baad me bhi chal sakti hai
+            }
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(

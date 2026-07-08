@@ -1,19 +1,22 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import com.hivirtus.zygiskmode.databinding.ActivityOverlayBinding
+import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 
 /**
- * POCO/MIUI par WindowManager overlay fail hota hai — Activity se menu 100% dikhta hai.
+ * POCO/MIUI: translucent theme + include tag se layout inflate fail hota tha.
+ * Menu direct OverlayMenuBinding se load hota hai — full Material theme ke saath.
  */
 class OverlayActivity : AppCompatActivity() {
-
-    private lateinit var binding: ActivityOverlayBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,26 +31,48 @@ class OverlayActivity : AppCompatActivity() {
             setTurnScreenOn(true)
         }
 
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        )
+        try {
+            val menuBinding = OverlayMenuBinding.inflate(layoutInflater)
+            val menuWidthPx = (340f * resources.displayMetrics.density).toInt()
 
-        binding = ActivityOverlayBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        binding.dimBackground.setOnClickListener { closeMenu() }
-
-        OverlayMenuController(this, binding.menuPanel) { closeMenu() }.bind()
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                closeMenu()
+            val container = FrameLayout(this).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.parseColor("#CC12151C"))
+                setOnClickListener { closeMenu() }
             }
-        })
 
-        // Background OTP polling chalu rakho
-        startService(Intent(this, OverlayService::class.java))
+            menuBinding.root.setOnClickListener { /* menu area — container ko click mat bhejo */ }
+
+            container.addView(
+                menuBinding.root,
+                FrameLayout.LayoutParams(menuWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            )
+            setContentView(container)
+
+            OverlayMenuController(this, menuBinding) { closeMenu() }.bind()
+
+            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    closeMenu()
+                }
+            })
+
+            try {
+                startService(Intent(this, OverlayService::class.java))
+            } catch (_: Exception) {
+                // Menu dikhe — background service optional
+            }
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                getString(R.string.overlay_failed_detail, e.message ?: "layout"),
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -57,6 +82,7 @@ class OverlayActivity : AppCompatActivity() {
 
     private fun closeMenu() {
         finish()
+        @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
     }
 }

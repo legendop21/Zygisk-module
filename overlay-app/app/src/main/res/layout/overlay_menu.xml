@@ -219,7 +219,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnBackupNow"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -229,7 +229,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRestoreBackup"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -240,7 +240,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnChangeDeviceId"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/change_device_id"
@@ -415,7 +415,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSelectAllUpi"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -425,7 +425,7 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnDeselectAllUpi"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
