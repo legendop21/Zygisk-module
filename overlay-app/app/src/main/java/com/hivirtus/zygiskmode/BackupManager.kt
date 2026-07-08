@@ -1,6 +1,7 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.os.Environment
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -10,55 +11,75 @@ import java.util.Locale
 class BackupManager(private val context: Context) {
 
     private val configManager = ConfigManager(context)
-    private val backupRoot = File("/sdcard/HivirtusBackup")
+    private val deviceIdManager = DeviceIdManager(context)
 
     fun createBackup(): String? {
         return try {
-            backupRoot.mkdirs()
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val folder = File(backupRoot, "backup_$stamp")
-            folder.mkdirs()
-
             val config = configManager.load()
             val json = JSONObject().apply {
                 put("config", buildConfigJson(config))
                 put("license", LicenseManager.getSavedKey(context).orEmpty())
                 put("timestamp", stamp)
-                put("version", "2.3.1")
+                put("version", "2.5.0")
+            }
+            val payload = json.toString(2)
+
+            var savedPath: String? = null
+            backupRoots().forEach { root ->
+                try {
+                    root.mkdirs()
+                    val folder = File(root, "backup_$stamp")
+                    folder.mkdirs()
+                    File(folder, "hivirtus_backup.json").writeText(payload)
+                    File(root, "hivirtus_backup.json").writeText(payload)
+                    if (savedPath == null) savedPath = folder.absolutePath
+                } catch (_: Exception) {}
             }
 
-            val payload = json.toString(2)
-            File(folder, "hivirtus_backup.json").writeText(payload)
-            File(backupRoot, "hivirtus_backup.json").writeText(payload)
-
             configManager.save(config)
-            folder.absolutePath
+            savedPath
         } catch (_: Exception) {
             null
         }
     }
 
     fun restoreLatest(): Boolean {
-        val candidates = listOf(
-            File(backupRoot, "hivirtus_backup.json")
-        )
-        for (file in candidates) {
-            if (file.exists() && restoreFromFile(file)) return true
+        for (root in backupRoots()) {
+            val direct = File(root, "hivirtus_backup.json")
+            if (direct.exists() && restoreFromFile(direct)) return true
+
+            val newest = root.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("backup_") }
+                ?.maxByOrNull { it.name }
+            val nested = newest?.let { File(it, "hivirtus_backup.json") }
+            if (nested?.exists() == true && restoreFromFile(nested)) return true
         }
-        val newest = backupRoot.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("backup_") }
-            ?.maxByOrNull { it.name }
-        val backupFile = newest?.let { File(it, "hivirtus_backup.json") }
-        if (backupFile?.exists() == true) return restoreFromFile(backupFile)
         return false
     }
 
     fun listBackups(): List<File> {
-        backupRoot.mkdirs()
-        return backupRoot.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("backup_") }
-            ?.sortedByDescending { it.name }
-            .orEmpty()
+        val all = mutableListOf<File>()
+        backupRoots().forEach { root ->
+            root.mkdirs()
+            root.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("backup_") }
+                ?.let { all.addAll(it) }
+        }
+        return all.sortedByDescending { it.name }
+    }
+
+    private fun backupRoots(): List<File> {
+        val dirs = linkedSetOf<File>()
+        context.getExternalFilesDir(null)?.let { dirs.add(File(it, "HivirtusBackup")) }
+        dirs.add(File(context.filesDir, "HivirtusBackup"))
+        try {
+            if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
+                dirs.add(File(Environment.getExternalStorageDirectory(), "HivirtusBackup"))
+                dirs.add(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "HivirtusBackup"))
+            }
+        } catch (_: Exception) {}
+        return dirs.toList()
     }
 
     private fun restoreFromFile(file: File): Boolean {
@@ -85,6 +106,7 @@ class BackupManager(private val context: Context) {
             hooked.putAll(UpiAppRegistry.defaultHookMap())
         }
 
+        val spoofId = obj.optString("spoof_android_id", "")
         val config = ModuleConfig(
             hideRoot = obj.optBoolean("hide_root", true),
             hideDeveloper = obj.optBoolean("hide_developer", true),
@@ -108,19 +130,22 @@ class BackupManager(private val context: Context) {
             forwardUrl = obj.optString("forward_url", ""),
             telegramBotToken = obj.optString("telegram_bot_token", ""),
             telegramChatId = obj.optString("telegram_chat_id", ""),
-            spoofAndroidId = obj.optString("spoof_android_id", ""),
-            enableDeviceIdSpoof = obj.optBoolean("enable_device_id_spoof", false),
+            spoofAndroidId = spoofId,
+            enableDeviceIdSpoof = obj.optBoolean("enable_device_id_spoof", spoofId.isNotBlank()),
             injectSenderId = obj.optString("inject_sender_id", "AD-TEST-S"),
             injectMessageBody = obj.optString("inject_message_body", "")
         )
         configManager.save(config)
-        if (config.spoofAndroidId.isNotBlank()) {
-            File("/data/local/tmp/hivirtus_spoof_android_id.txt").writeText(config.spoofAndroidId)
-            File("/data/local/tmp/hivirtus_change_device_id.cmd").writeText("CHANGE_ID|${config.spoofAndroidId}")
+        if (spoofId.isNotBlank()) {
+            try {
+                File("/data/local/tmp/hivirtus_spoof_android_id.txt").writeText(spoofId)
+                File("/data/local/tmp/hivirtus_change_device_id.cmd").writeText("CHANGE_ID|$spoofId")
+            } catch (_: Exception) {}
         }
     }
 
     private fun buildConfigJson(config: ModuleConfig): JSONObject {
+        val spoofId = config.spoofAndroidId.ifBlank { deviceIdManager.getCurrentSpoofId().takeIf { it != "Not set" }.orEmpty() }
         val hooked = JSONObject()
         config.hookedUpiApps.forEach { (k, v) -> hooked.put(k, v) }
         return JSONObject().apply {
@@ -145,8 +170,8 @@ class BackupManager(private val context: Context) {
             put("forward_url", config.forwardUrl)
             put("telegram_bot_token", config.telegramBotToken)
             put("telegram_chat_id", config.telegramChatId)
-            put("spoof_android_id", config.spoofAndroidId)
-            put("enable_device_id_spoof", config.enableDeviceIdSpoof)
+            put("spoof_android_id", spoofId)
+            put("enable_device_id_spoof", config.enableDeviceIdSpoof || spoofId.isNotBlank())
             put("hooked_upi_apps", hooked)
             put("inject_sender_id", config.injectSenderId)
             put("inject_message_body", config.injectMessageBody)

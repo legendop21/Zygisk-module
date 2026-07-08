@@ -12,10 +12,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.hivirtus.zygiskmode.databinding.OverlayMenuBinding
 
-/**
- * POCO/MIUI: translucent theme + include tag se layout inflate fail hota tha.
- * Menu direct OverlayMenuBinding se load hota hai — full Material theme ke saath.
- */
 class OverlayActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,6 +28,10 @@ class OverlayActivity : AppCompatActivity() {
         }
 
         try {
+            startService(
+                Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_HIDE_BUBBLE)
+            )
+
             val menuBinding = OverlayMenuBinding.inflate(layoutInflater)
             val menuWidthPx = (340f * resources.displayMetrics.density).toInt()
 
@@ -41,10 +41,10 @@ class OverlayActivity : AppCompatActivity() {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 setBackgroundColor(Color.parseColor("#CC12151C"))
-                setOnClickListener { closeMenu() }
+                setOnClickListener { minimizeMenu() }
             }
 
-            menuBinding.root.setOnClickListener { /* menu area — container ko click mat bhejo */ }
+            menuBinding.root.setOnClickListener { /* menu area */ }
 
             container.addView(
                 menuBinding.root,
@@ -52,19 +52,17 @@ class OverlayActivity : AppCompatActivity() {
             )
             setContentView(container)
 
-            OverlayMenuController(this, menuBinding) { closeMenu() }.bind()
+            OverlayMenuController(this, menuBinding) { minimizeMenu() }.bind()
 
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    closeMenu()
+                    minimizeMenu()
                 }
             })
 
             try {
                 startService(Intent(this, OverlayService::class.java))
-            } catch (_: Exception) {
-                // Menu dikhe — background service optional
-            }
+            } catch (_: Exception) {}
         } catch (e: Exception) {
             Toast.makeText(
                 this,
@@ -80,7 +78,13 @@ class OverlayActivity : AppCompatActivity() {
         setIntent(intent)
     }
 
-    private fun closeMenu() {
+    private fun minimizeMenu() {
+        try {
+            startService(
+                Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_SHOW_BUBBLE)
+            )
+            Toast.makeText(this, R.string.minimize_to_bubble, Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {}
         finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)

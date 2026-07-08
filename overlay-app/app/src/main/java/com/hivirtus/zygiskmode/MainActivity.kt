@@ -127,6 +127,9 @@ class MainActivity : AppCompatActivity() {
                 // Menu pehle — OTP service baad me bhi chal sakti hai
             }
             Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_LONG).show()
+            if (!PermissionHelper.canDrawOverlay(this)) {
+                Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_LONG).show()
+            }
         } catch (e: Exception) {
             Toast.makeText(
                 this,

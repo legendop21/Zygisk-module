@@ -17,14 +17,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/**
- * Background OTP polling + notification se menu dubara khulne ke liye.
- * WindowManager overlay hata diya — POCO/MIUI par kaam nahi karta tha.
- */
 class OverlayService : Service() {
 
     private val configManager by lazy { ConfigManager(this) }
     private val tokenForwarder by lazy { TokenForwarder(configManager) }
+    private val bubbleManager by lazy { FloatingBubbleManager(this) }
     private var pollJob: Job? = null
     private var lastForwardedKey: String? = null
     private var running = false
@@ -32,9 +29,24 @@ class OverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                bubbleManager.hide()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_SHOW_BUBBLE -> {
+                ensureRunning()
+                bubbleManager.show()
+                if (!bubbleManager.isShowing()) {
+                    Toast.makeText(this, R.string.bubble_need_overlay, Toast.LENGTH_SHORT).show()
+                }
+                return START_STICKY
+            }
+            ACTION_HIDE_BUBBLE -> {
+                bubbleManager.hide()
+                return START_STICKY
+            }
         }
 
         if (!LicenseManager.isLicensed(this)) {
@@ -43,16 +55,12 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        if (!running) {
-            running = true
-            startOtpPolling()
-        }
+        ensureRunning()
+        bubbleManager.hide()
 
         try {
             startForeground(NOTIFICATION_ID, createNotification())
-        } catch (_: Exception) {
-            // Notification fail ho to bhi polling chalegi jab tak process alive hai
-        }
+        } catch (_: Exception) {}
 
         return START_STICKY
     }
@@ -60,7 +68,15 @@ class OverlayService : Service() {
     override fun onDestroy() {
         running = false
         pollJob?.cancel()
+        bubbleManager.hide()
         super.onDestroy()
+    }
+
+    private fun ensureRunning() {
+        if (!running) {
+            running = true
+            startOtpPolling()
+        }
     }
 
     private fun startOtpPolling() {
@@ -99,6 +115,12 @@ class OverlayService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val bubbleIntent = Intent(this, OverlayService::class.java).setAction(ACTION_SHOW_BUBBLE)
+        val bubblePending = PendingIntent.getService(
+            this, 2, bubbleIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val stopIntent = Intent(this, OverlayService::class.java).setAction(ACTION_STOP)
         val stopPending = PendingIntent.getService(
             this, 1, stopIntent,
@@ -111,6 +133,7 @@ class OverlayService : Service() {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pending)
             .addAction(0, getString(R.string.open_menu), pending)
+            .addAction(0, getString(R.string.show_bubble), bubblePending)
             .addAction(0, getString(R.string.stop_overlay), stopPending)
             .setOngoing(true)
             .build()
@@ -119,6 +142,8 @@ class OverlayService : Service() {
     companion object {
         const val ACTION_STOP = "com.hivirtus.zygiskmode.STOP"
         const val ACTION_OPEN = "com.hivirtus.zygiskmode.OPEN"
+        const val ACTION_SHOW_BUBBLE = "com.hivirtus.zygiskmode.SHOW_BUBBLE"
+        const val ACTION_HIDE_BUBBLE = "com.hivirtus.zygiskmode.HIDE_BUBBLE"
         private const val NOTIFICATION_ID = 2001
     }
 }

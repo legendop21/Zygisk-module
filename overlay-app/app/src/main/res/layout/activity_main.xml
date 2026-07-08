@@ -140,4 +140,13 @@
         android:textColor="@color/primary_blue"
         app:strokeColor="@color/primary_blue" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/dev_credit"
+        android:textColor="@color/menu_blue"
+        android:textSize="12sp"
+        android:textStyle="italic" />
+
 </LinearLayout>

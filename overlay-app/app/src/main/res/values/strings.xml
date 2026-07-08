@@ -5,7 +5,7 @@
     <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
     <string name="start_overlay">Open Mod Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
-    <string name="overlay_started">Menu khul gaya — UPI tab me saari apps A-Z dikhengi</string>
+    <string name="overlay_started">Menu khul gaya — band karoge to side bubble dikhega</string>
     <string name="overlay_failed">Menu start fail — dono permission allow karo</string>
     <string name="overlay_failed_detail">Menu start fail: %1$s</string>
     <string name="grant_notification_permission">Notification permission Allow karo</string>
@@ -77,7 +77,15 @@
     <string name="config_saved">Config saved</string>
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
-    <string name="footer_text">Zygisk Injected. Developed for Android.</string>
+    <string name="dev_credit">dev by @hivirtus</string>
+    <string name="dev_credit_footer">dev by @hivirtus · Zygisk Injected</string>
+    <string name="vip_access_title">◆ VIP ACCESS ◆</string>
+    <string name="developer_hide_saved">Developer mode hide saved — apps restart karo</string>
+    <string name="root_hide_saved">Root hide saved — stealth active</string>
+    <string name="backup_created_path">Backup saved: %1$s</string>
+    <string name="bubble_need_overlay">Side bubble ke liye Overlay permission ON karo</string>
+    <string name="show_bubble">Show Bubble</string>
+    <string name="minimize_to_bubble">Menu side bubble pe chala gaya — logo tap karo</string>
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
     <string name="tap_bubble">HV</string>

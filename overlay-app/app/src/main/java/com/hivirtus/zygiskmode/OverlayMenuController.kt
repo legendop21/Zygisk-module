@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 class OverlayMenuController(
     private val context: Context,
     private val menu: OverlayMenuBinding,
-    private val onClose: () -> Unit
+    private val onMinimize: () -> Unit
 ) {
     private val configManager = ConfigManager(context)
     private val tokenForwarder = TokenForwarder(configManager)
@@ -49,8 +49,9 @@ class OverlayMenuController(
         menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
 
         setupUpiApps(config)
+        setupRootHideToggles()
 
-        menu.btnClose.setOnClickListener { onClose() }
+        menu.btnClose.setOnClickListener { onMinimize() }
 
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
@@ -81,8 +82,9 @@ class OverlayMenuController(
             val path = backupManager.createBackup()
             Toast.makeText(
                 context,
-                if (path != null) R.string.backup_created else R.string.backup_failed,
-                Toast.LENGTH_SHORT
+                if (path != null) context.getString(R.string.backup_created_path, path)
+                else context.getString(R.string.backup_failed),
+                Toast.LENGTH_LONG
             ).show()
         }
 
@@ -174,6 +176,17 @@ class OverlayMenuController(
         }
 
         selectTab(Tab.UPI)
+    }
+
+    private fun setupRootHideToggles() {
+        menu.switchNotDeveloper.setOnCheckedChangeListener { _, checked ->
+            configManager.update { it.copy(hideDeveloper = checked) }
+            Toast.makeText(context, R.string.developer_hide_saved, Toast.LENGTH_SHORT).show()
+        }
+        menu.switchNotRoot.setOnCheckedChangeListener { _, checked ->
+            configManager.update { it.copy(hideRoot = checked) }
+            Toast.makeText(context, R.string.root_hide_saved, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupUpiApps(config: ModuleConfig) {
