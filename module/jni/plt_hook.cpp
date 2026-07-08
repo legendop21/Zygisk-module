@@ -40,6 +40,22 @@ void set_api(zygisk::Api* api) {
     g_api = api;
 }
 
+bool lib_loaded(const char* lib_regex) {
+    if (!lib_regex) return false;
+    std::ifstream maps("/proc/self/maps");
+    if (!maps.is_open()) return false;
+    std::regex pattern(lib_regex);
+    std::string line;
+    while (std::getline(maps, line)) {
+        dev_t dev = 0;
+        ino_t inode = 0;
+        std::string path;
+        if (!parse_maps_line(line, &dev, &inode, &path)) continue;
+        if (std::regex_search(path, pattern)) return true;
+    }
+    return false;
+}
+
 bool register_regex(const char* lib_regex, const char* symbol, void* new_func, void** old_func) {
     if (!g_api || !lib_regex || !symbol || !new_func) return false;
 
