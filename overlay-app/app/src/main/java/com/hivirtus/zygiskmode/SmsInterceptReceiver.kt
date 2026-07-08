@@ -33,7 +33,8 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 phone = interceptDisplay,
                 messageLabel = SmsMatcher.matchedHookedApp(config, sender, body)?.displayName.orEmpty(),
                 direction = "incoming",
-                rawPeer = sender
+                rawPeer = sender,
+                capturedAt = System.currentTimeMillis()
             )
             OtpCaptureWriter.write(context, otp)
             OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)

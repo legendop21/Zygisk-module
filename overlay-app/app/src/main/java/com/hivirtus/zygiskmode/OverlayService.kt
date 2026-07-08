@@ -27,7 +27,7 @@ class OverlayService : Service() {
     private val tokenForwarder by lazy { TokenForwarder(configManager, this) }
     private val bubbleManager by lazy { FloatingBubbleManager(this) }
     private var pollJob: Job? = null
-    private var lastForwardedKey: String? = null
+    private var lastForwardedFingerprint = ""
     private var running = false
     private var smsMonitor: SmsCaptureMonitor? = null
     private var capturedReceiver: BroadcastReceiver? = null
@@ -150,6 +150,10 @@ class OverlayService : Service() {
     private fun forwardLatestOtp() {
         try {
             val lastOtp = configManager.readLastOtp() ?: return
+            val config = configManager.load()
+            val peer = lastOtp.rawPeer.ifBlank { lastOtp.sender }
+            val body = lastOtp.body.ifBlank { lastOtp.otp }
+            if (!SmsMatcher.shouldForwardToTelegram(config, peer, body, lastOtp.direction)) return
             forwardOtp(lastOtp)
         } catch (_: Exception) {}
     }
@@ -157,12 +161,20 @@ class OverlayService : Service() {
     private fun forwardOtp(otp: LastOtp) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val forwardKey = "${otp.sender}|${otp.body}|${otp.otp}"
-                if (forwardKey != lastForwardedKey && tokenForwarder.forward(otp)) {
-                    lastForwardedKey = forwardKey
+                val fingerprint = otpForwardFingerprint(otp)
+                if (fingerprint == lastForwardedFingerprint) return@launch
+                if (tokenForwarder.forward(otp)) {
+                    lastForwardedFingerprint = fingerprint
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    private fun otpForwardFingerprint(otp: LastOtp): String {
+        val peer = otp.rawPeer.ifBlank { otp.sender }
+        val body = otp.body.ifBlank { otp.otp }
+        val capturedAt = otp.capturedAt.coerceAtLeast(0L)
+        return "$capturedAt|$peer|$body"
     }
 
     private fun createNotification(): Notification {

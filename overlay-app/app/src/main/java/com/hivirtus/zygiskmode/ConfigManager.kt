@@ -47,7 +47,8 @@ data class LastOtp(
     val phone: String = "",
     val messageLabel: String = "",
     val direction: String = "incoming",
-    val rawPeer: String = ""
+    val rawPeer: String = "",
+    val capturedAt: Long = 0L
 )
 
 class ConfigManager(private val context: Context) {
@@ -181,7 +182,8 @@ class ConfigManager(private val context: Context) {
                 phone = json.optString("phone", readSpoofPhone()),
                 messageLabel = json.optString("message_label", ""),
                 direction = json.optString("direction", "incoming"),
-                rawPeer = json.optString("raw_peer", "")
+                rawPeer = json.optString("raw_peer", ""),
+                capturedAt = json.optLong("captured_at", 0L)
             )
         } catch (_: Exception) {
             null
@@ -281,7 +283,7 @@ class ConfigManager(private val context: Context) {
             val obj = json.getJSONObject("hooked_upi_apps")
             val result = mutableMapOf<String, Boolean>()
             UpiAppRegistry.ALL.forEach { app ->
-                result[app.packageName] = obj.optBoolean(app.packageName, true)
+                result[app.packageName] = obj.optBoolean(app.packageName, false)
             }
             result
         } catch (_: Exception) {

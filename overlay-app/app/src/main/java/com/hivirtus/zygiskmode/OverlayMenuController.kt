@@ -353,7 +353,7 @@ class OverlayMenuController(
         UpiAppRegistry.ALL.sortedBy { it.displayName.lowercase() }.forEach { app ->
             val switch = SwitchMaterial(context).apply {
                 text = app.displayName
-                isChecked = config.hookedUpiApps[app.packageName] ?: true
+                isChecked = config.hookedUpiApps[app.packageName] ?: false
                 setTextColor(ContextCompat.getColor(context, R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,

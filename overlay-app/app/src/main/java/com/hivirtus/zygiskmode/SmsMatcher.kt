@@ -1,7 +1,5 @@
 package com.hivirtus.zygiskmode
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import org.json.JSONObject
 import java.util.regex.Pattern
@@ -45,46 +43,23 @@ object SmsMatcher {
         }
     }
 
+    /**
+     * Sirf hooked app ka SMS — YesPay/Snapmint generic match nahi.
+     * YESPRO tabhi jab YesPay hook ON ho. Snapmint tabhi jab Snapmint hook ON ho.
+     */
     fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank() || peer.isBlank()) return false
-        val hooked = enabledHookedApps(config)
-        if (hooked.isEmpty()) return false
-
-        // Dusre phone (+91) se OTP — Sender ID saved + hooked apps
-        if (userSenderId(config) != null && (extractOtpDigits(body) != null || isUpiVerificationContent(body))) {
-            return true
-        }
-
-        if (!isUpiVerificationContent(body) && extractOtpDigits(body) == null) return false
-
-        if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
-        if (UpiAppRegistry.matchAmongBySender(hooked, peer) != null) return true
-        if (UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
-        if (isEncryptedToken(body) && hooked.isNotEmpty()) return true
-        if (is2faContent(body)) return true
-
-        return false
+        if (enabledHookedApps(config).isEmpty()) return false
+        return matchedHookedApp(config, peer, body) != null
     }
 
     fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
         if (!config.hookOutgoingSms) return false
         if (body.isBlank() || recipient.isBlank()) return false
-        val hooked = enabledHookedApps(config)
-        if (hooked.isEmpty()) return false
-
-        if (isUpiVerificationContent(body) || isEncryptedToken(body)) return true
-        if (is2faContent(body)) return true
-        if (isShortCodeRecipient(recipient)) return true
-        if (UpiAppRegistry.matchAmong(hooked, recipient, body) != null) return true
-        if (extractOtpDigits(body) != null && userSenderId(config) != null) return true
-
-        return body.length >= 4
+        if (enabledHookedApps(config).isEmpty()) return false
+        return matchedHookedApp(config, recipient, body) != null
     }
 
-    /**
-     * +91 / phone number kabhi mat dikhao — hamesha saved Sender ID.
-     * Dusre phone se aaya ho to bhi Sender ID dikhega.
-     */
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
         if (!config.overrideIncomingSender) {
             if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
@@ -137,7 +112,6 @@ object SmsMatcher {
         val trimmed = body.trim()
         if (trimmed.isEmpty()) return ""
         if (isEncryptedToken(trimmed)) return trimmed
-        if (isUpiVerificationContent(trimmed)) return trimmed
         if (!autoExtract) return trimmed
         return extractOtpDigits(trimmed) ?: trimmed
     }
@@ -149,34 +123,12 @@ object SmsMatcher {
         val tokenChars = compact.count { it.isLetterOrDigit() || it in "+/=)(?&._-" }
         return tokenChars >= compact.length * 0.85
     }
-
-    private fun is2faContent(body: String): Boolean {
-        val upper = body.uppercase()
-        val keywords = listOf(
-            "2FA", "TWO FACTOR", "TWOFACTOR", "TWO-FACTOR", "SECOND OTP", "2ND OTP",
-            "LOGIN OTP", "AUTHENTICATION", "AUTH CODE", "SECURE CODE", "STEP 2"
-        )
-        return keywords.any { upper.contains(it) }
-    }
-
-    private fun isUpiVerificationContent(body: String): Boolean {
-        if (isEncryptedToken(body)) return true
-        if (is2faContent(body)) return true
-        if (extractOtpDigits(body) != null) return true
-        val trimmed = body.trim()
-        if (trimmed.length <= 3) return false
-        val upper = trimmed.uppercase()
-        val keywords = listOf(
-            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
-            "PHONEPE", "PAYTM", "PYTM", "GPAY", "BHIM", "CODE", "PIN", "BANK", "PAY"
-        )
-        return keywords.any { upper.contains(it) }
-    }
 }
 
 object OtpCaptureWriter {
 
     fun write(context: Context, otp: LastOtp) {
+        val capturedAt = if (otp.capturedAt > 0L) otp.capturedAt else System.currentTimeMillis()
         val json = JSONObject().apply {
             put("otp", otp.otp)
             put("sender", otp.sender)
@@ -185,7 +137,7 @@ object OtpCaptureWriter {
             put("phone", otp.phone)
             put("raw_peer", otp.rawPeer)
             put("message_label", otp.messageLabel)
-            put("captured_at", System.currentTimeMillis())
+            put("captured_at", capturedAt)
         }
         val payload = json.toString()
         val appDir = context.getExternalFilesDir(null) ?: context.filesDir
