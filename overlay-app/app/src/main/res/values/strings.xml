@@ -67,9 +67,13 @@
     <string name="enable_phone_spoof">Fake Phone Number — Override number shown to apps</string>
     <string name="mock_phone_sim1">Verify Number (app registered — SIM ka nahi):</string>
     <string name="fake_phone_hint">SIM alag hai? App wala number daalo: +919520752078</string>
-    <string name="module_not_flashed_title">⚠️ LSPosed / Module Required</string>
-    <string name="module_not_flashed_body">LSPosed mode: APK install + LSPosed me enable karo (Zygisk ZIP optional). Module active hone ke baad menu khulega.</string>
-    <string name="module_flash_steps">LSPosed:\n1. LSPosed install + reboot\n2. Virtus APK → LSPosed me ON\n3. Scope: System Framework + Phone + GMS + apps\n4. Reboot\n\nZygisk (optional):\n1. ZIP flash → Zygisk ON → reboot</string>
+    <string name="module_not_flashed_title">⚠️ Module Not Active</string>
+    <string name="module_not_flashed_body">Zygisk Next ≠ Hivirtus. Ya to Hivirtus ZIP flash karo, ya LSPosed mode use karo (neeche button).</string>
+    <string name="module_flash_steps">OPTION A — LSPosed (recommended):\n1. LSPosed install + reboot\n2. Virtus APK → LSPosed me ON\n3. Scope: Framework + Phone + GMS + apps\n4. Neeche \"LSPosed ON\" dabao\n\nOPTION B — Zygisk:\n1. hivirtus_zygisk_mode.zip flash\n2. Zygisk ON → reboot</string>
+    <string name="module_lsposed_continue">✅ LSPosed ON — Menu Kholo</string>
+    <string name="module_still_missing">Module abhi detect nahi — LSPosed enable + scope check karo</string>
+    <string name="lsposed_not_installed">LSPosed Manager install nahi mila</string>
+    <string name="lsposed_mode_confirmed">LSPosed mode active — menu khul raha hai</string>
     <string name="module_retry_check">Module Check (Retry)</string>
     <string name="module_exit_app">Exit App</string>
     <string name="fake_number_on">Fake Number ON: %1$s</string>

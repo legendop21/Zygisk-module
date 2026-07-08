@@ -70,7 +70,7 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        if (!ModuleGate.isModuleFlashed()) {
+        if (!ModuleGate.isModuleFlashed(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
