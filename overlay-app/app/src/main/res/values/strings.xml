@@ -79,6 +79,7 @@
     <string name="telegram_test_failed">Telegram forward fail — token/chat ID check karein</string>
     <string name="save_telegram_config">Save Telegram Config</string>
     <string name="config_saved">Config saved</string>
+    <string name="save_failed">Save fail — dubara try karo</string>
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
     <string name="dev_credit">dev by @hivirtus</string>
