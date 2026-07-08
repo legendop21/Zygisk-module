@@ -31,7 +31,7 @@ data class ModuleConfig(
     val telegramChatId: String = "",
     val spoofAndroidId: String = "",
     val enableDeviceIdSpoof: Boolean = false,
-    val injectSenderId: String = "AD-TEST-S",
+    val injectSenderId: String = "",
     val injectMessageBody: String = ""
 )
 
@@ -224,7 +224,7 @@ class ConfigManager(private val context: Context) {
                 telegramChatId = json.optString("telegram_chat_id", ""),
                 spoofAndroidId = json.optString("spoof_android_id", ""),
                 enableDeviceIdSpoof = json.optBoolean("enable_device_id_spoof", false),
-                injectSenderId = json.optString("inject_sender_id", "AD-TEST-S"),
+                injectSenderId = json.optString("inject_sender_id", ""),
                 injectMessageBody = json.optString("inject_message_body", "")
             )
         } catch (_: Exception) {

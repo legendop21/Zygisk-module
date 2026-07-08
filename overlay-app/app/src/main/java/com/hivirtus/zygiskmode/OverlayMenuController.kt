@@ -105,8 +105,12 @@ class OverlayMenuController(
         }
 
         menu.btnSaveMessage.setOnClickListener {
+            val sender = textOf(menu.etSenderId).trim()
+            if (sender.isBlank()) {
+                toast(R.string.set_sender_id_first)
+                return@setOnClickListener
+            }
             safeSave(R.string.sender_id_saved) {
-                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }.uppercase()
                 configManager.save(
                     configManager.load().copy(
                         injectSenderId = sender,
@@ -159,13 +163,13 @@ class OverlayMenuController(
 
         menu.btnInjectSms.setOnClickListener {
             scope.launch {
-                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }.uppercase()
+                val sender = textOf(menu.etSenderId).trim()
                 val body = textOf(menu.etMessageBody)
                 if (body.isBlank()) {
                     toast(R.string.enter_message_body)
                     return@launch
                 }
-                if (sender == "AD-TEST-S" || sender.isBlank()) {
+                if (sender.isBlank()) {
                     toast(R.string.set_sender_id_first)
                     return@launch
                 }
@@ -251,12 +255,18 @@ class OverlayMenuController(
         }
 
         menu.btnSaveUpiHooks.setOnClickListener {
+            val sender = textOf(menu.etSenderId).trim()
+            if (sender.isBlank()) {
+                toast(R.string.set_sender_id_first)
+                return@setOnClickListener
+            }
             safeSave(R.string.upi_hooks_saved) {
                 val hooked = upiAppSwitches.mapValues { it.value.isChecked }
                 val anyHooked = hooked.values.any { it }
                 val current = configManager.load()
                 configManager.save(
                     current.copy(
+                        injectSenderId = sender,
                         hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
                         hookIncomingSms = anyHooked || menu.switchHookIncoming.isChecked,
                         hookOutgoingSms = anyHooked || menu.switchHookOutgoing.isChecked,
