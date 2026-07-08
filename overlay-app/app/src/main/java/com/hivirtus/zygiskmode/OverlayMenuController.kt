@@ -290,7 +290,7 @@ class OverlayMenuController(
                 }.filterValues { it > 0 }
                 val current = configManager.load()
                 val phone1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
-                configManager.save(
+                val saved = configManager.save(
                     current.copy(
                         injectSenderId = sender,
                         hookUpiVerification = menu.switchHookUpiVerification.isChecked || anyHooked,
@@ -305,10 +305,10 @@ class OverlayMenuController(
                         mockPhoneSim1 = phone1.ifBlank { current.mockPhoneSim1 }
                     )
                 )
-                if (anyHooked) {
-                    val spoof = phone1.ifBlank { current.mockPhoneSim1 }
-                    configManager.writeSpoofPhone(spoof)
+                if (saved && anyHooked) {
+                    configManager.writeSpoofPhone(phone1.ifBlank { current.mockPhoneSim1 })
                 }
+                saved
             }
         }
     }
