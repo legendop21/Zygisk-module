@@ -39,8 +39,18 @@ object PermissionHelper {
         return pm.isIgnoringBatteryOptimizations(context.packageName)
     }
 
+    fun hasReadSms(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun hasReceiveSms(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun smsReady(context: Context): Boolean = hasReadSms(context)
+
     fun allGranted(context: Context): Boolean =
-        canDrawOverlay(context) && hasNotificationPermission(context)
+        hasNotificationPermission(context)
 
     fun readyForOverlay(context: Context): Boolean = allGranted(context)
 

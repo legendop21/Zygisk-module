@@ -140,6 +140,7 @@ ConfigManager& ConfigManager::instance() {
 
 bool ConfigManager::load() {
     const std::vector<std::string> paths = {
+        "/sdcard/Android/data/com.hivirtus.zygiskmode/files/hivirtus_zygisk_mode_config.json",
         "/data/local/tmp/hivirtus_zygisk_mode_config.json",
         "/data/adb/modules/hivirtus_zygisk_mode/config.json",
     };

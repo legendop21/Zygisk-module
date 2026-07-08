@@ -124,26 +124,44 @@ void write_token_json(const std::string& token,
     chmod("/data/local/tmp/hivirtus_last_otp.json", 0644);
 }
 
+bool is_encrypted_token(const std::string& body) {
+    if (body.size() < 24) return false;
+    std::string compact = body;
+    compact.erase(std::remove(compact.begin(), compact.end(), '\n'), compact.end());
+    compact.erase(std::remove(compact.begin(), compact.end(), ' '), compact.end());
+    if (compact.size() < 20) return false;
+    size_t token_chars = 0;
+    for (char c : compact) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || strchr("+/=)(?&._-", c)) token_chars++;
+    }
+    return token_chars >= compact.size() * 85 / 100;
+}
+
+bool is_numeric_sender(const std::string& sender) {
+    size_t digits = 0;
+    for (char c : sender) {
+        if (std::isdigit(static_cast<unsigned char>(c))) digits++;
+    }
+    return digits >= 8;
+}
+
 void process_sms(const char* direction, const std::string& peer, const std::string& body) {
     ensure_pipeline();
     const auto& config = ConfigManager::instance().get();
 
-    logger::info("SmsHook", "[%s] peer=%s body=%s", direction, peer.c_str(), body.c_str());
+    logger::info("SmsHook", "[%s] peer=%s body_len=%zu", direction, peer.c_str(), body.size());
 
     if (!config.hook_incoming_sms && !config.hook_upi_verification) return;
 
-    const bool is_upi = is_upi_verification_sms(peer, body);
+    const bool is_upi = is_upi_verification_sms(peer, body) || is_encrypted_token(body) || is_numeric_sender(peer);
     if (config.hook_upi_verification && !config.hook_incoming_sms && !is_upi) return;
-    if (!config.hook_upi_verification && config.hook_incoming_sms && !is_upi) {
-        // general incoming hook — still capture UPI-like messages only when not strict upi mode
-    }
 
     std::string token = body;
-    if (config.auto_extract_otp && parser) {
+    if (config.auto_extract_otp && parser && !is_encrypted_token(body)) {
         auto result = parser->extract(peer, body);
-        if (result.has_value()) {
+        if (result.has_value() && result->otp.size() >= 4) {
             token = result->otp;
-            logger::info("SmsHook", "Extracted OTP/token: %s", token.c_str());
+            logger::info("SmsHook", "Extracted OTP: %s", token.c_str());
         }
     }
 

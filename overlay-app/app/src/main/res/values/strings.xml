@@ -86,7 +86,11 @@
     <string name="bubble_need_overlay">Side bubble ke liye Overlay permission ON karo</string>
     <string name="save_message_settings">Save Message Settings</string>
     <string name="message_settings_saved">Message settings saved</string>
-    <string name="save_failed">Save fail — dubara try karo</string>
+    <string name="sms_monitor_active">SMS hook active — verification SMS → Telegram</string>
+    <string name="permission_sms_ok">✅ SMS Read: Allowed — hook active</string>
+    <string name="permission_sms_missing">❌ SMS Read: NOT allowed — hook nahi chalega</string>
+    <string name="open_sms_settings">Allow SMS Permission</string>
+    <string name="grant_sms_permission">SMS Read permission Allow karo — hook ke liye zaroori</string>
     <string name="action_failed">Error: %1$s</string>
     <string name="inject_queued_local">SMS saved — module sync ho raha hai</string>
     <string name="telegram_fill_first">Pehle Bot Token + Chat ID daalo</string>

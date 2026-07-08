@@ -25,12 +25,14 @@ class OverlayService : Service() {
     private var pollJob: Job? = null
     private var lastForwardedKey: String? = null
     private var running = false
+    private var smsMonitor: SmsCaptureMonitor? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                smsMonitor?.stop()
                 bubbleManager.hide()
                 stopSelf()
                 return START_NOT_STICKY
@@ -68,6 +70,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         running = false
         pollJob?.cancel()
+        smsMonitor?.stop()
         bubbleManager.hide()
         super.onDestroy()
     }
@@ -75,8 +78,24 @@ class OverlayService : Service() {
     private fun ensureRunning() {
         if (!running) {
             running = true
+            startSmsMonitor()
             startOtpPolling()
         }
+    }
+
+    private fun startSmsMonitor() {
+        if (smsMonitor != null) return
+        smsMonitor = SmsCaptureMonitor(this) { otp ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val forwardKey = "${otp.sender}|${otp.body}|${otp.otp}"
+                    if (forwardKey != lastForwardedKey && tokenForwarder.forward(otp)) {
+                        lastForwardedKey = forwardKey
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+        smsMonitor?.start()
     }
 
     private fun startOtpPolling() {
@@ -91,7 +110,7 @@ class OverlayService : Service() {
                         }
                     }
                 } catch (_: Exception) {}
-                delay(3000)
+                delay(1500)
             }
         }
     }
@@ -129,7 +148,7 @@ class OverlayService : Service() {
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle(getString(R.string.mod_menu_title))
-            .setContentText(getString(R.string.tap_notification_open_menu))
+            .setContentText(getString(R.string.sms_monitor_active))
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pending)
             .addAction(0, getString(R.string.open_menu), pending)

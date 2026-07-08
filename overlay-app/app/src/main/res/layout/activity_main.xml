@@ -105,6 +105,23 @@
                 android:textColor="@color/menu_blue"
                 android:textSize="12sp" />
 
+            <TextView
+                android:id="@+id/tvSmsStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/text_hint"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGrantSms"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/open_sms_settings"
+                android:textColor="@color/menu_blue"
+                android:textSize="12sp" />
+
             <LinearLayout
                 android:id="@+id/miuiSection"
                 android:layout_width="match_parent"

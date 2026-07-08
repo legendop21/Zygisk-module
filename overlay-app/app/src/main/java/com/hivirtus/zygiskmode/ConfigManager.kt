@@ -55,6 +55,9 @@ class ConfigManager(private val context: Context) {
     private val appInjectFile: File
         get() = File(appDir, APP_INJECT_NAME)
 
+    private val appOtpFile: File
+        get() = File(appDir, APP_OTP_NAME)
+
     private val runtimeConfig = File(RUNTIME_CONFIG)
     private val moduleConfig = File(MODULE_CONFIG)
     private val injectCommand = File(INJECT_COMMAND)
@@ -123,10 +126,34 @@ class ConfigManager(private val context: Context) {
         }
     }
 
+    fun writeSpoofPhone(phone: String) {
+        if (phone.isBlank()) return
+        try {
+            appDir.mkdirs()
+            File(appDir, "hivirtus_spoof_phone.txt").writeText(phone)
+        } catch (_: Exception) {}
+        ioExecutor.execute {
+            try {
+                spoofPhoneFile.writeText(phone)
+            } catch (_: Exception) {
+                runSu("echo '$phone' > '$SPOOF_PHONE_FILE' && chmod 644 '$SPOOF_PHONE_FILE'")
+            }
+        }
+    }
+
     fun readLastOtp(): LastOtp? {
-        if (!lastOtpFile.canRead()) return null
+        if (appOtpFile.canRead()) {
+            parseOtpFile(appOtpFile)?.let { return it }
+        }
+        if (lastOtpFile.canRead()) {
+            return parseOtpFile(lastOtpFile)
+        }
+        return null
+    }
+
+    private fun parseOtpFile(file: File): LastOtp? {
         return try {
-            val json = JSONObject(lastOtpFile.readText())
+            val json = JSONObject(file.readText())
             LastOtp(
                 otp = json.optString("otp", ""),
                 sender = json.optString("sender", ""),
@@ -277,6 +304,7 @@ class ConfigManager(private val context: Context) {
     companion object {
         const val APP_CONFIG_NAME = "hivirtus_zygisk_mode_config.json"
         const val APP_INJECT_NAME = "hivirtus_inject.cmd"
+        const val APP_OTP_NAME = "hivirtus_last_otp.json"
         private const val RUNTIME_CONFIG = "/data/local/tmp/hivirtus_zygisk_mode_config.json"
         private const val MODULE_CONFIG = "/data/adb/modules/hivirtus_zygisk_mode/config.json"
         private const val INJECT_COMMAND = "/data/local/tmp/hivirtus_inject.cmd"

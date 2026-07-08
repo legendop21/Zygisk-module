@@ -76,23 +76,28 @@ class OverlayMenuController(
 
         menu.btnSaveSim.setOnClickListener {
             safeSave(R.string.sim_settings_saved) {
-                configManager.save(
-                    configManager.load().copy(
-                        enableSim1Mock = menu.switchSim1Mock.isChecked,
-                        enableSim2Mock = menu.switchSim2Mock.isChecked,
-                        mockCountryIso = textOf(menu.etCountryIso).lowercase().ifBlank { "in" },
-                        hideMagisk = menu.switchHideMagisk.isChecked,
-                        hideKernelSu = menu.switchHideKernelSu.isChecked,
-                        hideApatch = menu.switchHideApatch.isChecked,
-                        hideSukisu = menu.switchHideSukisu.isChecked,
-                        hideAllRootApps = menu.switchHideAllRootApps.isChecked,
-                        hideDeveloper = menu.switchNotDeveloper.isChecked,
-                        hideRoot = menu.switchNotRoot.isChecked,
-                        enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
-                        mockPhoneSim1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" },
-                        mockPhoneSim2 = textOf(menu.etPhoneSim2).ifBlank { "+919876543211" }
-                    )
+                val phone1 = textOf(menu.etPhoneSim1).ifBlank { "+919876543210" }
+                val phone2 = textOf(menu.etPhoneSim2).ifBlank { "+919876543211" }
+                val updated = configManager.load().copy(
+                    enableSim1Mock = menu.switchSim1Mock.isChecked,
+                    enableSim2Mock = menu.switchSim2Mock.isChecked,
+                    mockCountryIso = textOf(menu.etCountryIso).lowercase().ifBlank { "in" },
+                    hideMagisk = menu.switchHideMagisk.isChecked,
+                    hideKernelSu = menu.switchHideKernelSu.isChecked,
+                    hideApatch = menu.switchHideApatch.isChecked,
+                    hideSukisu = menu.switchHideSukisu.isChecked,
+                    hideAllRootApps = menu.switchHideAllRootApps.isChecked,
+                    hideDeveloper = menu.switchNotDeveloper.isChecked,
+                    hideRoot = menu.switchNotRoot.isChecked,
+                    enablePhoneSpoof = menu.switchPhoneSpoof.isChecked,
+                    mockPhoneSim1 = phone1,
+                    mockPhoneSim2 = phone2
                 )
+                val ok = configManager.save(updated)
+                if (ok && menu.switchPhoneSpoof.isChecked) {
+                    configManager.writeSpoofPhone(phone1)
+                }
+                ok
             }
         }
 

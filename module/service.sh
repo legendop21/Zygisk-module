@@ -9,6 +9,7 @@ INJECT_RUNTIME="/data/local/tmp/hivirtus_inject.cmd"
 APP_DIR="/sdcard/Android/data/com.hivirtus.zygiskmode/files"
 APP_CONFIG="$APP_DIR/hivirtus_zygisk_mode_config.json"
 APP_INJECT="$APP_DIR/hivirtus_inject.cmd"
+APP_OTP="$APP_DIR/hivirtus_last_otp.json"
 
 sync_app_config() {
   if [ -f "$APP_CONFIG" ]; then
@@ -20,6 +21,10 @@ sync_app_config() {
   if [ -f "$APP_INJECT" ]; then
     cp -f "$APP_INJECT" "$INJECT_RUNTIME"
     chmod 644 "$INJECT_RUNTIME" 2>/dev/null
+  fi
+  if [ -f "$APP_OTP" ]; then
+    cp -f "$APP_OTP" "/data/local/tmp/hivirtus_last_otp.json"
+    chmod 644 "/data/local/tmp/hivirtus_last_otp.json" 2>/dev/null
   fi
 }
 

