@@ -4,7 +4,7 @@
 SKIPUNZIP=1
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.11.0  "
+ui_print "   Hivirtus Zygisk Mode v2.11.2  "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -71,3 +71,6 @@ fi
 ui_print "- Module installed: $MODPATH"
 ui_print "- Enable Zygisk in root settings"
 ui_print "- Reboot to activate"
+
+echo "1" > /data/local/tmp/hivirtus_module_installed.flag
+chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null

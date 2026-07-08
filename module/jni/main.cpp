@@ -82,14 +82,13 @@ public:
 
         const bool phone_active = config.enable_phone_spoof || config.enable_sim1_mock ||
                                   config.enable_sim2_mock;
-        const bool use_phone_spoof = phone_active || (is_hooked_upi_ && config.enable_phone_spoof);
 
         sim_mock::install(env_,
                           api_,
-                          config.enable_sim1_mock || (is_hooked_upi_ && config.enable_phone_spoof),
+                          config.enable_sim1_mock || config.enable_phone_spoof,
                           config.enable_sim2_mock,
                           config.mock_country_iso,
-                          use_phone_spoof,
+                          phone_active,
                           config.mock_phone_sim1,
                           config.mock_phone_sim2);
 
@@ -108,11 +107,9 @@ public:
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
-                                       use_phone_spoof || config.enable_device_id_spoof ||
+                                       phone_active || config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty();
-        if (is_hooked_upi_ || is_telephony_ || config.enable_phone_spoof) {
-            touch_module_heartbeat();
-        }
+        touch_module_heartbeat();
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }

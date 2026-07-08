@@ -61,6 +61,11 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
 
+        if (!ModuleGate.isModuleFlashed()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         ensureRunning(showBubble = true)
 
         try {
@@ -185,9 +190,18 @@ class OverlayService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val config = configManager.load()
+        val subText = when {
+            config.enablePhoneSpoof || config.enableSim1Mock -> {
+                val phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+                getString(R.string.fake_number_on, phone)
+            }
+            else -> getString(R.string.bubble_always_on)
+        }
+
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle(getString(R.string.mod_menu_title))
-            .setContentText(getString(R.string.bubble_always_on))
+            .setContentText(subText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pending)
             .addAction(0, getString(R.string.open_menu), pending)

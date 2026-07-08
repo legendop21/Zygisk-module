@@ -13,6 +13,8 @@ class LicenseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (ModuleGate.blockIfNeeded(this)) return
+
         if (LicenseManager.isLicensed(this)) {
             openMain()
             return

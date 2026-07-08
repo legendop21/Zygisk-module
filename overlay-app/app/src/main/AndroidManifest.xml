@@ -25,6 +25,12 @@
         android:requestLegacyExternalStorage="true">
 
         <activity
+            android:name=".ModuleBlockActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.HivirtusZygiskMode" />
+
+        <activity
             android:name=".LicenseActivity"
             android:exported="true"
             android:theme="@style/Theme.HivirtusZygiskMode">

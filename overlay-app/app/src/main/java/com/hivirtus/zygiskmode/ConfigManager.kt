@@ -144,7 +144,21 @@ class ConfigManager(private val context: Context) {
             } catch (_: Exception) {
                 runSu("echo '$phone' > '$SPOOF_PHONE_FILE' && chmod 644 '$SPOOF_PHONE_FILE'")
             }
+            applyPhoneSystemProps(phone)
         }
+    }
+
+    private fun applyPhoneSystemProps(phone: String) {
+        val escaped = phone.replace("'", "'\\''")
+        val digits = phone.replace(Regex("[^0-9]"), "")
+        val cmds = listOf(
+            "resetprop persist.vendor.radio.nitz_number_0 '$escaped'",
+            "resetprop persist.vendor.radio.nitz_number_1 '$escaped'",
+            "resetprop persist.sys.phone.phone_number '$escaped'",
+            "resetprop gsm.sim.operator.numeric '40445'",
+            "resetprop ril.ecclist '$digits'"
+        )
+        cmds.forEach { runSu(it) }
     }
 
     fun readLastOtp(): LastOtp? {

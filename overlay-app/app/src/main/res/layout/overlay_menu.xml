@@ -202,6 +202,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/fake_phone_hint"
+                android:textColor="@color/gold_muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/mock_phone_sim1"
                 android:textColor="@color/text_secondary"

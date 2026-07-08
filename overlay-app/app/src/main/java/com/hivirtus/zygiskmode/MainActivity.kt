@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (ModuleGate.blockIfNeeded(this)) return
+
         if (!LicenseManager.isLicensed(this)) {
             startActivity(Intent(this, LicenseActivity::class.java))
             finish()
