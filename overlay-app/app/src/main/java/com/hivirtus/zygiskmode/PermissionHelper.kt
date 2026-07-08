@@ -47,7 +47,8 @@ object PermissionHelper {
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
             PackageManager.PERMISSION_GRANTED
 
-    fun smsReady(context: Context): Boolean = hasReadSms(context)
+    fun smsReady(context: Context): Boolean =
+        hasReadSms(context) && hasReceiveSms(context)
 
     fun allGranted(context: Context): Boolean =
         hasNotificationPermission(context)

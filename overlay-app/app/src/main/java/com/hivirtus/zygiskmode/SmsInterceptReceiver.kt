@@ -22,6 +22,11 @@ class SmsInterceptReceiver : BroadcastReceiver() {
 
             val configManager = ConfigManager(context)
             val config = configManager.load()
+
+            if (SmsSenderRewriter.shouldRewrite(sender, config)) {
+                SmsSenderRewriter.rewriteIncomingSender(context, config, sender, body)
+            }
+
             if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return
 
             val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
@@ -38,9 +43,6 @@ class SmsInterceptReceiver : BroadcastReceiver() {
             )
             OtpCaptureWriter.write(context, otp)
             OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
-            if (SmsSenderRewriter.shouldRewrite(sender, config)) {
-                SmsSenderRewriter.rewriteForHookedApps(context, config, sender, body)
-            }
             if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
                 context.sendBroadcast(
                     Intent(ACTION_SMS_CAPTURED).setPackage(context.packageName)

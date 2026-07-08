@@ -61,6 +61,11 @@ class SmsCaptureMonitor(
         scanMessages(Telephony.Sms.MESSAGE_TYPE_INBOX, lastProcessedInId) { id, peer, body ->
             lastProcessedInId = id
             val config = configManager.load()
+            if (SmsSenderRewriter.shouldRewrite(peer, config)) {
+                if (SmsSenderRewriter.rewriteIncomingSender(context, config, peer, body, id)) {
+                    return@scanMessages
+                }
+            }
             if (!SmsMatcher.shouldCaptureIncoming(config, peer, body)) return@scanMessages
             deliver(config, peer, body, "incoming")
         }
@@ -136,9 +141,6 @@ class SmsCaptureMonitor(
         )
         OtpCaptureWriter.write(context, otp)
         OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
-        if (!isOutgoing && SmsSenderRewriter.shouldRewrite(actualPeer, config)) {
-            SmsSenderRewriter.rewriteForHookedApps(context, config, actualPeer, body)
-        }
         if (SmsMatcher.shouldForwardToTelegram(config, actualPeer, body, direction)) {
             onCaptured(otp)
         }

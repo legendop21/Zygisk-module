@@ -1,13 +1,14 @@
 package com.hivirtus.zygiskmode
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.provider.Telephony
 import android.util.Log
 
 /**
- * Dusre phone (+91) se aaya OTP — hooked UPI apps ko saved Sender ID ke saath
- * dubara inbox mein daalo taaki auto-read / sender match kaam kare.
+ * +91 / numeric sender ko saved Sender ID (JK-AXISBK-S) mein rewrite —
+ * notification + UPI OTP auto-read ke liye.
  */
 object SmsSenderRewriter {
 
@@ -16,28 +17,93 @@ object SmsSenderRewriter {
 
     fun shouldRewrite(actualPeer: String, config: ModuleConfig): Boolean {
         if (!config.overrideIncomingSender) return false
+        if (!config.hookIncomingSms && !config.hookUpiVerification) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (senderId.isBlank()) return false
         if (!SmsMatcher.isIndianMobileNumber(actualPeer) && !SmsMatcher.isNumericSender(actualPeer)) {
             return false
         }
-        return SmsMatcher.enabledHookedApps(config).isNotEmpty()
+        return true
     }
 
-    fun rewriteForHookedApps(context: Context, config: ModuleConfig, actualPeer: String, body: String) {
-        if (!shouldRewrite(actualPeer, config)) return
-        val senderId = SmsMatcher.userSenderId(config) ?: return
-        if (body.isBlank()) return
+    fun rewriteIncomingSender(
+        context: Context,
+        config: ModuleConfig,
+        actualPeer: String,
+        body: String,
+        messageId: Long = -1L
+    ): Boolean {
+        if (!shouldRewrite(actualPeer, config)) return false
+        val senderId = SmsMatcher.userSenderId(config) ?: return false
+        if (body.isBlank()) return false
 
-        val key = "${actualPeer.trim()}|${body.trim()}"
+        val key = "${actualPeer.trim()}|${body.trim()}|rewrite"
         synchronized(recentKeys) {
-            if (!recentKeys.add(key)) return
-            if (recentKeys.size > 48) recentKeys.clear()
+            if (!recentKeys.add(key)) return false
+            if (recentKeys.size > 64) recentKeys.clear()
         }
 
+        val deleted = deleteInboxSms(context, messageId, actualPeer, body)
         val inserted = insertInboxSms(context, senderId, body)
         ConfigManager(context).writeInjectCommand(senderId, body)
-        Log.i(TAG, "Rewrote +91 SMS as Sender ID=$senderId inserted=$inserted")
+        try {
+            context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
+        } catch (_: Exception) {}
+        Log.i(TAG, "Rewrote $actualPeer -> $senderId deleted=$deleted inserted=$inserted")
+        return inserted
+    }
+
+    /** MESSAGE tab inject — seedha Sender ID se inbox mein daalo */
+    fun injectInboxMessage(context: Context, senderId: String, body: String): Boolean {
+        if (senderId.isBlank() || body.isBlank()) return false
+        val inserted = insertInboxSms(context, senderId.trim(), body.trim())
+        ConfigManager(context).writeInjectCommand(senderId.trim(), body.trim())
+        try {
+            context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
+        } catch (_: Exception) {}
+        Log.i(TAG, "Injected inbox SMS from $senderId inserted=$inserted")
+        return inserted
+    }
+
+    @Deprecated("Use rewriteIncomingSender", ReplaceWith("rewriteIncomingSender(context, config, actualPeer, body)"))
+    fun rewriteForHookedApps(context: Context, config: ModuleConfig, actualPeer: String, body: String) {
+        rewriteIncomingSender(context, config, actualPeer, body)
+    }
+
+    private fun deleteInboxSms(context: Context, messageId: Long, peer: String, body: String): Boolean {
+        if (messageId > 0L) {
+            try {
+                val uri = ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId)
+                val deleted = context.contentResolver.delete(uri, null, null)
+                if (deleted > 0) return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Delete by id failed: ${e.message}")
+            }
+        }
+
+        if (PermissionHelper.hasReadSms(context)) {
+            try {
+                val deleted = context.contentResolver.delete(
+                    Telephony.Sms.CONTENT_URI,
+                    "${Telephony.Sms.ADDRESS}=? AND ${Telephony.Sms.BODY}=? AND ${Telephony.Sms.TYPE}=?",
+                    arrayOf(peer, body, Telephony.Sms.MESSAGE_TYPE_INBOX.toString())
+                )
+                if (deleted > 0) return true
+            } catch (e: Exception) {
+                Log.w(TAG, "Delete by query failed: ${e.message}")
+            }
+        }
+
+        return deleteViaSu(peer, body)
+    }
+
+    private fun deleteViaSu(peer: String, body: String): Boolean {
+        val safePeer = peer.replace("'", "'\\''")
+        val safeBody = body.replace("'", "'\\''").replace("\n", " ")
+        return ShellHelper.runSu(
+            "content delete --uri content://sms/inbox " +
+                "--where \"address='$safePeer' AND body='$safeBody'\""
+        )
     }
 
     private fun insertInboxSms(context: Context, senderId: String, body: String): Boolean {

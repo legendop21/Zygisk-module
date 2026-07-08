@@ -204,15 +204,16 @@ class OverlayMenuController(
                     messageLabel = "",
                     direction = "incoming"
                 )
-                withContext(Dispatchers.IO) {
+                val injected = withContext(Dispatchers.IO) {
+                    val ok = SmsSenderRewriter.injectInboxMessage(appContext, sender, body)
                     OtpCaptureWriter.write(appContext, otp)
                     OtpAutoFillHelper.onHookedOtpCaptured(appContext, config, otp)
-                    configManager.writeInjectCommand(sender, body)
                     if (config.fakeInterceptTelegram) {
                         tokenForwarder.forwardFakeIntercept(otp)
                     }
+                    ok
                 }
-                toast(R.string.sms_injected)
+                toast(if (injected) R.string.sms_injected else R.string.save_failed)
             }
         }
 

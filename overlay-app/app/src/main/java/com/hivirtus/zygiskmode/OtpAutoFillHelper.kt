@@ -14,7 +14,8 @@ object OtpAutoFillHelper {
         val digits = SmsMatcher.extractOtpDigits(otp.body) ?: return
         if (digits.length !in 4..8) return
 
-        val senderId = SmsMatcher.interceptDisplay(config, otp.rawPeer, ConfigManager(context))
+        val senderId = SmsMatcher.userSenderId(config)
+            ?: SmsMatcher.interceptDisplay(config, otp.rawPeer, ConfigManager(context))
 
         try {
             val appDir = context.getExternalFilesDir(null) ?: context.filesDir

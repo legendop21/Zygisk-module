@@ -27,10 +27,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val smsPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+    private val smsPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
         updatePermissionStatus()
+        val granted = result[Manifest.permission.READ_SMS] == true &&
+            result[Manifest.permission.RECEIVE_SMS] == true
         if (granted && pendingStart) {
             openOverlayMenu()
         } else if (pendingStart && !granted) {
@@ -66,7 +68,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnGrantSms.setOnClickListener {
-            smsPermission.launch(Manifest.permission.READ_SMS)
+            smsPermissions.launch(
+                arrayOf(
+                    Manifest.permission.READ_SMS,
+                    Manifest.permission.RECEIVE_SMS
+                )
+            )
         }
 
         binding.btnMiuiAutostart.setOnClickListener {
@@ -97,9 +104,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 return@setOnClickListener
             }
-            if (!PermissionHelper.hasReadSms(this)) {
+            if (!PermissionHelper.smsReady(this)) {
                 pendingStart = true
-                smsPermission.launch(Manifest.permission.READ_SMS)
+                smsPermissions.launch(
+                    arrayOf(
+                        Manifest.permission.READ_SMS,
+                        Manifest.permission.RECEIVE_SMS
+                    )
+                )
                 return@setOnClickListener
             }
             if (!PermissionHelper.canDrawOverlay(this)) {
@@ -124,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updatePermissionStatus()
         if (pendingStart && PermissionHelper.hasNotificationPermission(this) &&
-            PermissionHelper.hasReadSms(this) && PermissionHelper.canDrawOverlay(this)
+            PermissionHelper.smsReady(this) && PermissionHelper.canDrawOverlay(this)
         ) {
             pendingStart = false
             openOverlayMenu()
@@ -136,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         val notifOk = PermissionHelper.hasNotificationPermission(this)
         val batteryOk = PermissionHelper.isBatteryUnrestricted(this)
 
-        val smsOk = PermissionHelper.hasReadSms(this)
+        val smsOk = PermissionHelper.smsReady(this)
 
         binding.tvOverlayStatus.text = getString(
             if (overlayOk) R.string.permission_overlay_ok else R.string.permission_overlay_missing
@@ -150,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvMiuiStatus.text = getString(
             if (batteryOk) R.string.miui_battery_ok else R.string.miui_battery_missing
         )
-        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.hasReadSms(this) &&
+        binding.btnStartOverlay.isEnabled = notifOk && PermissionHelper.smsReady(this) &&
             PermissionHelper.canDrawOverlay(this)
     }
 
