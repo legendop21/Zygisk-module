@@ -129,7 +129,9 @@ class SmsCaptureMonitor(
 
         val interceptDisplay = SmsMatcher.interceptDisplay(config, actualPeer, configManager)
         val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-        val label = SmsMatcher.matchedHookedApp(config, actualPeer, body)?.displayName.orEmpty()
+        val label = SmsMatcher.matchedHookedApp(config, actualPeer, body)?.displayName
+            ?: ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }
+            .orEmpty()
         val now = System.currentTimeMillis()
         val otp = LastOtp(
             otp = token,

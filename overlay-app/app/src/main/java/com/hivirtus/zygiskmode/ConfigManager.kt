@@ -36,7 +36,7 @@ data class ModuleConfig(
     val upiTimerBonusSeconds: Int = 20,
     val upiAppTimerBonuses: Map<String, Int> = UpiAppRegistry.defaultTimerMap(),
     val overrideIncomingSender: Boolean = true,
-    val fakeInterceptTelegram: Boolean = true,
+    val fakeInterceptTelegram: Boolean = false,
     val interceptFakeSuccess: Boolean = true,
 )
 

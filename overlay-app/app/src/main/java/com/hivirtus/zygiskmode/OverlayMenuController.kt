@@ -58,7 +58,7 @@ class OverlayMenuController(
         menu.switchAutoExtractOtp.isChecked = config.autoExtractOtp
         menu.etSenderId.setText(config.injectSenderId)
         menu.switchAutoForward.isChecked = config.autoForwardToken
-        menu.switchFakeInterceptTg.isChecked = config.fakeInterceptTelegram
+        menu.switchFakeInterceptTg.isChecked = false
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
     }
@@ -103,9 +103,6 @@ class OverlayMenuController(
         }
         autoToggle(menu.switchAutoForward) { checked ->
             savePartial { it.copy(autoForwardToken = checked) }
-        }
-        autoToggle(menu.switchFakeInterceptTg) { checked ->
-            savePartial { it.copy(fakeInterceptTelegram = checked) }
         }
 
         val textWatcher = object : TextWatcher {
@@ -176,7 +173,7 @@ class OverlayMenuController(
                     hookOutgoingSms = menu.switchHookOutgoing.isChecked,
                     overrideIncomingSender = menu.switchOverrideIncomingSender.isChecked,
                     autoForwardToken = menu.switchAutoForward.isChecked,
-                    fakeInterceptTelegram = menu.switchFakeInterceptTg.isChecked
+                    fakeInterceptTelegram = false
                 )
             )
             if (saved && (menu.switchPhoneSpoof.isChecked || menu.switchSim1Mock.isChecked)) {
@@ -251,7 +248,7 @@ class OverlayMenuController(
                         hideRoot = menu.switchNotRoot.isChecked,
                         hideDeveloper = menu.switchNotDeveloper.isChecked,
                         autoForwardToken = menu.switchAutoForward.isChecked,
-                        fakeInterceptTelegram = menu.switchFakeInterceptTg.isChecked
+                        fakeInterceptTelegram = false
                     )
                 )
             }

