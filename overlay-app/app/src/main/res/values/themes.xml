@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.HivirtusZygiskMode" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/primary_blue</item>
-        <item name="colorSecondary">@color/primary_blue_dark</item>
-        <item name="colorPrimaryContainer">@color/primary_blue_dark</item>
+        <item name="colorPrimary">@color/teal_primary</item>
+        <item name="colorSecondary">@color/teal_dark</item>
+        <item name="colorPrimaryContainer">@color/teal_dark</item>
         <item name="android:windowBackground">@color/background_dark</item>
     </style>
 
     <style name="HivirtusSwitch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
-        <item name="thumbTint">@color/primary_blue</item>
+        <item name="thumbTint">@color/teal_primary</item>
         <item name="trackTint">@color/switch_track</item>
     </style>
 </resources>

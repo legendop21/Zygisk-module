@@ -5,25 +5,55 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
 
+    <!-- Background circle -->
     <path
-        android:fillColor="#7B2CBF"
-        android:pathData="M256,16 C380,16 496,132 496,256 C496,380 380,496 256,496 C132,496 16,380 16,256 C16,132 132,16 256,16 Z" />
+        android:fillColor="#142824"
+        android:pathData="M256,8 C398,8 504,114 504,256 C504,398 398,504 256,504 C114,504 8,398 8,256 C8,114 114,8 256,8 Z" />
 
+    <!-- Wolf head — teal fur -->
     <path
-        android:fillColor="#FFD60A"
-        android:pathData="M256,48 C362,48 448,134 448,256 C448,378 362,464 256,464 C150,464 64,378 64,256 C64,134 150,48 256,48 Z"
-        android:strokeColor="#7B2CBF"
-        android:strokeWidth="6" />
+        android:fillColor="#3DBFAB"
+        android:pathData="M120,280 L140,160 L180,120 L220,100 L280,95 L340,110 L380,140 L400,180 L410,230 L400,290 L370,340 L320,370 L260,380 L200,370 L150,340 L120,280 Z" />
 
+    <!-- Jaw light fur -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M148,320 L148,192 L196,192 L196,248 L248,192 L308,192 L244,260 L312,320 L248,320 L204,276 L196,284 L196,320 Z" />
+        android:fillColor="#B8E8DF"
+        android:pathData="M160,300 L200,340 L260,355 L320,340 L360,300 L340,380 L260,400 L180,380 Z" />
 
+    <!-- Ear -->
     <path
-        android:fillColor="#FFD60A"
-        android:pathData="M320,192 L364,192 L392,248 L420,192 L464,192 L408,320 L376,320 L320,192 Z" />
+        android:fillColor="#2A8F82"
+        android:pathData="M150,140 L170,80 L210,110 L180,150 Z" />
 
+    <!-- Snout shadow -->
     <path
-        android:fillColor="#FFD60A"
-        android:pathData="M200,128 L312,128 L324,148 L188,148 Z" />
+        android:fillColor="#2A8F82"
+        android:pathData="M100,260 L130,240 L150,280 L130,310 Z" />
+
+    <!-- Eye yellow -->
+    <path
+        android:fillColor="#FFE066"
+        android:pathData="M210,200 m-18,0 a18,18 0 1,1 36,0 a18,18 0 1,1 -36,0" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M210,200 m-8,0 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0" />
+
+    <!-- Teeth -->
+    <path
+        android:fillColor="#F5F5F5"
+        android:pathData="M130,290 L145,310 L155,290 Z M155,292 L168,312 L178,292 Z M178,294 L192,314 L202,294 Z" />
+
+    <!-- Mouth red -->
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M125,285 L205,295 L125,300 Z" />
+
+    <!-- HIVIRTUS text bar -->
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M90,420 L422,420 L422,470 L90,470 Z" />
+    <path
+        android:fillColor="#3DBFAB"
+        android:pathData="M96,426 L416,426 L416,464 L96,464 Z" />
+
 </vector>

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hivirtus Zygisk Mode</string>
-    <string name="mod_menu_title">Zygisk Mod Menu</string>
-    <string name="main_description">Tap floating bubble se menu kholein. Root hide, SIM mock, SMS OTP — sab ek jagah.</string>
+    <string name="app_name">hivirtus zygisk</string>
+    <string name="mod_menu_title">Hivirtus Zygisk</string>
+    <string name="main_description">Wolf logo bubble tap karo — menu + saari UPI apps A-Z ek baar me</string>
     <string name="start_overlay">Start Floating Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
-    <string name="overlay_started">Menu started — blue MOD bubble screen pe dikhega, tap karo</string>
+    <string name="overlay_started">Menu khul gaya — UPI apps A-Z ready</string>
     <string name="overlay_failed">Menu start fail — dono permission allow karo</string>
     <string name="overlay_failed_detail">Menu start fail: %1$s</string>
     <string name="grant_notification_permission">Notification permission Allow karo</string>
@@ -17,15 +17,16 @@
     <string name="open_overlay_settings">Open Overlay Settings → Allow</string>
     <string name="open_notification_settings">Allow Notification Permission</string>
     <string name="overlay_stopped">Floating menu stopped</string>
-    <string name="overlay_running">Hivirtus Zygisk Mode running</string>
+    <string name="overlay_running">hivirtus zygisk running</string>
     <string name="grant_overlay_permission">Overlay permission grant karein</string>
-    <string name="notification_channel">Hivirtus Zygisk Mode</string>
+    <string name="notification_channel">hivirtus zygisk</string>
     <string name="close">Close</string>
     <string name="minimize">Minimize</string>
     <string name="tab_system">SYSTEM</string>
     <string name="tab_upi">UPI</string>
     <string name="tab_message">MESSAGE</string>
-    <string name="tab_telegram">MORE</string>
+    <string name="tab_telegram">TG</string>
+    <string name="upi_apps_az">UPI Apps A → Z (Select All)</string>
     <string name="upi_hook_section">UPI Apps Hook (Select Apps)</string>
     <string name="hook_upi_verification">Hook SMS Verification (All UPI)</string>
     <string name="select_all_upi">Select All Apps</string>
@@ -69,16 +70,16 @@
     <string name="config_saved">Config saved</string>
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
-    <string name="footer_text">Zygisk Injected. Developed for Android.</string>
+    <string name="footer_text">Hivirtus Zygisk Injected. Developed for Android.</string>
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>
     <string name="last_otp_format">Last OTP: %1$s from %2$s</string>
-    <string name="tap_bubble">MOD</string>
-    <string name="tap_bubble_hint">Tap blue MOD bubble to open menu</string>
+    <string name="tap_bubble">HV</string>
+    <string name="tap_bubble_hint">Tap wolf bubble — menu + UPI apps A-Z</string>
     <string name="vip_subtitle">VIP License Required</string>
     <string name="enter_license_key">Telegram se mili VIP key enter karein:</string>
     <string name="activate_vip">Activate VIP</string>
     <string name="license_invalid">Invalid key — sirf Telegram se valid key chalegi</string>
-    <string name="license_activated">VIP activated — Hivirtus Zygisk Mode unlocked</string>
+    <string name="license_activated">VIP activated — hivirtus zygisk unlocked</string>
     <string name="license_hint">Key format: HIVIRTUS-XXXX-XXXX-XXXX\n@hivirtus @liqdy se key lo</string>
     <string name="license_required">VIP license required — app band ho jayega</string>
     <string name="backup_section">Unlimited Device Backup</string>

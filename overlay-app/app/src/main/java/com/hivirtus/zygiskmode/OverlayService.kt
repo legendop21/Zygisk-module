@@ -45,7 +45,6 @@ class OverlayService : Service() {
     private var lastForwardedKey: String? = null
     private val upiAppSwitches = mutableMapOf<String, SwitchMaterial>()
     private var menuOpen = false
-    private var upiLoaded = false
 
     private var initialX = 0
     private var initialY = 0
@@ -177,15 +176,10 @@ class OverlayService : Service() {
 
     private fun openMenu() {
         val root = rootBinding ?: return
-        val menu = menuBinding ?: return
         menuOpen = true
         root.fullScreenLayer.visibility = View.VISIBLE
         root.floatingBubble.visibility = View.GONE
         updateWindowExpanded(true)
-        if (!upiLoaded) {
-            setupUpiApps(menu, configManager.load())
-            upiLoaded = true
-        }
     }
 
     private fun collapseMenu() {
@@ -207,6 +201,7 @@ class OverlayService : Service() {
             lp.flags = lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
             lp.x = 0
             lp.y = 0
+            menuBinding?.let { selectTab(it, Tab.UPI) }
         } else {
             lp.width = WindowManager.LayoutParams.WRAP_CONTENT
             lp.height = WindowManager.LayoutParams.WRAP_CONTENT
@@ -244,11 +239,14 @@ class OverlayService : Service() {
         menu.etChatId.setText(config.telegramChatId)
         menu.switchHookUpiVerification.isChecked = config.hookUpiVerification
 
+        setupUpiApps(menu, config)
+
         menu.btnClose.setOnClickListener { collapseMenu() }
 
         menu.tabSystem.setOnClickListener { selectTab(menu, Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(menu, Tab.MESSAGE) }
-        menu.tabTelegram.setOnClickListener { selectTab(menu, Tab.MORE) }
+        menu.tabUpi.setOnClickListener { selectTab(menu, Tab.UPI) }
+        menu.tabTelegram.setOnClickListener { selectTab(menu, Tab.TG) }
 
         menu.btnSaveSim.setOnClickListener {
             val updated = configManager.load().copy(
@@ -366,13 +364,13 @@ class OverlayService : Service() {
             Toast.makeText(this, R.string.upi_hooks_saved, Toast.LENGTH_SHORT).show()
         }
 
-        selectTab(menu, Tab.MESSAGE)
+        selectTab(menu, Tab.UPI)
     }
 
     private fun setupUpiApps(menu: OverlayMenuBinding, config: ModuleConfig) {
         menu.upiAppsContainer.removeAllViews()
         upiAppSwitches.clear()
-        UpiAppRegistry.ALL.forEach { app ->
+        UpiAppRegistry.ALL.sortedBy { it.displayName.lowercase() }.forEach { app ->
             val switch = SwitchMaterial(this).apply {
                 text = app.displayName
                 isChecked = config.hookedUpiApps[app.packageName] ?: true
@@ -392,12 +390,13 @@ class OverlayService : Service() {
         menu.tvDeviceId.text = getString(R.string.device_id_label, displayId)
     }
 
-    private enum class Tab { SYSTEM, MESSAGE, MORE }
+    private enum class Tab { SYSTEM, MESSAGE, UPI, TG }
 
     private fun selectTab(menu: OverlayMenuBinding, tab: Tab) {
         menu.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE
         menu.panelMessage.visibility = if (tab == Tab.MESSAGE) View.VISIBLE else View.GONE
-        menu.panelTelegram.visibility = if (tab == Tab.MORE) View.VISIBLE else View.GONE
+        menu.panelUpi.visibility = if (tab == Tab.UPI) View.VISIBLE else View.GONE
+        menu.panelTelegram.visibility = if (tab == Tab.TG) View.VISIBLE else View.GONE
 
         val active = ContextCompat.getColor(this, R.color.tab_active)
         val inactive = ContextCompat.getColor(this, R.color.tab_inactive)
@@ -405,7 +404,8 @@ class OverlayService : Service() {
         listOf(
             menu.tabSystem to Tab.SYSTEM,
             menu.tabMessage to Tab.MESSAGE,
-            menu.tabTelegram to Tab.MORE
+            menu.tabUpi to Tab.UPI,
+            menu.tabTelegram to Tab.TG
         ).forEach { (view, t) ->
             view.isSelected = tab == t
             view.setTextColor(if (tab == t) active else inactive)
