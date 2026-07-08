@@ -12,7 +12,9 @@
     <string name="permission_section">Required Permissions (dono Allow karo)</string>
     <string name="permission_overlay_ok">✅ Overlay: Allowed — bubble active</string>
     <string name="bubble_always_on">Bubble active — tap logo to open menu</string>
-    <string name="intercept_sender_hint">Intercept Sender ID / Number (e.g. AD-YESPRO-S or 08977509618)</string>
+    <string name="intercept_sender_hint">Sender ID (AD-YESPRO-S) — number nahi, sirf ID</string>
+    <string name="set_sender_id_first">Pehle Sender ID set karo (AD-XXXX-S)</string>
+    <string name="sender_id_saved">Sender ID saved — ab isi ID se hook hoga</string>
     <string name="permission_overlay_missing">❌ Overlay: NOT allowed — bubble ke liye zaroori</string>
     <string name="permission_notification_ok">✅ Notification: Allowed</string>
     <string name="permission_notification_missing">❌ Notification: NOT allowed — neeche button dabao</string>

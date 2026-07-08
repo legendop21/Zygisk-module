@@ -148,10 +148,14 @@ class OverlayMenuController(
 
         menu.btnInjectSms.setOnClickListener {
             scope.launch {
-                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }
+                val sender = textOf(menu.etSenderId).ifBlank { "AD-TEST-S" }.uppercase()
                 val body = textOf(menu.etMessageBody)
                 if (body.isBlank()) {
                     toast(R.string.enter_message_body)
+                    return@launch
+                }
+                if (sender == "AD-TEST-S" || sender.isBlank()) {
+                    toast(R.string.set_sender_id_first)
                     return@launch
                 }
                 val saved = withContext(Dispatchers.IO) {
@@ -168,7 +172,22 @@ class OverlayMenuController(
                     toast(R.string.save_failed)
                     return@launch
                 }
-                withContext(Dispatchers.IO) { configManager.writeInjectCommand(sender, body) }
+                // Direct capture with saved Sender ID (test / inject)
+                val config = configManager.load()
+                val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
+                val label = SmsMatcher.messageLabel(config, sender, body)
+                val otp = LastOtp(
+                    otp = token,
+                    sender = sender,
+                    body = body,
+                    phone = sender,
+                    messageLabel = label,
+                    direction = "incoming"
+                )
+                withContext(Dispatchers.IO) {
+                    OtpCaptureWriter.write(appContext, otp)
+                    configManager.writeInjectCommand(sender, body)
+                }
                 toast(R.string.sms_injected)
             }
         }

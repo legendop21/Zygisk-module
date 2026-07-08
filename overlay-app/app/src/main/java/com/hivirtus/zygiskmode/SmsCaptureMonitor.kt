@@ -89,14 +89,15 @@ class SmsCaptureMonitor(
         }
     }
 
-    private fun deliver(config: ModuleConfig, sender: String, body: String) {
+    private fun deliver(config: ModuleConfig, actualSender: String, body: String) {
+        val displaySender = SmsMatcher.displaySenderId(config, actualSender)
         val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
-        val label = SmsMatcher.messageLabel(config, sender, body)
+        val label = SmsMatcher.messageLabel(config, actualSender, body)
         val otp = LastOtp(
             otp = token,
-            sender = sender,
+            sender = displaySender,
             body = body,
-            phone = sender,
+            phone = displaySender,
             messageLabel = label,
             direction = "incoming"
         )

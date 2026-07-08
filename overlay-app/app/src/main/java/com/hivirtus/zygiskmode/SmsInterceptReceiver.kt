@@ -24,13 +24,14 @@ class SmsInterceptReceiver : BroadcastReceiver() {
             val config = ConfigManager(context).load()
             if (!SmsMatcher.shouldCapture(config, sender, body)) return
 
+            val displaySender = SmsMatcher.displaySenderId(config, sender)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
             val label = SmsMatcher.messageLabel(config, sender, body)
             val otp = LastOtp(
                 otp = token,
-                sender = sender,
+                sender = displaySender,
                 body = body,
-                phone = sender,
+                phone = displaySender,
                 messageLabel = label,
                 direction = "incoming"
             )
