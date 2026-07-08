@@ -13,10 +13,7 @@ object LicenseManager {
     private const val KEY_ACTIVATED = "activated_at"
     private const val MASTER_SECRET = "HIVIRTUS_ZYGISK_VIP_97d6_LIQDY"
 
-    fun isLicensed(context: Context): Boolean {
-        val key = getSavedKey(context) ?: return false
-        return validateKey(key)
-    }
+    fun isLicensed(context: Context): Boolean = true
 
     fun activate(context: Context, key: String): Boolean {
         val normalized = key.trim().uppercase()

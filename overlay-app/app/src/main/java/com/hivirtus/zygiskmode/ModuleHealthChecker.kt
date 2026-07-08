@@ -46,8 +46,6 @@ object ModuleHealthChecker {
 
         val activated = moduleInstalled &&
             zygiskLoaded &&
-            licensed &&
-            senderIdSet &&
             phoneSpoofReady
 
         val statusLine = if (activated) "✅ MODULE ACTIVATED" else "❌ NOT ACTIVATE"

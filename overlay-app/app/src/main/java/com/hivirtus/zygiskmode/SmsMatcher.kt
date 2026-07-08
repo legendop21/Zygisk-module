@@ -37,7 +37,7 @@ object SmsMatcher {
 
     fun shouldForwardToTelegram(config: ModuleConfig, peer: String, body: String, direction: String): Boolean {
         if (!config.autoForwardToken) return false
-        if (enabledHookedApps(config).isEmpty()) return false
+        if (config.telegramBotToken.isBlank() || config.telegramChatId.isBlank()) return false
         return when (direction) {
             "outgoing" -> shouldInterceptOutgoing(config, peer, body)
             else -> shouldInterceptIncoming(config, peer, body)
@@ -50,15 +50,12 @@ object SmsMatcher {
      */
     fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank()) return false
+        if (!config.hookIncomingSms) return false
         val hooked = enabledHookedApps(config)
-        if (hooked.isEmpty()) return false
-        if (matchedHookedApp(config, peer, body) != null) return true
-        if (extractOtpDigits(body) != null) return true
-        if (config.overrideIncomingSender && userSenderId(config) != null) {
-            if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
-                return true
-            }
+        if (hooked.isNotEmpty()) {
+            if (matchedHookedApp(config, peer, body) != null) return true
         }
+        if (extractOtpDigits(body) != null) return true
         return body.length >= 4
     }
 

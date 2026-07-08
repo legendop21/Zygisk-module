@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
-    <string name="mod_menu_title">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
+    <string name="mod_menu_title">Virtus Menu</string>
     <string name="menu_subtitle"></string>
-    <string name="main_description">Start dabao — Hivirtus Zygisk Mode Menu turant khulega (UPI apps A-Z ready)</string>
-    <string name="start_overlay">Start Zygisk Hooks</string>
+    <string name="main_description">Start dabao — bubble menu khulega. Koi UPI app kholo, auto hook ON.</string>
+    <string name="tab_message">MESSAGES</string>
+    <string name="system_tab_hint">System and environment parameters.</string>
+    <string name="message_tab_hint">SMS hook toggles — UPI app kholo to auto hook.</string>
+    <string name="telegram_tab_hint">Configure Telegram bot credentials to forward blocked outgoing SMS automatically.</string>
+    <string name="telegram_token_hint">e.g. 123456789:ABCdefGhl…</string>
+    <string name="telegram_chat_hint">e.g. 987654321 or -100123456</string>
+    <string name="verify_and_submit">Verify &amp; Submit</string>
+    <string name="show_app_info">Show App Info</string>
+    <string name="telegram_fields_required">Bot Token aur Chat ID dono daalo</string>
+    <string name="telegram_verified">✅ Telegram connected</string>
+    <string name="telegram_verify_failed">Telegram fail — token/chat ID check karo</string>
+    <string name="app_info_failed">App info nahi khuli</string>
+    <string name="hook_status_both_on">Hook SMS: ON</string>
+    <string name="start_overlay">Start Menu</string>
     <string name="stop_overlay">Stop Floating Menu</string>
     <string name="overlay_started">Menu khul gaya — band karoge to side bubble dikhega</string>
     <string name="overlay_failed">Menu start fail — dono permission allow karo</string>
@@ -37,7 +50,6 @@
     <string name="minimize">Minimize</string>
     <string name="tab_system">SYSTEM</string>
     <string name="tab_upi">UPI</string>
-    <string name="tab_message">MESSAGE</string>
     <string name="tab_sms">SMS</string>
     <string name="tab_telegram">TELEGRAM</string>
     <string name="upi_apps_az">UPI Apps A → Z (Select All)</string>
@@ -55,7 +67,7 @@
     <string name="enable_sim2_mock">Enable SIM 2 Mocking</string>
     <string name="mock_country_iso">Mock Country ISO (2-letter):</string>
     <string name="i_am_not_developer">I am not Developer</string>
-    <string name="i_am_not_root">I am no root</string>
+    <string name="i_am_not_root">I am not root</string>
     <string name="root_hide_section">Universal Root Hide (All Apps)</string>
     <string name="detected_root">Detected Root: %1$s</string>
     <string name="hide_magisk">Hide Magisk</string>

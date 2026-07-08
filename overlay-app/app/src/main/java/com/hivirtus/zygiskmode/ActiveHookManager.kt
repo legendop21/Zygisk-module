@@ -90,7 +90,9 @@ object ActiveHookManager {
     }
 
     fun isSelectedHooked(config: ModuleConfig, pkg: String): Boolean {
-        return pkg.isNotBlank() && config.hookedUpiApps[pkg] == true
+        if (pkg.isBlank()) return false
+        if (config.hookedUpiApps[pkg] == true) return true
+        return UpiAppRegistry.findByPackage(pkg) != null
     }
 
     fun persistAllSelected(packages: Collection<String>) {

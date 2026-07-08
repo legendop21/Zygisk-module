@@ -21,62 +21,17 @@
             android:src="@drawable/ic_close"
             app:tint="@color/gold_primary" />
 
-        <LinearLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
+            android:gravity="center"
             android:paddingEnd="28dp"
-            android:paddingStart="28dp">
-
-            <ImageView
-                android:id="@+id/ivMenuLogo"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:contentDescription="@string/app_name"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_hivirtus_logo" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/mod_menu_title"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+            android:paddingStart="28dp"
+            android:text="@string/mod_menu_title"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold" />
     </FrameLayout>
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStartHook"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:background="@drawable/button_gradient"
-        android:text="@string/start_hook_foreground"
-        android:textColor="@color/button_text_on_gold"
-        app:backgroundTint="@null" />
-
-    <TextView
-        android:id="@+id/tvHookStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:gravity="center"
-        android:text="@string/hook_status_idle"
-        android:textColor="@color/text_hint"
-        android:textSize="11sp" />
-
-    <TextView
-        android:id="@+id/tvActiveHook"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:gravity="center"
-        android:text="@string/active_hook_none"
-        android:textColor="@color/gold_primary"
-        android:textSize="11sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -91,23 +46,10 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="8dp"
+            android:padding="10dp"
             android:text="@string/tab_system"
             android:textColor="@color/tab_active"
-            android:textSize="10sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tabUpi"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/tab_selector"
-            android:gravity="center"
-            android:padding="8dp"
-            android:text="@string/tab_upi"
-            android:textColor="@color/tab_inactive"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
         <TextView
@@ -117,10 +59,10 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="8dp"
-            android:text="@string/tab_sms"
+            android:padding="10dp"
+            android:text="@string/tab_message"
             android:textColor="@color/tab_inactive"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
         <TextView
@@ -130,10 +72,10 @@
             android:layout_weight="1"
             android:background="@drawable/tab_selector"
             android:gravity="center"
-            android:padding="8dp"
+            android:padding="10dp"
             android:text="@string/tab_telegram"
             android:textColor="@color/tab_inactive"
-            android:textSize="10sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -147,8 +89,8 @@
         android:id="@+id/tabContentScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="380dp"
         android:fillViewport="true"
+        android:maxHeight="340dp"
         android:scrollbars="vertical">
 
         <FrameLayout
@@ -160,52 +102,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingTop="12dp">
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchSim1Mock"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/enable_sim1_mock"
-                    android:textColor="@color/text_primary" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchPhoneSpoof"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/enable_phone_spoof"
-                    android:textColor="@color/text_primary" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchAutoHook"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/auto_hook_open_app"
-                    android:textColor="@color/text_primary" />
+                android:paddingTop="14dp">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/mock_phone_sim1"
+                    android:text="@string/system_tab_hint"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
-
-                <EditText
-                    android:id="@+id/etPhoneSim1"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="+919520752078"
-                    android:inputType="phone"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchNotDeveloper"
@@ -221,103 +125,18 @@
                     style="@style/HivirtusSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
                     android:text="@string/i_am_not_root"
                     android:textColor="@color/text_primary" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/lsposed_compat_hint"
-                    android:textColor="@color/text_hint"
-                    android:textSize="10sp" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/panelUpi"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingTop="12dp"
-                android:visibility="gone">
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchHookUpiVerification"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/hook_upi_verification"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/upi_framework_scope_hint"
-                    android:textColor="@color/text_hint"
-                    android:textSize="10sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/upi_hook_section"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSelectAllUpi"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:text="@string/select_all_upi"
-                        android:textColor="@color/gold_primary"
-                        android:textSize="10sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnDeselectAllUpi"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/deselect_all_upi"
-                        android:textColor="@color/gold_primary"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvUpiApps"
-                    android:layout_width="match_parent"
-                    android:layout_height="220dp"
-                    android:layout_marginTop="6dp"
-                    android:nestedScrollingEnabled="true"
-                    android:overScrollMode="ifContentScrolls" />
-
-                <TextView
-                    android:id="@+id/tvUpiSelectedCount"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="@color/text_hint"
-                    android:textSize="10sp" />
-
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSaveUpiHooks"
+                    android:id="@+id/btnShowAppInfo"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/button_gradient"
-                    android:text="@string/save_upi_hooks"
-                    android:textColor="@color/button_text_on_gold"
-                    app:backgroundTint="@null" />
+                    android:layout_marginTop="16dp"
+                    android:text="@string/show_app_info"
+                    android:textColor="@color/text_primary"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
             </LinearLayout>
 
             <LinearLayout
@@ -325,14 +144,22 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingTop="12dp"
+                android:paddingTop="14dp"
                 android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/message_tab_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchHookIncoming"
                     style="@style/HivirtusSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
                     android:text="@string/hook_incoming_sms"
                     android:textColor="@color/text_primary" />
 
@@ -344,91 +171,6 @@
                     android:layout_marginTop="4dp"
                     android:text="@string/hook_outgoing_sms"
                     android:textColor="@color/text_primary" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchOverrideIncomingSender"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/override_incoming_sender"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/sender_id"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
-                <EditText
-                    android:id="@+id/etSenderId"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="AX-AIRBNK-S"
-                    android:inputType="textCapCharacters"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/sender_id_notification_hint"
-                    android:textColor="@color/text_hint"
-                    android:textSize="10sp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchInterceptFakeSuccess"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/intercept_fake_success"
-                    android:textColor="@color/text_primary" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/message_body"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
-                <EditText
-                    android:id="@+id/etMessageBody"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:gravity="top"
-                    android:hint="@string/message_body_hint_short"
-                    android:inputType="textMultiLine"
-                    android:minLines="2"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnOpenSendSmsFloat"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/button_gradient"
-                    android:text="@string/open_send_sms_float"
-                    android:textColor="@color/button_text_on_gold"
-                    app:backgroundTint="@null" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnInjectLocalSms"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/inject_local_sms"
-                    android:textColor="@color/gold_primary"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
             </LinearLayout>
 
             <LinearLayout
@@ -436,17 +178,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingTop="12dp"
+                android:paddingTop="14dp"
                 android:visibility="gone">
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchAutoForward"
-                    style="@style/HivirtusSwitch"
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/auto_forward_token"
-                    android:textColor="@color/text_primary" />
+                    android:text="@string/telegram_tab_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -461,7 +201,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/input_background"
-                    android:hint="123456789:ABCDefgh..."
+                    android:hint="@string/telegram_token_hint"
                     android:inputType="textPassword"
                     android:padding="12dp"
                     android:textColor="@color/text_primary"
@@ -480,91 +220,29 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/input_background"
-                    android:hint="-1001234567890"
+                    android:hint="@string/telegram_chat_hint"
                     android:inputType="numberSigned"
                     android:padding="12dp"
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_hint" />
-            </LinearLayout>
 
-            <!-- hidden config stubs -->
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchHideMagisk"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchHideKernelSu"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchHideApatch"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchHideSukisu"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchHideAllRootApps"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchFakeInterceptTg"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchAutoExtractOtp"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/switchSim2Mock"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <EditText
-                android:id="@+id/etCountryIso"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <EditText
-                android:id="@+id/etPhoneSim2"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <TextView
-                android:id="@+id/tvDeviceId"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <TextView
-                android:id="@+id/tvRootType"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <TextView
-                android:id="@+id/tvLastOtp"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
-            <ImageButton
-                android:id="@+id/btnMinimize"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVerifyTelegram"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/button_gradient"
+                    android:text="@string/verify_and_submit"
+                    android:textColor="@color/button_text_on_gold"
+                    app:backgroundTint="@null" />
+            </LinearLayout>
         </FrameLayout>
     </ScrollView>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:gravity="center"
         android:text="@string/dev_credit_footer"
         android:textColor="@color/text_hint"

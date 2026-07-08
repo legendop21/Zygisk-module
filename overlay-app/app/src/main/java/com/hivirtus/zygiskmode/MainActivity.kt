@@ -50,12 +50,6 @@ class MainActivity : AppCompatActivity() {
 
         if (ModuleGate.blockIfNeeded(this)) return
 
-        if (!LicenseManager.isLicensed(this)) {
-            startActivity(Intent(this, LicenseActivity::class.java))
-            finish()
-            return
-        }
-
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

@@ -45,7 +45,7 @@
             android:theme="@style/Theme.HivirtusZygiskMode" />
 
         <activity
-            android:name=".LicenseActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.HivirtusZygiskMode">
             <intent-filter>
@@ -55,7 +55,7 @@
         </activity>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".LicenseActivity"
             android:exported="false"
             android:theme="@style/Theme.HivirtusZygiskMode" />
 

@@ -64,12 +64,6 @@ class OverlayService : Service() {
             }
         }
 
-        if (!LicenseManager.isLicensed(this)) {
-            Toast.makeText(this, R.string.license_required, Toast.LENGTH_SHORT).show()
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
         if (!ModuleGate.isModuleFlashed(this)) {
             stopSelf()
             return START_NOT_STICKY

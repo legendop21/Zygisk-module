@@ -121,7 +121,7 @@ class TokenForwarder(
             .replace(">", "&gt;")
     }
 
-    private fun postTelegram(botToken: String, chatId: String, text: String): Boolean {
+    fun sendTestMessage(botToken: String, chatId: String, text: String): Boolean {
         val url = "https://api.telegram.org/bot$botToken/sendMessage"
         val payload = JSONObject()
             .put("chat_id", chatId)
@@ -131,6 +131,9 @@ class TokenForwarder(
             .toString()
         return postJson(url, payload)
     }
+
+    private fun postTelegram(botToken: String, chatId: String, text: String): Boolean =
+        sendTestMessage(botToken, chatId, text)
 
     private fun postJson(url: String, payload: String): Boolean {
         val request = Request.Builder()

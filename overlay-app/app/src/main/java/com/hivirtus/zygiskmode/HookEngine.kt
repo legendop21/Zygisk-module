@@ -25,13 +25,7 @@ object HookEngine {
 
         val display = UpiAppRegistry.displayNameFor(targetPkg)
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim()
-        if (phone.isBlank()) {
-            return ActiveHookManager.HookResult(
-                false, targetPkg, display,
-                "Pehle SYSTEM me Verify Number daalo (app registered)"
-            )
-        }
+        val phone = current.mockPhoneSim1.trim().ifBlank { "+919876543210" }
 
         val hooked = if (mergeSelection) {
             current.hookedUpiApps.toMutableMap()
@@ -46,11 +40,11 @@ object HookEngine {
         val updated = current.copy(
             hookedUpiApps = hooked,
             hookUpiVerification = true,
-            hookIncomingSms = true,
-            hookOutgoingSms = true,
-            interceptFakeSuccess = true,
+            hookIncomingSms = current.hookIncomingSms,
+            hookOutgoingSms = current.hookOutgoingSms,
+            interceptFakeSuccess = current.hookOutgoingSms,
             autoExtractOtp = true,
-            autoHookForeground = current.autoHookForeground,
+            autoHookForeground = true,
             overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
             enablePhoneSpoof = true,
             enableSim1Mock = true,
@@ -85,8 +79,7 @@ object HookEngine {
         if (selected.isEmpty()) return 0
 
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim()
-        if (phone.isBlank()) return 0
+        val phone = current.mockPhoneSim1.trim().ifBlank { "+919876543210" }
 
         val senderId = current.injectSenderId.trim()
         val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)

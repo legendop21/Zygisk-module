@@ -80,16 +80,10 @@ class HookStatusBarManager(private val context: Context) {
     private fun buildStatusText(config: ModuleConfig): String {
         val incoming = config.hookIncomingSms
         val outgoing = config.hookOutgoingSms
-        val sender = config.overrideIncomingSender && !SmsMatcher.userSenderId(config).isNullOrBlank()
         return when {
-            incoming && outgoing && sender ->
-                context.getString(R.string.hook_status_all_on)
-            incoming && sender ->
-                context.getString(R.string.hook_status_incoming_sender_on)
-            incoming ->
-                context.getString(R.string.hook_status_incoming_on)
-            outgoing ->
-                context.getString(R.string.hook_status_outgoing_on)
+            incoming && outgoing -> context.getString(R.string.hook_status_both_on)
+            incoming -> context.getString(R.string.hook_status_incoming_on)
+            outgoing -> context.getString(R.string.hook_status_outgoing_on)
             else -> context.getString(R.string.hook_status_incoming_on)
         }
     }
