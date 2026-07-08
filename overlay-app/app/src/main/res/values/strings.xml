@@ -84,6 +84,9 @@
     <string name="root_hide_saved">Root hide saved — stealth active</string>
     <string name="backup_created_path">Backup saved: %1$s</string>
     <string name="bubble_need_overlay">Side bubble ke liye Overlay permission ON karo</string>
+    <string name="save_failed">Save fail — dubara try karo</string>
+    <string name="action_failed">Error: %1$s</string>
+    <string name="inject_queued_local">SMS saved — module sync ho raha hai</string>
     <string name="show_bubble">Show Bubble</string>
     <string name="minimize_to_bubble">Menu side bubble pe chala gaya — logo tap karo</string>
     <string name="no_otp_yet">Abhi tak koi OTP capture nahi hua</string>

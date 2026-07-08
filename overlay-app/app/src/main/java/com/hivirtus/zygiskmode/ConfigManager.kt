@@ -45,6 +45,15 @@ data class LastOtp(
 
 class ConfigManager(private val context: Context) {
 
+    private val appDir: File
+        get() = context.getExternalFilesDir(null) ?: context.filesDir
+
+    private val appConfigFile: File
+        get() = File(appDir, APP_CONFIG_NAME)
+
+    private val appInjectFile: File
+        get() = File(appDir, APP_INJECT_NAME)
+
     private val runtimeConfig = File(RUNTIME_CONFIG)
     private val moduleConfig = File(MODULE_CONFIG)
     private val injectCommand = File(INJECT_COMMAND)
@@ -54,11 +63,85 @@ class ConfigManager(private val context: Context) {
 
     fun load(): ModuleConfig {
         val file = when {
+            appConfigFile.exists() -> appConfigFile
             runtimeConfig.exists() -> runtimeConfig
             moduleConfig.exists() -> moduleConfig
             else -> return ModuleConfig()
         }
+        return parseConfigFile(file)
+    }
 
+    fun save(config: ModuleConfig): Boolean {
+        return try {
+            val payload = buildJson(config).toString(2)
+            appDir.mkdirs()
+            appConfigFile.writeText(payload)
+            pushPayload(appConfigFile.absolutePath, payload)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun update(transform: (ModuleConfig) -> ModuleConfig): Boolean {
+        return save(transform(load()))
+    }
+
+    fun writeInjectCommand(sender: String, body: String): Boolean {
+        return try {
+            val safeSender = sender.replace("|", "-").trim().ifBlank { "AD-TEST-S" }
+            val safeBody = body.replace("\n", " ").trim()
+            val content = "INJECT|$safeSender|$safeBody"
+            appDir.mkdirs()
+            appInjectFile.writeText(content)
+            try {
+                injectCommand.parentFile?.mkdirs()
+                injectCommand.writeText(content)
+            } catch (_: Exception) {
+                runSu(
+                    "cp '${appInjectFile.absolutePath}' '$INJECT_COMMAND' && chmod 644 '$INJECT_COMMAND'"
+                )
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun readRootType(): String {
+        return try {
+            rootTypeFile.readText().trim().ifBlank { "Unknown" }
+        } catch (_: Exception) {
+            "Unknown"
+        }
+    }
+
+    fun readSpoofPhone(): String {
+        return try {
+            spoofPhoneFile.readText().trim()
+        } catch (_: Exception) {
+            load().mockPhoneSim1
+        }
+    }
+
+    fun readLastOtp(): LastOtp? {
+        if (!lastOtpFile.exists()) return null
+        return try {
+            val json = JSONObject(lastOtpFile.readText())
+            LastOtp(
+                otp = json.optString("otp", ""),
+                sender = json.optString("sender", ""),
+                body = json.optString("body", ""),
+                phone = json.optString("phone", readSpoofPhone()),
+                messageLabel = json.optString("message_label", ""),
+                direction = json.optString("direction", "incoming")
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseConfigFile(file: File): ModuleConfig {
         return try {
             val json = JSONObject(file.readText())
             ModuleConfig(
@@ -105,11 +188,11 @@ class ConfigManager(private val context: Context) {
         return result
     }
 
-    fun save(config: ModuleConfig) {
+    private fun buildJson(config: ModuleConfig): JSONObject {
         val hookedJson = JSONObject()
         config.hookedUpiApps.forEach { (pkg, enabled) -> hookedJson.put(pkg, enabled) }
 
-        val json = JSONObject().apply {
+        return JSONObject().apply {
             put("hide_root", config.hideRoot)
             put("hide_developer", config.hideDeveloper)
             put("hide_magisk", config.hideMagisk)
@@ -139,58 +222,41 @@ class ConfigManager(private val context: Context) {
             put("inject_message_body", config.injectMessageBody)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }
+    }
 
-        runtimeConfig.parentFile?.mkdirs()
-        runtimeConfig.writeText(json.toString(2))
-        moduleConfig.parentFile?.mkdirs()
+    private fun pushPayload(localPath: String, payload: String) {
         try {
-            moduleConfig.writeText(json.toString(2))
-        } catch (_: Exception) {}
-    }
-
-    fun update(transform: (ModuleConfig) -> ModuleConfig) {
-        save(transform(load()))
-    }
-
-    fun writeInjectCommand(sender: String, body: String) {
-        injectCommand.parentFile?.mkdirs()
-        injectCommand.writeText("INJECT|$sender|$body")
-    }
-
-    fun readRootType(): String {
-        return try {
-            rootTypeFile.readText().trim().ifBlank { "Unknown" }
+            runtimeConfig.parentFile?.mkdirs()
+            runtimeConfig.writeText(payload)
         } catch (_: Exception) {
-            "Unknown"
+            runSu("cp '$localPath' '$RUNTIME_CONFIG' && chmod 644 '$RUNTIME_CONFIG'")
+        }
+        try {
+            moduleConfig.parentFile?.mkdirs()
+            moduleConfig.writeText(payload)
+        } catch (_: Exception) {
+            runSu("cp '$localPath' '$MODULE_CONFIG' && chmod 644 '$MODULE_CONFIG'")
         }
     }
 
-    fun readSpoofPhone(): String {
-        return try {
-            spoofPhoneFile.readText().trim()
-        } catch (_: Exception) {
-            load().mockPhoneSim1
+    private fun runSu(command: String): Boolean {
+        val shells = listOf(
+            arrayOf("su", "-c", command),
+            arrayOf("ksud", "shell", command),
+            arrayOf("/data/adb/ksu/bin/ksud", "shell", command)
+        )
+        for (cmd in shells) {
+            try {
+                val process = Runtime.getRuntime().exec(cmd)
+                if (process.waitFor() == 0) return true
+            } catch (_: Exception) {}
         }
-    }
-
-    fun readLastOtp(): LastOtp? {
-        if (!lastOtpFile.exists()) return null
-        return try {
-            val json = JSONObject(lastOtpFile.readText())
-            LastOtp(
-                otp = json.optString("otp", ""),
-                sender = json.optString("sender", ""),
-                body = json.optString("body", ""),
-                phone = json.optString("phone", readSpoofPhone()),
-                messageLabel = json.optString("message_label", ""),
-                direction = json.optString("direction", "incoming")
-            )
-        } catch (_: Exception) {
-            null
-        }
+        return false
     }
 
     companion object {
+        const val APP_CONFIG_NAME = "hivirtus_zygisk_mode_config.json"
+        const val APP_INJECT_NAME = "hivirtus_inject.cmd"
         private const val RUNTIME_CONFIG = "/data/local/tmp/hivirtus_zygisk_mode_config.json"
         private const val MODULE_CONFIG = "/data/adb/modules/hivirtus_zygisk_mode/config.json"
         private const val INJECT_COMMAND = "/data/local/tmp/hivirtus_inject.cmd"
