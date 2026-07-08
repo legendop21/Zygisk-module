@@ -32,6 +32,7 @@ std::string g_package;
 
 int g_active_tab = 0;
 bool g_menu_open = true;
+bool g_overlay_attached = false;
 
 jobject g_sw_hide_dev = nullptr;
 jobject g_sw_hide_root = nullptr;
@@ -317,18 +318,40 @@ void toggle_menu(JNIEnv* env) {
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
 }
 
-jobject get_content_parent(JNIEnv* env, jobject activity) {
+jobject get_decor(JNIEnv* env, jobject activity) {
     jclass at = env->FindClass("android/app/Activity");
-    const jint content_id = 0x01020002;  // android.R.id.content
-    jobject content = env->CallObjectMethod(activity, env->GetMethodID(at, "findViewById", "(I)Landroid/view/View;"),
-                                            content_id);
-    if (!content || env->ExceptionCheck()) {
+    jobject win = env->CallObjectMethod(activity, env->GetMethodID(at, "getWindow", "()Landroid/view/Window;"));
+    if (!win || env->ExceptionCheck()) {
         env->ExceptionClear();
-        jobject win = env->CallObjectMethod(activity, env->GetMethodID(at, "getWindow", "()Landroid/view/Window;"));
-        content = env->CallObjectMethod(win, env->GetMethodID(env->FindClass("android/view/Window"), "getDecorView",
-                                                              "()Landroid/view/View;"));
+        return nullptr;
     }
-    return content;
+    jobject decor = env->CallObjectMethod(win, env->GetMethodID(env->FindClass("android/view/Window"), "getDecorView",
+                                                                  "()Landroid/view/View;"));
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    return decor;
+}
+
+jobject frame_lp(JNIEnv* env, jobject ctx, int w, int h, int gravity, int ml, int mt, int mr, int mb) {
+    jclass lp = env->FindClass("android/widget/FrameLayout$LayoutParams");
+    jobject lp_obj = env->NewObject(lp, env->GetMethodID(lp, "<init>", "(II)V"), w, h);
+    env->SetIntField(lp_obj, env->GetFieldID(lp, "gravity", "I"), gravity);
+    env->SetIntField(lp_obj, env->GetFieldID(lp, "leftMargin", "I"), px(env, ctx, static_cast<jfloat>(ml)));
+    env->SetIntField(lp_obj, env->GetFieldID(lp, "topMargin", "I"), px(env, ctx, static_cast<jfloat>(mt)));
+    env->SetIntField(lp_obj, env->GetFieldID(lp, "rightMargin", "I"), px(env, ctx, static_cast<jfloat>(mr)));
+    env->SetIntField(lp_obj, env->GetFieldID(lp, "bottomMargin", "I"), px(env, ctx, static_cast<jfloat>(mb)));
+    return lp_obj;
+}
+
+void add_to_decor(JNIEnv* env, jobject activity, jobject view, jobject lp) {
+    jobject decor = get_decor(env, activity);
+    if (!decor || !view) return;
+    jclass dc = env->GetObjectClass(decor);
+    env->CallVoidMethod(decor, env->GetMethodID(dc, "addView", "(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V"),
+                        view, lp);
+    if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
 jobject make_tab(JNIEnv* env, jobject ctx, const char* label, const char* tag, bool active) {
@@ -371,6 +394,8 @@ jobject build_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& conf
     add(env, header, text_view(env, activity, "Virtus Menu", gold, 17.0f, true));
     jobject close = text_view(env, activity, "✕", gold, 18.0f, true);
     set_tag(env, close, "hivirtus_btn_close");
+    jclass vc = env->FindClass("android/view/View");
+    env->CallVoidMethod(close, env->GetMethodID(vc, "setClickable", "(Z)V"), JNI_TRUE);
     jclass flp = env->FindClass("android/widget/FrameLayout$LayoutParams");
     jobject close_lp = env->NewObject(flp, env->GetMethodID(flp, "<init>", "(II)V"), -2, -2);
     env->SetIntField(close_lp, env->GetFieldID(flp, "gravity", "I"), 0x800005);
@@ -380,10 +405,13 @@ jobject build_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& conf
     jobject tabs = linear(env, activity, 0);
     clear_global(g_tab_system, env);
     g_tab_system = env->NewGlobalRef(make_tab(env, activity, "SYSTEM", "hivirtus_tab_system", g_active_tab == 0));
+    env->CallVoidMethod(g_tab_system, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
     clear_global(g_tab_message, env);
     g_tab_message = env->NewGlobalRef(make_tab(env, activity, "MESSAGE", "hivirtus_tab_message", g_active_tab == 1));
+    env->CallVoidMethod(g_tab_message, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
     clear_global(g_tab_telegram, env);
     g_tab_telegram = env->NewGlobalRef(make_tab(env, activity, "TELEGRAM", "hivirtus_tab_telegram", g_active_tab == 2));
+    env->CallVoidMethod(g_tab_telegram, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
     add(env, tabs, g_tab_system);
     add(env, tabs, g_tab_message);
     add(env, tabs, g_tab_telegram);
@@ -417,6 +445,7 @@ jobject build_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& conf
     add(env, g_panel_system, g_sw_hide_root);
     jobject app_info = button(env, activity, "Show App Info", color(env, kCard), white);
     set_tag(env, app_info, "hivirtus_btn_app_info");
+    env->CallVoidMethod(app_info, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
     add(env, g_panel_system, app_info);
 
     g_panel_message = linear(env, activity, 1);
@@ -448,6 +477,7 @@ jobject build_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& conf
     add(env, g_panel_telegram, g_et_chat);
     jobject verify = button(env, activity, "Verify & Submit", color(env, kGreen), white);
     set_tag(env, verify, "hivirtus_btn_verify");
+    env->CallVoidMethod(verify, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
     add(env, g_panel_telegram, verify);
 
     add(env, holder, g_panel_system);
@@ -472,6 +502,8 @@ jobject build_bubble(JNIEnv* env, jobject activity) {
     env->CallVoidMethod(bubble, env->GetMethodID(vc, "setPadding", "(IIII)V"), px(env, activity, 14), px(env, activity, 10),
                         px(env, activity, 14), px(env, activity, 10));
     env->CallVoidMethod(bubble, env->GetMethodID(vc, "setElevation", "(F)V"), 30.0f);
+    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setClickable", "(Z)V"), JNI_TRUE);
+    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setFocusable", "(Z)V"), JNI_TRUE);
     return bubble;
 }
 
@@ -544,45 +576,25 @@ void open_app_info(JNIEnv* env, jobject activity) {
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
-void handle_touch(JNIEnv* env, jobject activity, float x, float y) {
-    jobject root = find_tagged(env, get_content_parent(env, activity), kTagRoot);
-    if (!root) return;
+jobject g_current_activity = nullptr;
 
-    jobject bubble = find_tagged(env, root, kTagBubble);
-    if (bubble && view_rect(env, bubble).contains(x, y)) {
+void handle_view_click(JNIEnv* env, jobject view) {
+    if (!view) return;
+    jobject tag_obj = env->CallObjectMethod(view, env->GetMethodID(env->FindClass("android/view/View"), "getTag",
+                                                                   "()Ljava/lang/Object;"));
+    if (!tag_obj) return;
+    std::string tag = jstring_get(env, (jstring)tag_obj);
+    if (tag == kTagBubble || tag == "hivirtus_btn_close") {
         toggle_menu(env);
-        return;
-    }
-
-    if (!g_menu_open) return;
-
-    jobject close = find_tagged(env, root, "hivirtus_btn_close");
-    if (close && view_rect(env, close).contains(x, y)) {
-        toggle_menu(env);
-        return;
-    }
-
-    if (g_tab_system && view_rect(env, g_tab_system).contains(x, y)) {
+    } else if (tag == "hivirtus_tab_system") {
         select_tab(env, 0);
-        return;
-    }
-    if (g_tab_message && view_rect(env, g_tab_message).contains(x, y)) {
+    } else if (tag == "hivirtus_tab_message") {
         select_tab(env, 1);
-        return;
-    }
-    if (g_tab_telegram && view_rect(env, g_tab_telegram).contains(x, y)) {
+    } else if (tag == "hivirtus_tab_telegram") {
         select_tab(env, 2);
-        return;
-    }
-
-    jobject app_info = find_tagged(env, root, "hivirtus_btn_app_info");
-    if (app_info && view_rect(env, app_info).contains(x, y)) {
-        open_app_info(env, activity);
-        return;
-    }
-
-    jobject verify = find_tagged(env, root, "hivirtus_btn_verify");
-    if (verify && view_rect(env, verify).contains(x, y)) {
+    } else if (tag == "hivirtus_btn_app_info" && g_current_activity) {
+        open_app_info(env, g_current_activity);
+    } else if (tag == "hivirtus_btn_verify") {
         save_ui_to_config(env);
     }
 }
@@ -590,72 +602,42 @@ void handle_touch(JNIEnv* env, jobject activity, float x, float y) {
 void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& config) {
     if (!activity_alive(env, activity)) return;
 
-    jobject parent = get_content_parent(env, activity);
-    if (!parent || env->ExceptionCheck()) {
-        env->ExceptionClear();
-        return;
-    }
+    jobject decor = get_decor(env, activity);
+    if (!decor) return;
 
-    jobject existing = find_tagged(env, parent, kTagRoot);
-    if (existing) {
-        bring_front(env, existing);
+    if (find_tagged(env, decor, kTagBubble)) {
+        g_overlay_attached = true;
         update_pill_label(env, config);
         set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
         return;
     }
 
-    jobject root = linear(env, activity, 1);
-    set_tag(env, root, kTagRoot);
-    jclass vc = env->FindClass("android/view/View");
-    env->CallVoidMethod(root, env->GetMethodID(vc, "setClickable", "(Z)V"), JNI_FALSE);
-    env->CallVoidMethod(root, env->GetMethodID(vc, "setFocusable", "(Z)V"), JNI_FALSE);
-    env->CallVoidMethod(root, env->GetMethodID(vc, "setElevation", "(F)V"), 32.0f);
+    clear_global(g_current_activity, env);
+    g_current_activity = env->NewGlobalRef(activity);
 
-    jobject bubble_row = env->NewObject(env->FindClass("android/widget/FrameLayout"),
-                                        env->GetMethodID(env->FindClass("android/widget/FrameLayout"), "<init>",
-                                                         "(Landroid/content/Context;)V"),
-                                        activity);
     jobject bubble = build_bubble(env, activity);
-    jclass flp = env->FindClass("android/widget/FrameLayout$LayoutParams");
-    jobject bubble_lp = env->NewObject(flp, env->GetMethodID(flp, "<init>", "(II)V"), -2, -2);
-    env->SetIntField(bubble_lp, env->GetFieldID(flp, "gravity", "I"), 0x800035);
-    add_lp(env, bubble_row, bubble, bubble_lp);
-    add(env, root, bubble_row);
+    add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
 
     build_menu_panel(env, activity, config);
-    add(env, root, g_menu_panel);
+    add_to_decor(env, activity, g_menu_panel,
+                 frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
 
-    add(env, root, build_status_pill(env, activity, config));
+    jobject pill = build_status_pill(env, activity, config);
+    add_to_decor(env, activity, pill, frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 12));
 
-    jclass flp_root = env->FindClass("android/widget/FrameLayout$LayoutParams");
-    jobject lp = env->NewObject(flp_root, env->GetMethodID(flp_root, "<init>", "(II)V"), -1, -2);
-    env->SetIntField(lp, env->GetFieldID(flp_root, "gravity", "I"), 0x50);
-    env->SetIntField(lp, env->GetFieldID(flp_root, "bottomMargin", "I"), px(env, activity, 8));
-    env->SetIntField(lp, env->GetFieldID(flp_root, "leftMargin", "I"), px(env, activity, 8));
-    env->SetIntField(lp, env->GetFieldID(flp_root, "rightMargin", "I"), px(env, activity, 8));
-
-    jclass parent_cls = env->GetObjectClass(parent);
-    if (env->IsInstanceOf(parent, env->FindClass("android/widget/FrameLayout"))) {
-        add_lp(env, parent, root, lp);
-    } else {
-        env->CallVoidMethod(parent, env->GetMethodID(parent_cls, "addView", "(Landroid/view/View;)V"), root);
-    }
-
-    bring_front(env, root);
-
+    g_overlay_attached = true;
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
         logger::error("OverlayUI", "Virtus overlay attach failed");
     } else {
-        logger::info("OverlayUI", "Virtus Menu + bubble attached in %s", g_package.c_str());
+        logger::info("OverlayUI", "Virtus bubble+menu+pill attached in %s", g_package.c_str());
     }
 }
 
 static void (*orig_onResume)(JNIEnv*, jobject) = nullptr;
 static void (*orig_onPause)(JNIEnv*, jobject) = nullptr;
-static void (*orig_onWindowFocusChanged)(JNIEnv*, jobject, jboolean) = nullptr;
-static jboolean (*orig_dispatchTouchEvent)(JNIEnv*, jobject, jobject) = nullptr;
+static jboolean (*orig_performClick)(JNIEnv*, jobject) = nullptr;
 
 bool is_our_package(JNIEnv* env, jobject activity) {
     jstring pkg_j = (jstring)env->CallObjectMethod(activity,
@@ -668,16 +650,12 @@ bool is_our_package(JNIEnv* env, jobject activity) {
     return ours;
 }
 
-void refresh_overlay(JNIEnv* env, jobject activity) {
-    if (!is_our_package(env, activity)) return;
-    ConfigManager::instance().reload();
-    attach_virtus_overlay(env, activity, ConfigManager::instance().get());
-}
-
 void hook_onResume(JNIEnv* env, jobject thiz) {
     if (orig_onResume) orig_onResume(env, thiz);
     if (env->ExceptionCheck()) env->ExceptionClear();
-    refresh_overlay(env, thiz);
+    if (!is_our_package(env, thiz)) return;
+    ConfigManager::instance().reload();
+    attach_virtus_overlay(env, thiz, ConfigManager::instance().get());
 }
 
 void hook_onPause(JNIEnv* env, jobject thiz) {
@@ -686,23 +664,16 @@ void hook_onPause(JNIEnv* env, jobject thiz) {
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
-void hook_onWindowFocusChanged(JNIEnv* env, jobject thiz, jboolean has_focus) {
-    if (orig_onWindowFocusChanged) orig_onWindowFocusChanged(env, thiz, has_focus);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    if (has_focus) refresh_overlay(env, thiz);
-}
-
-jboolean hook_dispatchTouchEvent(JNIEnv* env, jobject thiz, jobject event) {
-    if (is_our_package(env, thiz) && event) {
-        jclass mc = env->FindClass("android/view/MotionEvent");
-        const jint action = env->CallIntMethod(event, env->GetMethodID(mc, "getActionMasked", "()I"));
-        if (action == 1) {
-            const jfloat x = env->CallFloatMethod(event, env->GetMethodID(mc, "getX", "()F"));
-            const jfloat y = env->CallFloatMethod(event, env->GetMethodID(mc, "getY", "()F"));
-            handle_touch(env, thiz, x, y);
+jboolean hook_performClick(JNIEnv* env, jobject thiz) {
+    jobject tag_obj = env->CallObjectMethod(thiz, env->GetMethodID(env->FindClass("android/view/View"), "getTag",
+                                                                   "()Ljava/lang/Object;"));
+    if (tag_obj) {
+        std::string tag = jstring_get(env, (jstring)tag_obj);
+        if (tag == kTagBubble || tag.rfind("hivirtus_", 0) == 0) {
+            handle_view_click(env, thiz);
         }
     }
-    return orig_dispatchTouchEvent ? orig_dispatchTouchEvent(env, thiz, event) : JNI_FALSE;
+    return orig_performClick ? orig_performClick(env, thiz) : JNI_TRUE;
 }
 
 void install_activity_hooks() {
@@ -715,12 +686,9 @@ void install_activity_hooks() {
                              reinterpret_cast<void*>(hook_onResume), reinterpret_cast<void**>(&orig_onResume));
     plt_hook::register_regex(".*/libandroid_runtime\\.so$", "Java_android_app_Activity_onPause",
                              reinterpret_cast<void*>(hook_onPause), reinterpret_cast<void**>(&orig_onPause));
-    plt_hook::register_regex(".*/libandroid_runtime\\.so$", "Java_android_app_Activity_onWindowFocusChanged",
-                             reinterpret_cast<void*>(hook_onWindowFocusChanged),
-                             reinterpret_cast<void**>(&orig_onWindowFocusChanged));
-    plt_hook::register_regex(".*/libandroid_runtime\\.so$", "Java_android_app_Activity_dispatchTouchEvent",
-                             reinterpret_cast<void*>(hook_dispatchTouchEvent),
-                             reinterpret_cast<void**>(&orig_dispatchTouchEvent));
+    plt_hook::register_regex(".*/libandroid_runtime\\.so$", "Java_android_view_View_performClick",
+                             reinterpret_cast<void*>(hook_performClick),
+                             reinterpret_cast<void**>(&orig_performClick));
     plt_hook::commit();
 }
 

@@ -37,22 +37,9 @@ void install_timer_hook(JNIEnv* env, zygisk::Api* api) {
 }  // namespace
 
 void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
+    (void)env;
+    (void)api;
     if (package_name.empty()) return;
-
-    ConfigManager::instance().reload();
-    const auto& config = ConfigManager::instance().get();
-    g_bonus_ms = config.timer_bonus_for_package(package_name) * 1000;
-    if (g_bonus_ms <= 0) g_bonus_ms = 20000;
-
-    install_timer_hook(env, api);
-    sender_spoof::install(env, api, package_name.c_str());
-
-    jclass sms_message = env->FindClass("android/telephony/SmsMessage");
-    jclass sms_retriever = env->FindClass("com/google/android/gms/auth/api/phone/SmsRetrieverClient");
-    if (sms_message || sms_retriever) {
-        logger::info("UpiHook", "UPI hook active in %s (timer bonus %ds)",
-                     package_name.c_str(), g_bonus_ms / 1000);
-    }
 
     FILE* f = fopen("/data/local/tmp/hivirtus_active_upi.txt", "a");
     if (f) {
@@ -60,6 +47,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
         fclose(f);
         chmod("/data/local/tmp/hivirtus_active_upi.txt", 0644);
     }
+    logger::info("UpiHook", "UPI scoped (overlay only) in %s", package_name.c_str());
 }
 
 }  // namespace upi_hook

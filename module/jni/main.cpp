@@ -235,9 +235,11 @@ public:
 
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
-            outgoing_sms_hook::install(env_, api_, false, true);
+            if (config.hook_outgoing_sms || config.intercept_fake_success) {
+                outgoing_sms_hook::install(env_, api_, false, true);
+            }
             overlay_ui::install(env_, api_, process_name_);
-            logger::info("Hivirtus", "UPI auto-hook + overlay in %s", process_name_.c_str());
+            logger::info("Hivirtus", "UPI overlay + light hooks in %s", process_name_.c_str());
         }
 
         if (is_messaging_ && framework_sms_active(config)) {
@@ -265,7 +267,8 @@ public:
         }
 
         if (is_hooked_upi_ && want_sender_spoof) {
-            sender_spoof::install(env_, api_, process_name_.c_str());
+            // Sender spoof sirf telephony/messaging — UPI process me nahi (crash avoid)
+            (void)want_sender_spoof;
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_ ||

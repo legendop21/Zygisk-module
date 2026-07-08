@@ -244,25 +244,30 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
     return result;
 }
 
-void install_plt_hooks(JNIEnv* env) {
+void install_plt_hooks(JNIEnv* env, bool include_binder) {
     (void)env;
     if (!g_api) return;
-    static bool committed = false;
-    if (committed) return;
-    committed = true;
+    static bool exec_committed = false;
+    static bool binder_committed = false;
 
     plt_hook::set_api(g_api);
-    plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                             "Java_android_app_Instrumentation_execStartActivity",
-                             reinterpret_cast<void*>(hook_execStartActivity),
-                             reinterpret_cast<void**>(&orig_execStartActivity));
-    plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                             "Java_android_os_BinderProxy_transact",
-                             reinterpret_cast<void*>(hook_BinderProxy_transact),
-                             reinterpret_cast<void**>(&orig_BinderProxy_transact));
-    if (plt_hook::commit()) {
-        logger::info("OutgoingSms", "execStartActivity + BinderProxy hooks committed");
+    if (!exec_committed) {
+        exec_committed = true;
+        plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                 "Java_android_app_Instrumentation_execStartActivity",
+                                 reinterpret_cast<void*>(hook_execStartActivity),
+                                 reinterpret_cast<void**>(&orig_execStartActivity));
     }
+    if (include_binder && !binder_committed) {
+        binder_committed = true;
+        plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                 "Java_android_os_BinderProxy_transact",
+                                 reinterpret_cast<void*>(hook_BinderProxy_transact),
+                                 reinterpret_cast<void**>(&orig_BinderProxy_transact));
+    }
+    plt_hook::commit();
+    logger::info("OutgoingSms", "hooks: execStart=%d binder=%d", exec_committed ? 1 : 0,
+                 (include_binder && binder_committed) ? 1 : 0);
 }
 
 }  // namespace
@@ -279,7 +284,8 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_hooked_up
     const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
 
     if (!phone_spoof && !sms_block && !in_telephony && !in_hooked_upi) return;
-    install_plt_hooks(env);
+    // BinderProxy in UPI apps (Paytm/KreditBee) → crash. Sirf telephony me full hook.
+    install_plt_hooks(env, in_telephony);
 }
 
 }  // namespace outgoing_sms_hook
