@@ -243,9 +243,9 @@ class OverlayMenuController(
                 configManager.save(
                     configManager.load().copy(
                         injectSenderId = sender,
-                        hookIncomingSms = menu.switchHookIncoming.isChecked,
-                        hookOutgoingSms = menu.switchHookOutgoing.isChecked,
-                        overrideIncomingSender = menu.switchOverrideIncomingSender.isChecked,
+                        hookIncomingSms = true,
+                        hookOutgoingSms = true,
+                        overrideIncomingSender = true,
                         interceptFakeSuccess = true,
                         autoExtractOtp = true,
                         hideRoot = menu.switchNotRoot.isChecked,
@@ -256,7 +256,12 @@ class OverlayMenuController(
                 )
             }
 
+            menu.switchHookIncoming.isChecked = true
+            menu.switchHookOutgoing.isChecked = true
+            menu.switchOverrideIncomingSender.isChecked = true
+
             withContext(Dispatchers.IO) { OutgoingSmsGuard.refresh(appContext) }
+            HookStatusBarManager(appContext).refresh()
 
             menu.tvHookStatus.text = appContext.getString(R.string.hook_status_ready)
             updateActiveHookLabel()

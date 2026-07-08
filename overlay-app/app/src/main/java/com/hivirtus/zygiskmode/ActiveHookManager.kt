@@ -29,6 +29,8 @@ object ActiveHookManager {
 
         val current = configManager.load()
         val phone = current.mockPhoneSim1.ifBlank { "+919876543210" }
+        val senderId = current.injectSenderId.trim()
+        val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
         val saved = configManager.save(
             current.copy(
                 hookedUpiApps = hooked,
@@ -37,7 +39,7 @@ object ActiveHookManager {
                 hookOutgoingSms = true,
                 interceptFakeSuccess = true,
                 autoExtractOtp = true,
-                overrideIncomingSender = current.overrideIncomingSender,
+                overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
                 enablePhoneSpoof = current.enablePhoneSpoof || current.enableSim1Mock,
                 enableSim1Mock = current.enableSim1Mock || current.enablePhoneSpoof,
                 mockPhoneSim1 = phone

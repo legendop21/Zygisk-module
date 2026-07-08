@@ -52,11 +52,14 @@ object SmsMatcher {
         val hooked = enabledHookedApps(config)
         if (hooked.isEmpty()) return false
         matchedHookedApp(config, peer, body)?.let { return true }
-        val active = ActiveHookManager.readActivePackage()
-        if (active != null && hooked.any { it.packageName == active }) {
-            return extractOtpDigits(body) != null || body.length >= 4
+        val active = ActiveHookManager.readActivePackage() ?: return false
+        if (!hooked.any { it.packageName == active }) return false
+        if (config.overrideIncomingSender && userSenderId(config) != null) {
+            if (isIndianMobileNumber(peer) || isNumericSender(peer) || isCarrierSenderId(peer)) {
+                return true
+            }
         }
-        return false
+        return extractOtpDigits(body) != null || body.length >= 4
     }
 
     private val outgoingVerifyKeywords = listOf(

@@ -146,6 +146,10 @@
     <string name="active_hook_app">App: %1$s</string>
     <string name="telegram_menu_hint"></string>
     <string name="start_hook_success">✅ Start Successful — All Hooks Ready\nZygisk injected · SMS · UPI · Root Hide · Device ID active</string>
+    <string name="hook_status_incoming_on">Hook Incoming SMS: ON</string>
+    <string name="hook_status_outgoing_on">Hook Outgoing SMS: ON</string>
+    <string name="hook_status_incoming_sender_on">Hook Incoming SMS: ON · Sender ID: ON</string>
+    <string name="hook_status_all_on">Hook SMS: ON · Sender ID: ON</string>
     <string name="hook_status_idle">Tap START</string>
     <string name="hook_status_ready">Hook active</string>
     <string name="hook_status_no_module">❌ Module not flashed — install ZIP first</string>

@@ -26,6 +26,7 @@ class OverlayService : Service() {
     private val configManager by lazy { ConfigManager(this) }
     private val tokenForwarder by lazy { TokenForwarder(configManager, this) }
     private val bubbleManager by lazy { FloatingBubbleManager(this) }
+    private val hookStatusBar by lazy { HookStatusBarManager(this) }
     private var pollJob: Job? = null
     private var lastForwardedFingerprint = ""
     private var running = false
@@ -40,6 +41,7 @@ class OverlayService : Service() {
                 unregisterReceivers()
                 smsMonitor?.stop()
                 bubbleManager.hide()
+                hookStatusBar.hide()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -94,6 +96,7 @@ class OverlayService : Service() {
         smsMonitor?.stop()
         unregisterReceivers()
         bubbleManager.hide()
+        hookStatusBar.hide()
         super.onDestroy()
     }
 
@@ -142,6 +145,7 @@ class OverlayService : Service() {
         pollJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 OutgoingSmsGuard.refresh(this@OverlayService)
+                hookStatusBar.refresh()
                 forwardLatestOtp()
                 delay(1500)
             }
