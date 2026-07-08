@@ -32,10 +32,10 @@
 
             <ImageView
                 android:id="@+id/ivMenuLogo"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
                 android:contentDescription="@string/app_name"
-                android:scaleType="fitCenter"
+                android:scaleType="centerCrop"
                 android:src="@drawable/ic_hivirtus_logo" />
 
             <TextView
