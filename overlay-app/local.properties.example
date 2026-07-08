@@ -1,2 +1,1 @@
-## Copy to local.properties and adjust path for your Mac
-sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk
+sdk.dir=/Users/raiyanrangrezz/Library/Android/sdk

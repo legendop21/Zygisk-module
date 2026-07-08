@@ -6,27 +6,45 @@ MODULE_DIR="$ROOT_DIR/module"
 OUTPUT_DIR="$ROOT_DIR/dist"
 ABI_LIST="${ABI_LIST:-arm64-v8a armeabi-v7a x86 x86_64}"
 
-if [[ -z "${ANDROID_NDK:-}" ]]; then
-  echo "ERROR: ANDROID_NDK environment variable set karein"
-  echo "Example: export ANDROID_NDK=\$HOME/Android/Sdk/ndk/26.1.10909125"
+# Auto-detect NDK (Mac: ~/Library/Android/sdk/ndk/...)
+if [[ -z "${ANDROID_NDK:-}" ]] || [[ ! -f "${ANDROID_NDK}/build/cmake/android.toolchain.cmake" ]]; then
+  if ANDROID_NDK=$("$ROOT_DIR/tools/find_ndk.sh"); then
+    export ANDROID_NDK
+    echo "==> Using NDK: $ANDROID_NDK"
+  else
+    exit 1
+  fi
+else
+  echo "==> Using NDK: $ANDROID_NDK"
+fi
+
+TOOLCHAIN="$ANDROID_NDK/build/cmake/android.toolchain.cmake"
+if [[ ! -f "$TOOLCHAIN" ]]; then
+  echo "ERROR: NDK toolchain missing:"
+  echo "  $TOOLCHAIN"
+  echo ""
+  echo "Mac pe sahi path usually:"
+  echo "  export ANDROID_NDK=\$HOME/Library/Android/sdk/ndk/26.1.10909125"
   exit 1
 fi
 
 echo "==> Building Zygisk native module"
-rm -rf "$OUTPUT_DIR"
+rm -rf "$OUTPUT_DIR" "$ROOT_DIR/build"
 mkdir -p "$OUTPUT_DIR/zygisk"
 
 for ABI in $ABI_LIST; do
   BUILD_DIR="$ROOT_DIR/build/$ABI"
   mkdir -p "$BUILD_DIR"
 
+  echo "==> Configuring $ABI ..."
   cmake -S "$MODULE_DIR/jni" -B "$BUILD_DIR" \
+    -G "Unix Makefiles" \
     -DANDROID_ABI="$ABI" \
     -DANDROID_PLATFORM=android-26 \
-    -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
+    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
     -DCMAKE_BUILD_TYPE=Release
 
-  cmake --build "$BUILD_DIR" --config Release
+  cmake --build "$BUILD_DIR" --config Release -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 
   LIB_PATH="$BUILD_DIR/libhivirtus_zygisk_mode.so"
   if [[ ! -f "$LIB_PATH" ]]; then
@@ -38,7 +56,7 @@ for ABI in $ABI_LIST; do
   echo "Built $ABI"
 done
 
-echo "==> Packaging Magisk module zip"
+echo "==> Packaging Magisk/KernelSU module zip"
 cp "$MODULE_DIR/module.prop" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
@@ -49,6 +67,7 @@ chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-
 
 ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
+echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
-
-echo "==> Done. Flash zip in Magisk Manager and reboot."
+echo ""
+echo "==> Done. KernelSU/Magisk me sirf ye zip flash karo, phir reboot."
