@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Zygisk-only runtime — auto UPI detect, config sync, hook restart (no APK)
+# Magisk module runtime — config sync + foreground UPI detect (native Zygisk hooks)
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"

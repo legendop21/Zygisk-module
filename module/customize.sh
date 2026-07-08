@@ -1,9 +1,9 @@
 #!/system/bin/sh
-# Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
+# Hivirtus — Magisk/KernelSU module (native .so Zygisk se app me inject hota hai)
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.24.0  "
-ui_print "   Zygisk Next + LSPosed safe  "
+ui_print "        Hivirtus v2.25.0        "
+ui_print "  Magisk ZIP → Zygisk inject    "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -67,8 +67,13 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
-ui_print "- Module installed successfully"
-ui_print "- Reboot → open any UPI app (KreditBee, PhonePe…)"
-ui_print "- Hook + bottom status pill auto show hoga"
-ui_print "- LSPosed me Hivirtus DISABLE rakho (ZIP-only mode)"
-ui_print "- Edit $MODPATH/config.json for Telegram token"
+ui_print "- Module install ho gaya"
+ui_print ""
+ui_print "YE MAGISK MODULE HAI — Zygisk ke THROUGH chalega:"
+ui_print "  1) Magisk/KernelSU me Zygisk ON rakho"
+ui_print "  2) Reboot karo"
+ui_print "  3) Koi UPI app kholo (PhonePe, KreditBee…)"
+ui_print "  → Native hook + bottom pill auto aayega"
+ui_print ""
+ui_print "APK ya LSPosed ki zaroorat NAHI hai"
+ui_print "Config: $MODPATH/config.json"

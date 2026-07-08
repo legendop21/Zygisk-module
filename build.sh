@@ -75,5 +75,5 @@ ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cu
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. Magisk/KernelSU → Zygisk ON → flash zip → reboot."
-echo "    Koi UPI app kholo — hook + status pill auto aayega. APK ki zaroorat nahi."
+echo "==> Done. Magisk/KernelSU module ZIP (Zygisk se native inject)."
+echo "    Zygisk ON → flash zip → reboot → UPI app kholo. APK/LSPosed nahi chahiye."
