@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.27.0                 "
+ui_print "        v2.29.0                 "
 ui_print "  Zygisk se through — MotaGian  "
 ui_print "*******************************"
 
