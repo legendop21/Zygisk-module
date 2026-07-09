@@ -5,6 +5,7 @@
 #include "inject_sms.hpp"
 #include "root_hide.hpp"
 #include "sim_mock.hpp"
+#include "virtual_sim.hpp"
 #include "upi_hook.hpp"
 #include "outgoing_sms_hook.hpp"
 #include "device_spoof.hpp"
@@ -253,12 +254,17 @@ public:
             if (config.intercept_fake_success || config.hook_outgoing_sms) {
                 outgoing_sms_hook::install(env_, api_, false, false);
             }
+            if (config.virtual_sim_active()) {
+                virtual_sim::install(env_, api_, process_name_);
+            }
             touch_module_heartbeat();
             logger::info("Hivirtus", "Framework SMS hook (GMS) — scoped apps");
             return;
         }
 
-        if (!any_hooked_app(config) && !is_telephony_ && !is_messaging_ && !is_hooked_upi_) {
+        const bool keep_process = any_hooked_app(config) || config.virtual_sim_active() ||
+                                  is_telephony_ || is_messaging_ || is_hooked_upi_;
+        if (!keep_process) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
@@ -268,7 +274,13 @@ public:
             device_spoof::install(env_, config, api_);
         }
 
+        const bool virtual_sim_on = config.virtual_sim_active();
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
+
+        if (virtual_sim_on &&
+            (is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_)) {
+            virtual_sim::install(env_, api_, process_name_);
+        }
 
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
@@ -281,28 +293,6 @@ public:
             root_hide::install(env_, config, api_);
         }
 
-        const bool phone_active = config.enable_phone_spoof || config.enable_sim1_mock ||
-                                  config.enable_sim2_mock;
-
-        if (phone_active && hook_target) {
-            sim_mock::install(env_,
-                              api_,
-                              config.enable_sim1_mock || config.enable_phone_spoof,
-                              config.enable_sim2_mock,
-                              config.mock_country_iso,
-                              phone_active,
-                              config.mock_phone_sim1,
-                              config.mock_phone_sim2);
-        }
-
-        if (phone_active && hook_target) {
-            outgoing_sms_hook::install(env_, api_, is_telephony_, is_hooked_upi_);
-            if (hook_target) {
-                logger::info("Hivirtus", "Phone spoof binder hooks in %s (upi=%d)",
-                             process_name_.c_str(), is_hooked_upi_);
-            }
-        }
-
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
             // SMS/Binder hooks sirf telephony — UPI me crash (Android 15 + Zygisk Next)
@@ -313,9 +303,7 @@ public:
 
         if (is_messaging_ && framework_sms_active(config)) {
             if (config.hook_outgoing_sms || config.intercept_fake_success) {
-                if (!phone_active) {
-                    outgoing_sms_hook::install(env_, api_, false, true);
-                }
+                outgoing_sms_hook::install(env_, api_, false, true);
                 logger::info("Hivirtus", "Messages SMS hook (scoped)");
             }
             if (want_sender_spoof) {
@@ -329,7 +317,7 @@ public:
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, "telephony");
             }
-            if (!phone_active) {
+            if (!virtual_sim_on) {
                 outgoing_sms_hook::install(env_, api_, true, false);
             }
             process_inject_command(env_);
@@ -341,6 +329,7 @@ public:
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_ ||
+                                       virtual_sim_on ||
                                        config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||

@@ -1,4 +1,5 @@
 #include "sim_mock.hpp"
+#include "config.hpp"
 #include "logger.hpp"
 #include "zygisk_utils.hpp"
 
@@ -56,6 +57,52 @@ bool should_spoof_property_key(const std::string& key) {
     return false;
 }
 
+bool should_spoof_sim_state_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("sim.state") != std::string::npos;
+}
+
+bool should_spoof_operator_alpha_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("operator.alpha") != std::string::npos ||
+           lower.find("operator.iso") != std::string::npos;
+}
+
+bool should_spoof_operator_numeric_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("operator.numeric") != std::string::npos;
+}
+
+bool should_spoof_imsi_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("imsi") != std::string::npos;
+}
+
+bool should_spoof_iccid_key(const std::string& key) {
+    std::string lower = key;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.find("icc_id") != std::string::npos || lower.find("iccid") != std::string::npos ||
+           lower.find("sim.serial") != std::string::npos;
+}
+
+bool slot2_key(const std::string& key) {
+    return key.find(".1") != std::string::npos || key.find("slot1") != std::string::npos ||
+           key.find("sim2") != std::string::npos;
+}
+
+const ModuleConfig& current_config() {
+    return ConfigManager::instance().get();
+}
+
 bool should_spoof_country_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -68,6 +115,32 @@ static jstring (*orig_SystemProperties_get)(JNIEnv*, jclass, jstring, jstring) =
 jstring hook_SystemProperties_get(JNIEnv* env, jclass clazz, jstring key_j, jstring def_j) {
     const std::string key = zygisk_utils::jstring_to_string(env, key_j);
     const std::string phone = active_phone();
+    const auto& cfg = current_config();
+
+    if (g_phone_spoof && should_spoof_sim_state_key(key)) {
+        return zygisk_utils::string_to_jstring(env, "READY");
+    }
+
+    if (g_phone_spoof && should_spoof_operator_alpha_key(key)) {
+        const std::string& op = slot2_key(key) ? cfg.mock_operator_name_sim2 : cfg.mock_operator_name_sim1;
+        if (!op.empty()) return zygisk_utils::string_to_jstring(env, op);
+    }
+
+    if (g_phone_spoof && should_spoof_operator_numeric_key(key)) {
+        const std::string& num =
+            slot2_key(key) ? cfg.mock_operator_numeric_sim2 : cfg.mock_operator_numeric_sim1;
+        if (!num.empty()) return zygisk_utils::string_to_jstring(env, num);
+    }
+
+    if (g_phone_spoof && should_spoof_imsi_key(key)) {
+        const std::string& imsi = slot2_key(key) ? cfg.mock_imsi_sim2 : cfg.mock_imsi_sim1;
+        if (!imsi.empty()) return zygisk_utils::string_to_jstring(env, imsi);
+    }
+
+    if (g_phone_spoof && should_spoof_iccid_key(key)) {
+        const std::string& iccid = slot2_key(key) ? cfg.mock_iccid_sim2 : cfg.mock_iccid_sim1;
+        if (!iccid.empty()) return zygisk_utils::string_to_jstring(env, iccid);
+    }
 
     if (g_phone_spoof && !phone.empty() && should_spoof_property_key(key)) {
         logger::info("SimMock", "Spoof prop %s -> %s", key.c_str(), phone.c_str());

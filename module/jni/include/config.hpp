@@ -16,9 +16,20 @@ struct ModuleConfig {
     bool enable_sim1_mock = false;
     bool enable_sim2_mock = false;
     bool enable_phone_spoof = false;
+    bool enable_virtual_sim = false;
     std::string mock_country_iso = "in";
     std::string mock_phone_sim1;
     std::string mock_phone_sim2;
+    std::string mock_operator_name_sim1 = "Jio";
+    std::string mock_operator_name_sim2 = "Airtel";
+    std::string mock_operator_numeric_sim1 = "405869";
+    std::string mock_operator_numeric_sim2 = "40445";
+    std::string mock_imsi_sim1;
+    std::string mock_imsi_sim2;
+    std::string mock_iccid_sim1;
+    std::string mock_iccid_sim2;
+
+    bool virtual_sim_active() const;
 
     bool hook_incoming_sms = true;
     bool hook_outgoing_sms = true;

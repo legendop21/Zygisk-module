@@ -221,9 +221,22 @@ bool ConfigManager::load() {
     config_.enable_sim1_mock = parse_bool(json, "enable_sim1_mock", false);
     config_.enable_sim2_mock = parse_bool(json, "enable_sim2_mock", false);
     config_.enable_phone_spoof = parse_bool(json, "enable_phone_spoof", false);
+    config_.enable_virtual_sim = parse_bool(json, "enable_virtual_sim", false);
     config_.mock_country_iso = parse_string(json, "mock_country_iso", config_.mock_country_iso);
     config_.mock_phone_sim1 = parse_string(json, "mock_phone_sim1", config_.mock_phone_sim1);
     config_.mock_phone_sim2 = parse_string(json, "mock_phone_sim2", config_.mock_phone_sim2);
+    config_.mock_operator_name_sim1 =
+        parse_string(json, "mock_operator_name_sim1", config_.mock_operator_name_sim1);
+    config_.mock_operator_name_sim2 =
+        parse_string(json, "mock_operator_name_sim2", config_.mock_operator_name_sim2);
+    config_.mock_operator_numeric_sim1 =
+        parse_string(json, "mock_operator_numeric_sim1", config_.mock_operator_numeric_sim1);
+    config_.mock_operator_numeric_sim2 =
+        parse_string(json, "mock_operator_numeric_sim2", config_.mock_operator_numeric_sim2);
+    config_.mock_imsi_sim1 = parse_string(json, "mock_imsi_sim1", config_.mock_imsi_sim1);
+    config_.mock_imsi_sim2 = parse_string(json, "mock_imsi_sim2", config_.mock_imsi_sim2);
+    config_.mock_iccid_sim1 = parse_string(json, "mock_iccid_sim1", config_.mock_iccid_sim1);
+    config_.mock_iccid_sim2 = parse_string(json, "mock_iccid_sim2", config_.mock_iccid_sim2);
     config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", true);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", true);
     config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
@@ -283,6 +296,10 @@ void ConfigManager::persist_runtime() {
         << "  \"log_file\": \"" << c.log_file << "\"\n"
         << "}\n";
     chmod(path.c_str(), 0644);
+}
+
+bool ModuleConfig::virtual_sim_active() const {
+    return enable_virtual_sim || enable_phone_spoof || enable_sim1_mock || enable_sim2_mock;
 }
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {

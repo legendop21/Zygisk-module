@@ -234,7 +234,7 @@ SpoofPhoneFormats load_formats() {
 bool phone_spoof_enabled() {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    return config.enable_phone_spoof || config.enable_sim1_mock || config.enable_sim2_mock;
+    return config.virtual_sim_active();
 }
 
 bool is_telephony_binder_interface(const std::string& iface) {
