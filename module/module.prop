@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.31.0
-versionCode=78
+version=v2.31.1
+versionCode=79
 author=@hivirtus
 description=Zygisk Next/APatch fix — MotaGian menu + SMS/UPI hooks. Official Zygisk API.
 zygisk=1

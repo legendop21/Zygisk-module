@@ -13,6 +13,7 @@
 #include "sender_spoof.hpp"
 
 #include <ctime>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -125,6 +126,22 @@ void touch_module_heartbeat() {
     }
 }
 
+void append_diag(const char* path, const char* line) {
+    FILE* f = fopen(path, "a");
+    if (!f) return;
+    fprintf(f, "%s\n", line);
+    fclose(f);
+    chmod(path, 0644);
+}
+
+void touch_upi_inject(const char* pkg) {
+    if (!pkg || !pkg[0]) return;
+    char buf[256];
+    snprintf(buf, sizeof(buf), "zygisk_inject:%s:%ld", pkg, static_cast<long>(time(nullptr)));
+    append_diag("/data/local/tmp/hivirtus_inject.log", buf);
+    append_diag("/data/local/tmp/hivirtus_overlay.debug", buf);
+}
+
 void process_inject_command(JNIEnv* env) {
     std::ifstream cmd_file(kInjectCommandFile);
     if (!cmd_file.is_open()) return;
@@ -176,6 +193,7 @@ public:
 
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
+        is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
         logger::init(config.log_file);
         const bool want_sender_spoof = sender_spoof_wanted(config);
 
@@ -220,6 +238,7 @@ public:
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
 
         if (is_hooked_upi_) {
+            touch_upi_inject(process_name_.c_str());
             root_hide::install(env_, upi_root_hide_config(config), api_);
         } else if ((config.hide_root || config.hide_developer) && hook_target) {
             root_hide::install(env_, config, api_);

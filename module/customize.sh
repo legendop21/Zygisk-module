@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.31.0                 "
+ui_print "        v2.31.1                 "
 ui_print "  Zygisk se through — Virtus    "
 ui_print "*******************************"
 
@@ -68,7 +68,7 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK NEXT / APATCH v2.31.0:"
+ui_print "ZYGISK NEXT / APATCH v2.31.1:"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
 ui_print "  3) UPI app kholo → gold V bubble + Virtus menu"

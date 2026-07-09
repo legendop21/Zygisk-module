@@ -103,6 +103,10 @@ mark_active() {
   echo "1" > "$NATIVE_FLAG"
   chmod 644 "$NATIVE_FLAG" 2>/dev/null
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
+  echo "foreground:$1" >> /data/local/tmp/hivirtus_overlay.debug
+  echo "foreground:$1" >> /data/local/tmp/hivirtus_inject.log
+  chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 }
 
 sync_config
