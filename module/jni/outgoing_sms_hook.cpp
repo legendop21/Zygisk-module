@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <ctime>
 
 namespace outgoing_sms_hook {
 
@@ -329,10 +330,18 @@ void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
 
 bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     if (!data || !reply) return false;
-    ConfigManager::instance().reload();
-    const auto& config = ConfigManager::instance().get();
-    if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
+    static thread_local bool block_on = false;
+    static thread_local time_t cached_at = 0;
+    const time_t now = time(nullptr);
+    if (cached_at == 0 || now - cached_at >= 2) {
+        ConfigManager::instance().reload();
+        const auto& config = ConfigManager::instance().get();
+        block_on = config.intercept_fake_success || config.hook_outgoing_sms;
+        cached_at = now;
+    }
+    if (!block_on) return false;
 
+    const auto& config = ConfigManager::instance().get();
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     reset_parcel(env, data);

@@ -211,6 +211,10 @@ public:
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
 
+        if (upi_registry::is_module_own_app(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+        }
+
         // Denylist unmount LSPosed / Zygisk Next ke saath use mat karo.
         (void)config;
     }
@@ -222,11 +226,6 @@ public:
         }
 
         if (process_name_ == "zygote" || process_name_ == "zygote64") {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
-
-        if (upi_registry::is_module_own_app(process_name_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
@@ -268,10 +267,7 @@ public:
             return;
         }
 
-        const bool keep_process = config.virtual_sim_active() || any_hooked_app(config) ||
-                                  is_telephony_ || is_messaging_ || is_hooked_upi_ ||
-                                  (config.auto_hook_foreground &&
-                                   upi_registry::is_hookable_user_app(process_name_));
+        const bool keep_process = is_telephony_ || is_messaging_ || is_gms_ || is_hooked_upi_;
         if (!keep_process) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -284,9 +280,8 @@ public:
 
         const bool virtual_sim_on = config.virtual_sim_active();
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
-        const bool user_app = upi_registry::is_hookable_user_app(process_name_);
 
-        if (virtual_sim_on && (user_app || is_telephony_ || is_messaging_ || is_gms_)) {
+        if (virtual_sim_on && (is_hooked_upi_ || is_telephony_ || is_messaging_ || is_gms_)) {
             virtual_sim::install(env_, api_, process_name_);
         }
 
@@ -303,10 +298,8 @@ public:
 
         if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
             upi_hook::install(env_, api_, process_name_);
-            // Native overlay sirf UPI apps — Virtus APK ka apna menu hai (crash avoid)
-            overlay_ui::install(env_, api_, process_name_);
-            logger::info("Hivirtus", "UPI overlay in %s (overlay_only=%d)", process_name_.c_str(),
-                         overlay_only_mode() ? 1 : 0);
+            // Native overlay band — Activity PLT hooks se crash/heat; sirf Virtus APK menu
+            logger::info("Hivirtus", "UPI scoped in %s (apk menu only)", process_name_.c_str());
         }
 
         if (is_messaging_ && framework_sms_active(config)) {
@@ -343,7 +336,6 @@ public:
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_ ||
-                                       virtual_sim_on ||
                                        config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||

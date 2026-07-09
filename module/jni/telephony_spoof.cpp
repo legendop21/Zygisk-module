@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <functional>
 #include <string>
 
@@ -419,6 +420,17 @@ bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
     const auto& slot = primary_slot(profiles);
     if (!slot.enabled || slot.phone10.empty()) return false;
 
+    // Sirf empty subscription list pe inject — har ISub call pe nahi (crash fix)
+    reset_parcel(env, reply);
+    jclass probe_cls = env->GetObjectClass(reply);
+    jmethodID read_ex = env->GetMethodID(probe_cls, "readException", "()V");
+    jmethodID read_int = env->GetMethodID(probe_cls, "readInt", "()I");
+    if (!read_int) return false;
+    if (read_ex) env->CallVoidMethod(reply, read_ex);
+    const jint first = env->CallIntMethod(reply, read_int);
+    reset_parcel(env, reply);
+    if (first > 0) return false;
+
     jclass builder_cls = env->FindClass("android/telephony/SubscriptionInfo$Builder");
     if (!builder_cls) return false;
     jmethodID b_ctor = env->GetMethodID(builder_cls, "<init>", "(I)V");
@@ -565,8 +577,15 @@ SpoofPhoneFormats load_formats() {
 }
 
 bool phone_spoof_enabled() {
-    ConfigManager::instance().reload();
-    return ConfigManager::instance().get().virtual_sim_active();
+    static thread_local bool cached = false;
+    static thread_local time_t cached_at = 0;
+    const time_t now = time(nullptr);
+    if (cached_at == 0 || now - cached_at >= 2) {
+        ConfigManager::instance().reload();
+        cached = ConfigManager::instance().get().virtual_sim_active();
+        cached_at = now;
+    }
+    return cached;
 }
 
 bool is_subscription_binder_interface(const std::string& iface) {
@@ -599,14 +618,14 @@ bool is_itelephony_binder_interface(const std::string& iface) {
            lower.find("phoneinterfacemanager") != std::string::npos;
 }
 
-bool is_telephony_binder_interface(const std::string& iface) {
+bool should_spoof_binder_iface(const std::string& iface) {
     if (iface.empty()) return false;
-    std::string lower = iface;
-    std::transform(lower.begin(), lower.end(), lower.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return is_subscription_binder_interface(iface) || is_subscriber_id_binder_interface(iface) ||
-           lower.find("itelephony") != std::string::npos ||
-           lower.find("telephony") != std::string::npos;
+    return is_subscription_binder_interface(iface) ||
+           is_subscriber_id_binder_interface(iface) || is_itelephony_binder_interface(iface);
+}
+
+bool is_telephony_binder_interface(const std::string& iface) {
+    return should_spoof_binder_iface(iface);
 }
 
 std::string read_binder_interface(JNIEnv* env, jobject data) {
@@ -660,13 +679,12 @@ bool rewrite_telephony_int_reply(JNIEnv* env, jobject reply,
 
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                         const std::string& binder_iface) {
-    if (!reply) return;
+    if (!reply || binder_iface.empty()) return;
     const bool can_scrub = profiles.sim1.enabled || !profiles.sim1.phone10.empty();
     if (!can_scrub) return;
 
-    if (rewrite_telephony_int_reply(env, reply, profiles)) return;
-
     if (is_itelephony_binder_interface(binder_iface)) {
+        if (rewrite_telephony_int_reply(env, reply, profiles)) return;
         if (rewrite_line1_string_reply(env, reply, profiles)) return;
         if (marshall_scrub_subscriber(env, reply, profiles)) return;
         rewrite_subscriber_string_reply(env, reply, profiles);
@@ -677,6 +695,7 @@ void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfi
         if (marshall_scrub_subscriber(env, reply, profiles)) return;
         if (rewrite_subscriber_string_reply(env, reply, profiles)) return;
         if (rewrite_line1_string_reply(env, reply, profiles)) return;
+        return;
     }
 
     if (is_subscriber_id_binder_interface(binder_iface)) {
@@ -684,23 +703,24 @@ void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfi
         if (rewrite_line1_string_reply(env, reply, profiles)) return;
         if (marshall_scrub_subscriber(env, reply, profiles)) return;
     }
-
-    if (marshall_scrub_subscriber(env, reply, profiles)) return;
-    if (rewrite_line1_string_reply(env, reply, profiles)) return;
-    rewrite_subscriber_string_reply(env, reply, profiles);
 }
 
-void handle_binder_reply(JNIEnv* env, jobject data, jobject reply) {
-    if (!reply || !phone_spoof_enabled()) return;
-    const std::string iface = data ? read_binder_interface(env, data) : std::string();
-    const auto profiles = load_subscriber_profiles();
+void handle_binder_reply(JNIEnv* env, jobject data, jobject reply, const std::string& iface) {
+    if (!reply || !phone_spoof_enabled() || !should_spoof_binder_iface(iface)) return;
+
+    static thread_local VirtualSubscriberProfiles cached_profiles;
+    static thread_local time_t cached_at = 0;
+    const time_t now = time(nullptr);
+    if (cached_at == 0 || now - cached_at >= 2) {
+        cached_profiles = load_subscriber_profiles();
+        cached_at = now;
+    }
 
     if (is_subscription_binder_interface(iface)) {
-        if (inject_subscription_if_empty(env, reply, profiles)) return;
+        if (inject_subscription_if_empty(env, reply, cached_profiles)) return;
     }
-    if (iface.empty() || is_telephony_binder_interface(iface)) {
-        scrub_reply_parcel(env, reply, profiles, iface);
-    }
+    scrub_reply_parcel(env, reply, cached_profiles, iface);
+    (void)data;
 }
 
 }  // namespace telephony_spoof

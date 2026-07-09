@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "upi_registry.hpp"
+
 namespace virtual_sim {
 
 namespace {
@@ -31,8 +33,13 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result == 0 && reply) {
-        telephony_spoof::handle_binder_reply(env, data, reply);
+    if (result != 0 || !reply || !data || !telephony_spoof::phone_spoof_enabled()) {
+        return result;
+    }
+
+    const std::string iface = telephony_spoof::read_binder_interface(env, data);
+    if (telephony_spoof::should_spoof_binder_iface(iface)) {
+        telephony_spoof::handle_binder_reply(env, data, reply, iface);
     }
     return result;
 }
@@ -116,6 +123,12 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     if (!config.virtual_sim_active()) return;
+
+    // Sirf UPI / telephony / GMS — har user app pe binder hook = crash + heat
+    const bool telephony_proc = is_telephony_process(process_name);
+    const bool gms_proc = is_gms_process(process_name);
+    const bool upi_proc = upi_registry::is_known_upi(process_name);
+    if (!telephony_proc && !gms_proc && !upi_proc) return;
 
     g_api = api;
     g_process = process_name;

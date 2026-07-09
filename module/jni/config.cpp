@@ -363,7 +363,7 @@ bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
         if (any_explicit) return false;
     }
 
-    if (auto_hook_foreground) return true;
+    if (auto_hook_foreground) return upi_registry::is_known_upi(package);
     return upi_registry::is_known_upi(package);
 }
 

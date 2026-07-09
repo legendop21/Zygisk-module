@@ -43,6 +43,9 @@ bool is_subscription_binder_interface(const std::string& iface);
 bool is_subscriber_id_binder_interface(const std::string& iface);
 bool is_itelephony_binder_interface(const std::string& iface);
 
+/** True only for telephony/subscription binder interfaces (never empty). */
+bool should_spoof_binder_iface(const std::string& iface);
+
 /** Inject virtual SubscriptionInfo list (ISub / SubscriptionManager APIs). */
 bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
                                   const VirtualSubscriberProfiles& profiles);
@@ -51,8 +54,8 @@ bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                         const std::string& binder_iface);
 
-/** Full telephony binder post-process: inject subscription + scrub line1/sim state/sub id. */
-void handle_binder_reply(JNIEnv* env, jobject data, jobject reply);
+/** Telephony binder post-process — iface must pass should_spoof_binder_iface(). */
+void handle_binder_reply(JNIEnv* env, jobject data, jobject reply, const std::string& iface);
 
 std::string read_binder_interface(JNIEnv* env, jobject data);
 
