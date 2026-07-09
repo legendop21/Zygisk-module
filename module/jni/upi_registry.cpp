@@ -50,6 +50,7 @@ constexpr const char* kPackages[] = {
     "com.payu.india",
     "com.msf.angelmobile",
     "com.groww.app",
+    "com.nextbillion.groww",
     "com.mmt.mmtpay",
     "com.irctc.air",
     "com.truecaller",

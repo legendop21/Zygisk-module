@@ -414,6 +414,127 @@ bool marshall_scrub_subscriber(JNIEnv* env, jobject reply, const VirtualSubscrib
 
 }  // namespace
 
+bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
+                                  const VirtualSubscriberProfiles& profiles) {
+    const auto& slot = primary_slot(profiles);
+    if (!slot.enabled || slot.phone10.empty()) return false;
+
+    jclass builder_cls = env->FindClass("android/telephony/SubscriptionInfo$Builder");
+    if (!builder_cls) return false;
+    jmethodID b_ctor = env->GetMethodID(builder_cls, "<init>", "(I)V");
+    if (!b_ctor) return false;
+    const jint sub_id = static_cast<jint>(slot.slot_index + 1);
+    jobject builder = env->NewObject(builder_cls, b_ctor, sub_id);
+    if (!builder) return false;
+
+    jmethodID set_slot = env->GetMethodID(
+        builder_cls, "setSimSlotIndex", "(I)Landroid/telephony/SubscriptionInfo$Builder;");
+    if (set_slot) {
+        builder = env->CallObjectMethod(builder, set_slot, static_cast<jint>(slot.slot_index));
+    }
+
+    jmethodID set_number = env->GetMethodID(
+        builder_cls, "setNumber", "(Ljava/lang/String;)Landroid/telephony/SubscriptionInfo$Builder;");
+    if (set_number) {
+        const std::string display =
+            slot.phone_e164.empty() ? "+91" + slot.phone10 : slot.phone_e164;
+        builder = env->CallObjectMethod(
+            builder, set_number, zygisk_utils::string_to_jstring(env, display));
+    }
+
+    const std::string carrier =
+        slot.operator_name.empty() ? std::string("Jio") : slot.operator_name;
+    jmethodID set_carrier = env->GetMethodID(
+        builder_cls, "setCarrierName",
+        "(Ljava/lang/CharSequence;)Landroid/telephony/SubscriptionInfo$Builder;");
+    if (set_carrier) {
+        builder = env->CallObjectMethod(
+            builder, set_carrier, zygisk_utils::string_to_jstring(env, carrier));
+    }
+
+    if (!slot.iccid.empty()) {
+        jmethodID set_icc = env->GetMethodID(
+            builder_cls, "setIccId", "(Ljava/lang/String;)Landroid/telephony/SubscriptionInfo$Builder;");
+        if (set_icc) {
+            builder = env->CallObjectMethod(
+                builder, set_icc, zygisk_utils::string_to_jstring(env, slot.iccid));
+        }
+    }
+
+    if (!slot.country_iso.empty()) {
+        jmethodID set_iso = env->GetMethodID(
+            builder_cls, "setCountryIso",
+            "(Ljava/lang/String;)Landroid/telephony/SubscriptionInfo$Builder;");
+        if (set_iso) {
+            builder = env->CallObjectMethod(
+                builder, set_iso, zygisk_utils::string_to_jstring(env, slot.country_iso));
+        }
+    }
+
+    if (!slot.mcc.empty()) {
+        jmethodID set_mcc = env->GetMethodID(
+            builder_cls, "setMccString",
+            "(Ljava/lang/String;)Landroid/telephony/SubscriptionInfo$Builder;");
+        if (set_mcc) {
+            builder = env->CallObjectMethod(
+                builder, set_mcc, zygisk_utils::string_to_jstring(env, slot.mcc));
+        }
+    }
+    if (!slot.mnc.empty()) {
+        jmethodID set_mnc = env->GetMethodID(
+            builder_cls, "setMncString",
+            "(Ljava/lang/String;)Landroid/telephony/SubscriptionInfo$Builder;");
+        if (set_mnc) {
+            builder = env->CallObjectMethod(
+                builder, set_mnc, zygisk_utils::string_to_jstring(env, slot.mnc));
+        }
+    }
+
+    jmethodID build = env->GetMethodID(builder_cls, "build", "()Landroid/telephony/SubscriptionInfo;");
+    if (!build) return false;
+    jobject sub_info = env->CallObjectMethod(builder, build);
+    if (!sub_info) return false;
+
+    jclass list_cls = env->FindClass("java/util/ArrayList");
+    jmethodID list_ctor = env->GetMethodID(list_cls, "<init>", "()V");
+    jmethodID list_add = env->GetMethodID(list_cls, "add", "(Ljava/lang/Object;)Z");
+    jobject list = env->NewObject(list_cls, list_ctor);
+    if (!list || !list_add) return false;
+    env->CallBooleanMethod(list, list_add, sub_info);
+
+    jclass parcel_cls = env->GetObjectClass(reply);
+    jmethodID write_no_ex = env->GetMethodID(parcel_cls, "writeNoException", "()V");
+    jmethodID write_list = env->GetMethodID(parcel_cls, "writeTypedList", "(Ljava/util/List;)V");
+    jmethodID write_parcelable =
+        env->GetMethodID(parcel_cls, "writeParcelable", "(Landroid/os/Parcelable;I)V");
+    if (!write_list && !write_parcelable) return false;
+
+    reset_parcel(env, reply);
+    if (write_no_ex) env->CallVoidMethod(reply, write_no_ex);
+
+    bool wrote = false;
+    jclass slice_cls = env->FindClass("android/content/pm/ParceledListSlice");
+    if (slice_cls) {
+        jmethodID slice_ctor = env->GetMethodID(slice_cls, "<init>", "(Ljava/util/List;)V");
+        if (slice_ctor) {
+            jobject slice = env->NewObject(slice_cls, slice_ctor, list);
+            if (slice && write_parcelable) {
+                env->CallVoidMethod(reply, write_parcelable, slice, 0);
+                wrote = true;
+            }
+        }
+    }
+    if (!wrote && write_list) {
+        env->CallVoidMethod(reply, write_list, list);
+        wrote = true;
+    }
+    if (!wrote) return false;
+
+    logger::info("TelephonySpoof", "Injected virtual SIM SubscriptionInfo -> %s",
+                 slot.phone10.c_str());
+    return true;
+}
+
 VirtualSubscriberProfiles load_subscriber_profiles() {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
@@ -424,9 +545,14 @@ VirtualSubscriberProfiles load_subscriber_profiles() {
     profiles.dual_active = profiles.sim1.enabled && profiles.sim2.enabled;
 
     const std::string runtime = read_runtime_phone_file();
-    if (!runtime.empty() && profiles.sim1.phone10.empty()) {
-        profiles.sim1.phone10 = digits_only(runtime);
-        profiles.sim1.phone_e164 = "+91" + profiles.sim1.phone10;
+    if (!runtime.empty()) {
+        if (profiles.sim1.phone10.empty()) {
+            profiles.sim1.phone10 = digits_only(runtime);
+            profiles.sim1.phone_e164 = "+91" + profiles.sim1.phone10;
+        }
+        profiles.sim1.enabled = true;
+    }
+    if (config.virtual_sim_active() && !profiles.sim1.phone10.empty()) {
         profiles.sim1.enabled = true;
     }
     return profiles;

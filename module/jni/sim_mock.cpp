@@ -156,6 +156,17 @@ jstring hook_SystemProperties_get(JNIEnv* env, jclass clazz, jstring key_j, jstr
         return zygisk_utils::string_to_jstring(env, "READY");
     }
 
+    if (g_phone_spoof) {
+        std::string lower = key;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lower.find("sim.count") != std::string::npos ||
+            lower.find("num.sim") != std::string::npos ||
+            lower == "ro.telephony.sim.count") {
+            return zygisk_utils::string_to_jstring(env, "1");
+        }
+    }
+
     if (g_phone_spoof && should_spoof_operator_alpha_key(key)) {
         const std::string& op = slot2_key(key) ? cfg.mock_operator_name_sim2 : cfg.mock_operator_name_sim1;
         if (!op.empty()) return zygisk_utils::string_to_jstring(env, op);

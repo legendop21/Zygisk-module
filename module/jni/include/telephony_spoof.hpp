@@ -43,6 +43,10 @@ bool is_subscription_binder_interface(const std::string& iface);
 bool is_subscriber_id_binder_interface(const std::string& iface);
 bool is_itelephony_binder_interface(const std::string& iface);
 
+/** Inject virtual SubscriptionInfo when ISub returns empty list (no SIM tray). */
+bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
+                                    const VirtualSubscriberProfiles& profiles);
+
 /** Rewrite binder reply: SubscriptionInfo, ISub, IPhoneSubInfo, ITelephony getLine1Number. */
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                          const std::string& binder_iface);

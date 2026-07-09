@@ -76,9 +76,9 @@ if [ -n "$REAL_LINE" ]; then
   chmod 644 "$MODDIR/real_phone.txt" 2>/dev/null
 fi
 
-echo "module_boot_v2.43.0" > /data/local/tmp/hivirtus_overlay.debug
+echo "module_boot_v2.44.0" > /data/local/tmp/hivirtus_overlay.debug
 chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v2.43.0" > /data/local/tmp/hivirtus_inject.log
+echo "module_boot_v2.44.0" > /data/local/tmp/hivirtus_inject.log
 chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 
 # APK module ke andar — boot pe auto install

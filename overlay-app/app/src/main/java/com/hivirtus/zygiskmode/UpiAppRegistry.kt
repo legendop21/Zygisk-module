@@ -56,6 +56,7 @@ object UpiAppRegistry {
         UpiApp("com.payu.india", "PayU", listOf("PAYU"), 25),
         UpiApp("com.msf.angelmobile", "Angel One", listOf("ANGEL"), 25),
         UpiApp("com.groww.app", "Groww", listOf("GROWW"), 25),
+        UpiApp("com.nextbillion.groww", "Groww", listOf("GROWW", "YESBNK"), 25),
         UpiApp("com.mmt.mmtpay", "MakeMyTrip", listOf("MMT"), 20),
         UpiApp("com.irctc.air", "IRCTC", listOf("IRCTC"), 20),
         UpiApp("com.truecaller", "Truecaller Pay", listOf("TRUECALLER"), 25),

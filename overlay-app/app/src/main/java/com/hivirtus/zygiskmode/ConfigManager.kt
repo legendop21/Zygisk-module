@@ -265,6 +265,7 @@ class ConfigManager(private val context: Context) {
         if (enabled && ten.length == 10) {
             writeUserMockPhone(normalized)
             writeSpoofPhoneSync(normalized)
+            applyPhoneSystemProps(normalized)
             return true
         }
         return !enabled

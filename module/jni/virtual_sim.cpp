@@ -28,8 +28,13 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
 
     if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
         const std::string iface = data ? telephony_spoof::read_binder_interface(env, data) : "";
+        const auto profiles = telephony_spoof::load_subscriber_profiles();
+        if (telephony_spoof::is_subscription_binder_interface(iface)) {
+            if (telephony_spoof::inject_subscription_if_empty(env, reply, profiles)) {
+                return result;
+            }
+        }
         if (iface.empty() || telephony_spoof::is_telephony_binder_interface(iface)) {
-            const auto profiles = telephony_spoof::load_subscriber_profiles();
             telephony_spoof::scrub_reply_parcel(env, reply, profiles, iface);
         }
     }
@@ -141,9 +146,11 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    // All user/UPI apps — properties immediately, binder after 1s (getLine1Number / SubscriptionInfo)
-    schedule_deferred_binder(api, 1);
-    logger::info("VirtualSim", "Virtual SIM properties + binder in 1s for %s", process_name.c_str());
+    // Groww/UPI — turant binder hook (1s delay se pehle SIM check ho jata tha)
+    if (!install_binder_plt(api)) {
+        schedule_deferred_binder(api, 1);
+    }
+    logger::info("VirtualSim", "Virtual SIM binder active for %s", process_name.c_str());
 }
 
 }  // namespace virtual_sim
