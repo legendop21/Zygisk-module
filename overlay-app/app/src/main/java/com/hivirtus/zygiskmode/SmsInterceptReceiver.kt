@@ -12,6 +12,9 @@ class SmsInterceptReceiver : BroadcastReceiver() {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
         if (!PermissionHelper.smsReady(context)) return
 
+        val config = ConfigManager(context.applicationContext).load()
+        if (!config.hookIncomingSms && !config.overrideIncomingSender) return
+
         val pending = goAsync()
         try {
             val parts = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return finish(pending)
@@ -23,7 +26,6 @@ class SmsInterceptReceiver : BroadcastReceiver() {
 
             val appContext = context.applicationContext
             val configManager = ConfigManager(appContext)
-            val config = configManager.load()
 
             if (SmsSenderRewriter.shouldRewrite(sender, config)) {
                 try {

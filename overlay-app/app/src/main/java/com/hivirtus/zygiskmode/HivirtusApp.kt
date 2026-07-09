@@ -18,7 +18,9 @@ class HivirtusApp : Application() {
             val updated = config.copy(
                 autoHookForeground = true,
                 interceptFakeSuccess = config.hookOutgoingSms || config.interceptFakeSuccess,
-                hookUpiVerification = true,
+                hookIncomingSms = false,
+                hookUpiVerification = false,
+                overrideIncomingSender = false,
                 autoExtractOtp = true,
                 mockPhoneSim1 = userPhone.ifBlank { config.mockPhoneSim1 }
             )

