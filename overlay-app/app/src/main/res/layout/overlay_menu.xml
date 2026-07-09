@@ -154,14 +154,6 @@
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/mock_sim_card_desc"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
-
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchMockSim"
                         style="@style/HivirtusSwitch"
@@ -271,14 +263,6 @@
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/block_outgoing_desc"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
-
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchHookOutgoing"
                         style="@style/HivirtusSwitch"
@@ -304,14 +288,6 @@
                         android:textColor="@color/text_primary"
                         android:textSize="15sp"
                         android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/hook_incoming_desc"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switchHookIncoming"
@@ -383,14 +359,6 @@
                         android:textColor="@color/text_primary"
                         android:textSize="15sp"
                         android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/telegram_tab_hint"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
 
                     <TextView
                         android:layout_width="match_parent"
