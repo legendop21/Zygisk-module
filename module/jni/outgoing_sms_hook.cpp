@@ -81,7 +81,10 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
         return false;
     }
     if (verify_body) return true;
-    if (config.hook_outgoing_sms && config.virtual_sim_active() && verify_dest) return true;
+    // Outgoing hook ON → short-code verify SMS block (Hero/Axis etc.)
+    if ((config.hook_outgoing_sms || config.intercept_fake_success) && verify_dest) {
+        return true;
+    }
     return false;
 }
 

@@ -97,6 +97,10 @@ is_upi_pkg() {
 }
 
 sync_config() {
+  # User runtime config overwrite mat karo — telegram token wipe hota tha
+  if [ -f "$RUNTIME" ]; then
+    return 0
+  fi
   if [ -f "$CONFIG" ]; then
     cp -f "$CONFIG" "$RUNTIME"
     chmod 644 "$RUNTIME" 2>/dev/null

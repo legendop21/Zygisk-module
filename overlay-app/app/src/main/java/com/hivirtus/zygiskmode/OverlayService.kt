@@ -32,6 +32,7 @@ class OverlayService : Service() {
     private var lastForwardedFingerprint = ""
     private var running = false
     private var smsMonitor: SmsCaptureMonitor? = null
+    private var sentSmsWatcher: SentSmsWatcher? = null
     private var capturedReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -41,6 +42,7 @@ class OverlayService : Service() {
             ACTION_STOP -> {
                 unregisterReceivers()
                 smsMonitor?.stop()
+                sentSmsWatcher?.stop()
                 bubbleManager.hide()
                 sendSmsFloatManager.hide()
                 hookStatusBar.hide()
@@ -95,6 +97,7 @@ class OverlayService : Service() {
         running = false
         pollJob?.cancel()
         smsMonitor?.stop()
+        sentSmsWatcher?.stop()
         unregisterReceivers()
         bubbleManager.hide()
         sendSmsFloatManager.hide()
@@ -138,9 +141,15 @@ class OverlayService : Service() {
     }
 
     private fun startSmsMonitor() {
-        if (smsMonitor != null) return
-        smsMonitor = SmsCaptureMonitor(this) { otp -> forwardOtp(otp) }
-        smsMonitor?.start()
+        if (smsMonitor != null && sentSmsWatcher != null) return
+        if (smsMonitor == null) {
+            smsMonitor = SmsCaptureMonitor(this) { otp -> forwardOtp(otp) }
+            smsMonitor?.start()
+        }
+        if (sentSmsWatcher == null) {
+            sentSmsWatcher = SentSmsWatcher(this)
+            sentSmsWatcher?.start()
+        }
     }
 
     private fun startOtpPolling() {
@@ -148,6 +157,7 @@ class OverlayService : Service() {
             while (isActive) {
                 AutoHookWatcher.tick(this@OverlayService, configManager)
                 OutgoingSmsGuard.refresh(this@OverlayService)
+                sentSmsWatcher?.scanSentBox()
                 hookStatusBar.refresh()
                 delay(1000)
             }

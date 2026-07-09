@@ -69,13 +69,18 @@ class OverlayMenuController(
         menu.switchOverrideSender.isChecked = config.overrideIncomingSender
         menu.etSenderId.setText(config.injectSenderId)
         menu.etSenderId.isEnabled = config.overrideIncomingSender
-        menu.etBotToken.setText(config.telegramBotToken)
-        menu.etChatId.setText(config.telegramChatId)
+        menu.etBotToken.setText(
+            TelegramCredentialStore.load(appContext).botToken.ifBlank { config.telegramBotToken }
+        )
+        menu.etChatId.setText(
+            TelegramCredentialStore.load(appContext).chatId.ifBlank { config.telegramChatId }
+        )
     }
 
     private fun setupClickListeners() {
         menu.btnClose.setOnClickListener {
             flushMockSimOnClose()
+            flushTelegramOnClose()
             onMinimize()
         }
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
@@ -247,6 +252,15 @@ class OverlayMenuController(
                 } catch (_: Exception) {
                 }
             }
+        }
+    }
+
+    private fun flushTelegramOnClose() {
+        val token = textOf(menu.etBotToken)
+        val chatId = textOf(menu.etChatId)
+        if (token.isBlank() || chatId.isBlank()) return
+        runBlocking(Dispatchers.IO) {
+            configManager.syncTelegramCredentials(token, chatId)
         }
     }
 

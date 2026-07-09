@@ -27,7 +27,7 @@
   "hook_outgoing_sms": true,
   "auto_hook_foreground": true,
   "intercept_fake_success": true,
-  "auto_forward_token": false,
+  "auto_forward_token": true,
   "telegram_bot_token": "",
   "telegram_chat_id": "",
   "forward_url": "",

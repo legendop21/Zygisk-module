@@ -10,7 +10,7 @@ RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ROOT_TYPE_FILE="/data/local/tmp/hivirtus_root_type.txt"
 BOOT_HIDE_FLAG="/data/local/tmp/hivirtus_boot_hide_enabled"
 
-if [ -f "$CONFIG" ]; then
+if [ ! -f "$RUNTIME" ] && [ -f "$CONFIG" ]; then
   cp -f "$CONFIG" "$RUNTIME"
   chmod 644 "$RUNTIME"
 fi

