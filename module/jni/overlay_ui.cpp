@@ -266,6 +266,7 @@ Rect view_rect(JNIEnv* env, jobject view) {
 
 void save_ui_to_config(JNIEnv* env) {
     auto& mgr = ConfigManager::instance();
+    mgr.reload();
     auto& c = mgr.mutable_config();
     if (g_sw_hide_dev) c.hide_developer = switch_checked(env, g_sw_hide_dev);
     if (g_sw_hide_root) {

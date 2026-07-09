@@ -10,6 +10,8 @@
 #include <cctype>
 #include <cstdio>
 #include <string>
+#include <pthread.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 namespace outgoing_sms_hook {
@@ -47,7 +49,7 @@ bool body_has_verify_token(const std::string& body) {
     const std::string upper = to_upper(body);
     static const char* keywords[] = {
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY",
-        "SNAPMINT", "KREDIT", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
+        "SNAPMINT", "KREDIT", "KREDITBEE", "KREDITBEEAXIS", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
         "HEROAXIS", "AXIS", "AIRTEL", "AIRBNK", "MYAIRTEL", nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
         if (upper.find(*kw) != std::string::npos) return true;
@@ -62,7 +64,7 @@ bool body_matches_hooked_upi(const ModuleConfig& config, const std::string& body
 
 bool should_block_outgoing(const ModuleConfig& config, const std::string& body) {
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
-    if (!any_hooked_app(config)) return false;
+    if (!any_hooked_app(config) && !config.virtual_sim_active()) return false;
     return body_has_verify_token(body);
 }
 
@@ -242,7 +244,7 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
     return result;
 }
 
-void install_plt_hooks(JNIEnv* env, bool include_binder) {
+void install_plt_hooks(JNIEnv* env, bool enable_binder) {
     (void)env;
     if (!g_api) return;
     static bool exec_committed = false;
@@ -256,7 +258,7 @@ void install_plt_hooks(JNIEnv* env, bool include_binder) {
                                  reinterpret_cast<void*>(hook_execStartActivity),
                                  reinterpret_cast<void**>(&orig_execStartActivity));
     }
-    if (include_binder && !binder_committed) {
+    if (enable_binder && !binder_committed) {
         binder_committed = true;
         plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                  "Java_android_os_BinderProxy_transact",
@@ -264,26 +266,55 @@ void install_plt_hooks(JNIEnv* env, bool include_binder) {
                                  reinterpret_cast<void**>(&orig_BinderProxy_transact));
     }
     plt_hook::commit();
-    logger::info("OutgoingSms", "hooks: execStart=%d binder=%d", exec_committed ? 1 : 0,
-                 (include_binder && binder_committed) ? 1 : 0);
+    logger::info("OutgoingSms", "hooks: exec=%d binder=%d", exec_committed ? 1 : 0,
+                 (enable_binder && binder_committed) ? 1 : 0);
+}
+
+struct DeferredSmsHook {
+    zygisk::Api* api = nullptr;
+    JNIEnv* env = nullptr;
+};
+
+void* deferred_sms_hook_worker(void* arg) {
+    auto* job = static_cast<DeferredSmsHook*>(arg);
+    sleep(2);
+    if (job && job->api) {
+        g_api = job->api;
+        g_in_hooked_upi = true;
+        install_plt_hooks(job->env, true);
+        logger::info("OutgoingSms", "Deferred ISms block active (UPI app)");
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
+    auto* job = new DeferredSmsHook();
+    job->api = api;
+    job->env = env;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_sms_hook_worker, job);
+    pthread_detach(t);
 }
 
 }  // namespace
 
-void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_hooked_upi) {
+void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging) {
     (void)env;
-    (void)in_telephony;
     g_api = api;
-    g_in_hooked_upi = in_hooked_upi;
+    g_in_hooked_upi = in_messaging;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    const bool phone_spoof = config.enable_phone_spoof || config.enable_sim1_mock ||
-                             config.enable_sim2_mock;
+    const bool phone_spoof = config.virtual_sim_active();
     const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
 
-    if (!phone_spoof && !sms_block && !in_telephony && !in_hooked_upi) return;
-    // BinderProxy in UPI apps (Paytm/KreditBee) → crash. Sirf telephony me full hook.
-    install_plt_hooks(env, in_telephony);
+    if (!phone_spoof && !sms_block && !in_telephony && !in_messaging) return;
+    // Telephony + Messages need ISms binder hook to block real verify SMS.
+    install_plt_hooks(env, in_telephony || in_messaging);
+}
+
+void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {
+    schedule_deferred_upi(env, api);
 }
 
 }  // namespace outgoing_sms_hook

@@ -77,13 +77,23 @@ class ConfigManager(private val context: Context) {
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
     fun load(): ModuleConfig {
-        val file = when {
-            appConfigFile.exists() -> appConfigFile
-            runtimeConfig.canRead() -> runtimeConfig
-            moduleConfig.canRead() -> moduleConfig
-            else -> return ModuleConfig()
+        val parsed = when {
+            runtimeConfig.canRead() -> parseConfigFile(runtimeConfig)
+            moduleConfig.canRead() -> parseConfigFile(moduleConfig)
+            appConfigFile.exists() -> parseConfigFile(appConfigFile)
+            else -> ModuleConfig()
         }
-        return parseConfigFile(file)
+        val spoofDigits = readSpoofPhone().let { mockSimDigits10(it) }
+        if (spoofDigits.length == 10) {
+            val normalized = normalizePhone(spoofDigits)
+            return parsed.copy(
+                mockPhoneSim1 = normalized,
+                enableVirtualSim = parsed.enableVirtualSim || parsed.enableSim1Mock || parsed.enablePhoneSpoof,
+                enableSim1Mock = parsed.enableSim1Mock || parsed.enableVirtualSim,
+                enablePhoneSpoof = parsed.enablePhoneSpoof || parsed.enableVirtualSim
+            )
+        }
+        return parsed
     }
 
     /** App storage pe save — kabhi crash nahi. Root sync background me. */
@@ -194,7 +204,12 @@ class ConfigManager(private val context: Context) {
             enableVirtualSim = enabled,
             enableSim1Mock = enabled,
             enablePhoneSpoof = enabled,
-            mockPhoneSim1 = if (ten.length == 10) normalized else current.mockPhoneSim1
+            mockPhoneSim1 = if (ten.length == 10) normalized else current.mockPhoneSim1,
+            hookOutgoingSms = if (enabled) true else current.hookOutgoingSms,
+            hookIncomingSms = if (enabled) true else current.hookIncomingSms,
+            interceptFakeSuccess = if (enabled) true else current.interceptFakeSuccess,
+            hookUpiVerification = if (enabled) true else current.hookUpiVerification,
+            autoHookForeground = true
         )
 
         if (!saveAndFlushSync(updated)) return false

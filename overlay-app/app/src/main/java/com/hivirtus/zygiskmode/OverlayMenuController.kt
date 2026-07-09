@@ -76,7 +76,10 @@ class OverlayMenuController(
     }
 
     private fun setupClickListeners() {
-        menu.btnClose.setOnClickListener { onMinimize() }
+        menu.btnClose.setOnClickListener {
+            flushMockSimOnClose()
+            onMinimize()
+        }
         menu.tabSystem.setOnClickListener { selectTab(Tab.SYSTEM) }
         menu.tabMessage.setOnClickListener { selectTab(Tab.MESSAGE) }
         menu.tabTelegram.setOnClickListener { selectTab(Tab.TG) }
@@ -195,6 +198,16 @@ class OverlayMenuController(
         }
     }
 
+    private fun flushMockSimOnClose() {
+        if (!menu.switchMockSim.isChecked) return
+        val digits = configManager.mockSimDigits10(textOf(menu.etMockSimNumber))
+        if (digits.length != 10) return
+        scope.launch(Dispatchers.IO) {
+            configManager.syncMockSim(true, digits)
+            TelephonyInjectHelper.wakeTelephonyPipeline()
+        }
+    }
+
     private fun persistMockSim(enabled: Boolean, phoneRaw: String) {
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -203,6 +216,7 @@ class OverlayMenuController(
             val digits = configManager.mockSimDigits10(phoneRaw)
             updateMockSimStatus(enabled, digits)
             if (ok) {
+                TelephonyInjectHelper.wakeTelephonyPipeline()
                 HookStatusBarManager(appContext).refresh()
                 OutgoingSmsGuard.refresh(appContext)
                 if (enabled && digits.length == 10) {

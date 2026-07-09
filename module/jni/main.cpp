@@ -100,11 +100,12 @@ ModuleConfig upi_root_hide_config(const ModuleConfig& config) {
 }
 
 bool framework_sms_active(const ModuleConfig& config) {
+    if (config.virtual_sim_active()) return true;
     if (!config.hook_incoming_sms && !config.hook_outgoing_sms &&
         !config.intercept_fake_success && !config.hook_upi_verification) {
         return false;
     }
-    return any_hooked_app(config);
+    return any_hooked_app(config) || config.auto_hook_foreground;
 }
 
 // system_server/GMS PLT hooks → Zygisk Next + APatch pe zygote crash. Telephony enough.
@@ -317,10 +318,16 @@ public:
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, "telephony");
             }
-            if (!virtual_sim_on) {
+            if (config.hook_outgoing_sms || config.intercept_fake_success) {
                 outgoing_sms_hook::install(env_, api_, true, false);
             }
             process_inject_command(env_);
+        }
+
+        if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
+                               config.virtual_sim_active())) {
+            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
+            logger::info("Hivirtus", "Deferred outgoing SMS block in %s", process_name_.c_str());
         }
 
         if (is_hooked_upi_ && want_sender_spoof) {
