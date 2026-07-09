@@ -352,13 +352,70 @@ jobject frame_lp(JNIEnv* env, jobject ctx, int w, int h, int gravity, int ml, in
     return lp_obj;
 }
 
+bool add_via_window_manager(JNIEnv* env, jobject activity, jobject view, jobject lp);
+
 void add_to_decor(JNIEnv* env, jobject activity, jobject view, jobject lp) {
     jobject decor = get_decor(env, activity);
     if (!decor || !view) return;
     jclass dc = env->GetObjectClass(decor);
     env->CallVoidMethod(decor, env->GetMethodID(dc, "addView", "(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V"),
                         view, lp);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        debug_marker("decor_addView_failed_try_wm");
+        add_via_window_manager(env, activity, view, lp);
+    }
+}
+
+bool add_via_window_manager(JNIEnv* env, jobject activity, jobject view, jobject lp) {
+    if (!activity || !view) return false;
+    jclass at = env->GetObjectClass(activity);
+    jmethodID get_ss = env->GetMethodID(at, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+    jobject wm = env->CallObjectMethod(activity, get_ss, env->NewStringUTF("window"));
+    if (!wm || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+
+    jobject decor = get_decor(env, activity);
+    if (!decor) return false;
+    jobject token = env->CallObjectMethod(decor,
+                                         env->GetMethodID(env->FindClass("android/view/View"), "getWindowToken",
+                                                          "()Landroid/os/IBinder;"));
+    if (!token || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(decor);
+        return false;
+    }
+
+    jclass lp_cls = env->FindClass("android/view/WindowManager$LayoutParams");
+    jobject wlp = env->NewObject(lp_cls, env->GetMethodID(lp_cls, "<init>", "(IIIII)V"),
+                                 static_cast<jint>(-2), static_cast<jint>(-2),
+                                 static_cast<jint>(1000),  // TYPE_APPLICATION_PANEL
+                                 static_cast<jint>(0x18),  // NOT_FOCUSABLE | NOT_TOUCH_MODAL
+                                 static_cast<jint>(-3));     // TRANSLUCENT
+    jfieldID token_field = env->GetFieldID(lp_cls, "token", "Landroid/os/IBinder;");
+    env->SetObjectField(wlp, token_field, token);
+
+    jclass fl = env->FindClass("android/widget/FrameLayout$LayoutParams");
+    if (lp) {
+        jfieldID gravity_field = env->GetFieldID(fl, "gravity", "I");
+        jfieldID top_field = env->GetFieldID(fl, "topMargin", "I");
+        jfieldID right_field = env->GetFieldID(fl, "rightMargin", "I");
+        const jint gravity = env->GetIntField(lp, gravity_field);
+        env->SetIntField(wlp, env->GetFieldID(lp_cls, "gravity", "I"), gravity);
+        env->SetIntField(wlp, env->GetFieldID(lp_cls, "x", "I"), 0);
+        env->SetIntField(wlp, env->GetFieldID(lp_cls, "y", "I"), env->GetIntField(lp, top_field));
+    }
+
+    jclass wmi = env->FindClass("android/view/WindowManager");
+    env->CallVoidMethod(wm, env->GetMethodID(wmi, "addView", "(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V"),
+                        view, wlp);
+    const bool ok = !env->ExceptionCheck();
+    if (!ok) env->ExceptionClear();
+    else debug_marker("overlay_wm_add_ok");
+    env->DeleteLocalRef(decor);
+    return ok;
 }
 
 jobject make_tab(JNIEnv* env, jobject ctx, const char* label, const char* tag, bool active) {
@@ -768,9 +825,7 @@ bool try_install_activity_hooks() {
 
     plt_hook::set_api(g_api);
     static bool reg_attached = false;
-    static bool reg_start = false;
     static bool reg_resume = false;
-    static bool reg_post_resume = false;
     static bool reg_pause = false;
     static bool reg_click = false;
 
@@ -780,23 +835,11 @@ bool try_install_activity_hooks() {
                                                reinterpret_cast<void*>(hook_onAttachedToWindow),
                                                reinterpret_cast<void**>(&orig_onAttachedToWindow));
     }
-    if (!reg_start) {
-        reg_start = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                                             "Java_android_app_Activity_onStart",
-                                             reinterpret_cast<void*>(hook_onStart),
-                                             reinterpret_cast<void**>(&orig_onStart));
-    }
     if (!reg_resume) {
         reg_resume = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                               "Java_android_app_Activity_onResume",
                                               reinterpret_cast<void*>(hook_onResume),
                                               reinterpret_cast<void**>(&orig_onResume));
-    }
-    if (!reg_post_resume) {
-        reg_post_resume = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                                                   "Java_android_app_Activity_onPostResume",
-                                                   reinterpret_cast<void*>(hook_onPostResume),
-                                                   reinterpret_cast<void**>(&orig_onPostResume));
     }
     if (!reg_pause) {
         reg_pause = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
@@ -811,12 +854,12 @@ bool try_install_activity_hooks() {
                                              reinterpret_cast<void**>(&orig_performClick));
     }
 
-    if (!(reg_attached || reg_resume || reg_start) || !plt_hook::commit()) return false;
+    if (!(reg_attached || reg_resume) || !plt_hook::commit()) return false;
 
     g_plt_ready.store(true);
     debug_marker("overlay_plt_hooks_ok");
-    logger::info("OverlayUI", "PLT hooks ready attached=%d start=%d resume=%d post=%d",
-                 reg_attached ? 1 : 0, reg_start ? 1 : 0, reg_resume ? 1 : 0, reg_post_resume ? 1 : 0);
+    logger::info("OverlayUI", "PLT hooks ready attached=%d resume=%d click=%d",
+                 reg_attached ? 1 : 0, reg_resume ? 1 : 0, reg_click ? 1 : 0);
     return true;
 }
 
@@ -846,14 +889,8 @@ void* overlay_keepalive_worker(void*) {
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
     for (int i = 0; i < 1200; ++i) {
         usleep(500000);
+        // Sirf PLT hooks retry — UI attach main thread (onResume) se hota hai
         try_install_activity_hooks();
-        jobject activity = get_top_resumed_activity(env);
-        if (activity) {
-            if (is_our_package(env, activity)) {
-                overlay_touch(env, activity);
-            }
-            env->DeleteLocalRef(activity);
-        }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     g_vm->DetachCurrentThread();

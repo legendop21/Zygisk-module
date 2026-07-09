@@ -18,6 +18,7 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/stat.h>
 
 namespace {
@@ -142,6 +143,38 @@ void touch_upi_inject(const char* pkg) {
     append_diag("/data/local/tmp/hivirtus_overlay.debug", buf);
 }
 
+bool overlay_only_mode() {
+    return access("/data/local/tmp/hivirtus_overlay_only", R_OK) == 0 ||
+           access("/data/local/tmp/hivirtus_safe_mode", R_OK) == 0;
+}
+
+struct DeferredRootHide {
+    JNIEnv* env = nullptr;
+    ModuleConfig config{};
+    zygisk::Api* api = nullptr;
+};
+
+void* deferred_root_hide_worker(void* arg) {
+    auto* job = static_cast<DeferredRootHide*>(arg);
+    sleep(3);
+    if (job && job->env && job->api) {
+        root_hide::install(job->env, job->config, job->api);
+        append_diag("/data/local/tmp/hivirtus_overlay.debug", "root_hide_deferred_ok");
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_deferred_root_hide(JNIEnv* env, const ModuleConfig& config, zygisk::Api* api) {
+    auto* job = new DeferredRootHide();
+    job->env = env;
+    job->config = upi_root_hide_config(config);
+    job->api = api;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_root_hide_worker, job);
+    pthread_detach(t);
+}
+
 void process_inject_command(JNIEnv* env) {
     std::ifstream cmd_file(kInjectCommandFile);
     if (!cmd_file.is_open()) return;
@@ -239,7 +272,11 @@ public:
 
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
-            root_hide::install(env_, upi_root_hide_config(config), api_);
+            if (!overlay_only_mode()) {
+                schedule_deferred_root_hide(env_, config, api_);
+            } else {
+                append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_only_mode");
+            }
         } else if ((config.hide_root || config.hide_developer) && hook_target) {
             root_hide::install(env_, config, api_);
         }
@@ -268,11 +305,10 @@ public:
 
         if (is_hooked_upi_) {
             upi_hook::install(env_, api_, process_name_);
-            if (config.hook_outgoing_sms || config.intercept_fake_success) {
-                outgoing_sms_hook::install(env_, api_, false, true);
-            }
+            // SMS/Binder hooks sirf telephony — UPI me crash (Android 15 + Zygisk Next)
             overlay_ui::install(env_, api_, process_name_);
-            logger::info("Hivirtus", "UPI overlay + light hooks in %s", process_name_.c_str());
+            logger::info("Hivirtus", "UPI overlay in %s (overlay_only=%d)", process_name_.c_str(),
+                         overlay_only_mode() ? 1 : 0);
         }
 
         if (is_messaging_ && framework_sms_active(config)) {
