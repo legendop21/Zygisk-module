@@ -101,6 +101,7 @@ ModuleConfig upi_root_hide_config(const ModuleConfig& config) {
 
 bool framework_sms_active(const ModuleConfig& config) {
     if (config.virtual_sim_active()) return true;
+    if (!config.inject_sender_id.empty() && config.inject_sender_id != "AD-TEST-S") return true;
     if (!config.hook_incoming_sms && !config.hook_outgoing_sms &&
         !config.intercept_fake_success && !config.hook_upi_verification) {
         return false;
@@ -114,7 +115,6 @@ bool hook_system_framework(const ModuleConfig&) {
 }
 
 bool sender_spoof_wanted(const ModuleConfig& config) {
-    if (!any_hooked_app(config)) return false;
     if (!config.override_incoming_sender) return false;
     const std::string& id = config.inject_sender_id;
     return !id.empty() && id != "AD-TEST-S";
@@ -303,9 +303,9 @@ public:
         }
 
         if (is_messaging_ && framework_sms_active(config)) {
-            if (config.hook_outgoing_sms || config.intercept_fake_success) {
-                outgoing_sms_hook::install(env_, api_, false, true);
-                logger::info("Hivirtus", "Messages SMS hook (scoped)");
+            if (config.hook_outgoing_sms || config.intercept_fake_success || config.virtual_sim_active()) {
+                outgoing_sms_hook::install(env_, api_, true, true);
+                logger::info("Hivirtus", "Messages SMS hook (binder+exec)");
             }
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, process_name_.c_str());

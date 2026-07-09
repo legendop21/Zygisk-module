@@ -11,7 +11,7 @@
   "enable_sim2_mock": true,
   "enable_phone_spoof": true,
   "mock_country_iso": "in",
-  "mock_phone_sim1": "9876543210",
+  "mock_phone_sim1": "",
   "mock_phone_sim2": "9123456789",
   "mock_operator_name_sim1": "Jio",
   "mock_operator_name_sim2": "Airtel",

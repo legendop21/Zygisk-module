@@ -144,7 +144,7 @@ class BackupManager(private val context: Context) {
             enableSim2Mock = obj.optBoolean("enable_sim2_mock", false),
             enablePhoneSpoof = obj.optBoolean("enable_phone_spoof", false),
             mockCountryIso = obj.optString("mock_country_iso", "in"),
-            mockPhoneSim1 = obj.optString("mock_phone_sim1", "+919876543210"),
+            mockPhoneSim1 = obj.optString("mock_phone_sim1", ""),
             mockPhoneSim2 = obj.optString("mock_phone_sim2", "+919876543211"),
             hookIncomingSms = obj.optBoolean("hook_incoming_sms", true),
             hookOutgoingSms = obj.optBoolean("hook_outgoing_sms", true),

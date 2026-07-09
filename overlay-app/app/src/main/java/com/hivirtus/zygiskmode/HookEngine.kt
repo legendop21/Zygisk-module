@@ -25,7 +25,7 @@ object HookEngine {
 
         val display = UpiAppRegistry.displayNameFor(targetPkg)
         val current = configManager.load()
-        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }.ifBlank { "+919876543210" }
+        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
         val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
 
         val hooked = if (mergeSelection) {
@@ -81,7 +81,7 @@ object HookEngine {
         if (selected.isEmpty()) return 0
 
         val current = configManager.load()
-        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }.ifBlank { "+919876543210" }
+        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
         val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
 
         val senderId = current.injectSenderId.trim()

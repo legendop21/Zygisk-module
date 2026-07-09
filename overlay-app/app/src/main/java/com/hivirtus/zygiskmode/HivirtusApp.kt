@@ -14,22 +14,18 @@ class HivirtusApp : Application() {
             val cm = ConfigManager(this)
             val config = cm.load()
             val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
+            val userPhone = cm.readUserMockPhoneRaw().ifBlank { config.mockPhoneSim1 }
             val updated = config.copy(
                 autoHookForeground = true,
-                enableVirtualSim = mockOn,
-                enablePhoneSpoof = mockOn && config.enablePhoneSpoof,
-                enableSim1Mock = mockOn && config.enableSim1Mock,
-                interceptFakeSuccess = config.hookOutgoingSms,
-                hookIncomingSms = config.hookIncomingSms,
-                hookOutgoingSms = config.hookOutgoingSms,
+                interceptFakeSuccess = config.hookOutgoingSms || config.interceptFakeSuccess,
                 hookUpiVerification = true,
-                autoExtractOtp = true
+                autoExtractOtp = true,
+                mockPhoneSim1 = userPhone.ifBlank { config.mockPhoneSim1 }
             )
-            cm.saveAndFlushSync(updated)
-            if (mockOn) {
-                val phone = cm.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
-                if (phone.isNotBlank()) cm.writeSpoofPhoneSync(phone)
+            if (mockOn && userPhone.isNotBlank()) {
+                cm.writeSpoofPhoneSync(userPhone)
             }
+            cm.save(updated)
             FrameworkHookHelper.markScopeActivePublic()
         } catch (_: Exception) {
         }

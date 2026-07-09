@@ -64,7 +64,9 @@ bool body_matches_hooked_upi(const ModuleConfig& config, const std::string& body
 
 bool should_block_outgoing(const ModuleConfig& config, const std::string& body) {
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
-    if (!any_hooked_app(config) && !config.virtual_sim_active()) return false;
+    if (!any_hooked_app(config) && !config.virtual_sim_active() && !config.auto_hook_foreground) {
+        return false;
+    }
     return body_has_verify_token(body);
 }
 

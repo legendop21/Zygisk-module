@@ -18,7 +18,7 @@ data class ModuleConfig(
     val enableSim2Mock: Boolean = false,
     val enablePhoneSpoof: Boolean = false,
     val mockCountryIso: String = "in",
-    val mockPhoneSim1: String = "+919876543210",
+    val mockPhoneSim1: String = "",
     val mockPhoneSim2: String = "+919876543211",
     val hookIncomingSms: Boolean = true,
     val hookOutgoingSms: Boolean = true,
@@ -74,6 +74,9 @@ class ConfigManager(private val context: Context) {
     private val rootTypeFile = File(ROOT_TYPE_FILE)
     private val spoofPhoneFile = File(SPOOF_PHONE_FILE)
 
+    private val userMockPhoneFile: File
+        get() = File(appDir, USER_MOCK_PHONE_NAME)
+
     private val ioExecutor = Executors.newSingleThreadExecutor()
 
     fun load(): ModuleConfig {
@@ -83,7 +86,8 @@ class ConfigManager(private val context: Context) {
             appConfigFile.exists() -> parseConfigFile(appConfigFile)
             else -> ModuleConfig()
         }
-        val spoofDigits = readSpoofPhone().let { mockSimDigits10(it) }
+        val userPhone = readUserMockPhoneRaw().ifBlank { readSpoofPhoneDirect() }
+        val spoofDigits = mockSimDigits10(userPhone.ifBlank { parsed.mockPhoneSim1 })
         if (spoofDigits.length == 10) {
             val normalized = normalizePhone(spoofDigits)
             return parsed.copy(
@@ -177,12 +181,56 @@ class ConfigManager(private val context: Context) {
         }
     }
 
-    fun readSpoofPhone(): String {
+    /** App-private file — hamesha writable, menu close pe bhi safe. */
+    fun readUserMockPhoneRaw(): String {
         return try {
-            if (!spoofPhoneFile.canRead()) return load().mockPhoneSim1
-            spoofPhoneFile.readText().trim().ifBlank { load().mockPhoneSim1 }
+            if (!userMockPhoneFile.exists()) return ""
+            userMockPhoneFile.readText().trim()
         } catch (_: Exception) {
-            load().mockPhoneSim1
+            ""
+        }
+    }
+
+    private fun writeUserMockPhone(phone: String) {
+        if (phone.isBlank()) return
+        try {
+            appDir.mkdirs()
+            userMockPhoneFile.writeText(normalizePhone(phone))
+        } catch (_: Exception) {}
+    }
+
+    /** load() call nahi — circular dependency avoid. */
+    fun readSpoofPhoneDirect(): String {
+        val fromUser = readUserMockPhoneRaw()
+        if (fromUser.isNotBlank()) return fromUser
+        try {
+            val appSpoof = File(appDir, "hivirtus_spoof_phone.txt")
+            if (appSpoof.canRead()) {
+                val t = appSpoof.readText().trim()
+                if (t.isNotBlank()) return t
+            }
+        } catch (_: Exception) {}
+        return try {
+            if (!spoofPhoneFile.canRead()) ""
+            else spoofPhoneFile.readText().trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    fun readSpoofPhone(): String {
+        val direct = readSpoofPhoneDirect()
+        if (direct.isNotBlank()) return direct
+        return try {
+            val fromJson = when {
+                runtimeConfig.canRead() -> parseConfigFile(runtimeConfig).mockPhoneSim1
+                moduleConfig.canRead() -> parseConfigFile(moduleConfig).mockPhoneSim1
+                appConfigFile.exists() -> parseConfigFile(appConfigFile).mockPhoneSim1
+                else -> ""
+            }
+            fromJson.trim()
+        } catch (_: Exception) {
+            ""
         }
     }
 
@@ -215,10 +263,22 @@ class ConfigManager(private val context: Context) {
         if (!saveAndFlushSync(updated)) return false
 
         if (enabled && ten.length == 10) {
+            writeUserMockPhone(normalized)
             writeSpoofPhoneSync(normalized)
             return true
         }
         return !enabled
+    }
+
+    fun syncSenderId(senderIdRaw: String): Boolean {
+        val senderId = senderIdRaw.trim().uppercase()
+        val current = load()
+        val updated = current.copy(
+            injectSenderId = senderId,
+            overrideIncomingSender = senderId.isNotBlank(),
+            hookIncomingSms = if (senderId.isNotBlank()) true else current.hookIncomingSms
+        )
+        return saveAndFlushSync(updated)
     }
 
     fun mockSimDigits10(phone: String): String {
@@ -389,7 +449,7 @@ class ConfigManager(private val context: Context) {
                 enableSim2Mock = json.optBoolean("enable_sim2_mock", false),
                 enablePhoneSpoof = json.optBoolean("enable_phone_spoof", false),
                 mockCountryIso = json.optString("mock_country_iso", "in"),
-                mockPhoneSim1 = json.optString("mock_phone_sim1", "+919876543210"),
+                mockPhoneSim1 = json.optString("mock_phone_sim1", ""),
                 mockPhoneSim2 = json.optString("mock_phone_sim2", "+919876543211"),
                 hookIncomingSms = json.optBoolean("hook_incoming_sms", true),
                 hookOutgoingSms = json.optBoolean("hook_outgoing_sms", true),
@@ -503,6 +563,7 @@ class ConfigManager(private val context: Context) {
     private fun runSu(command: String): Boolean = ShellHelper.runSu(command)
 
     companion object {
+        const val USER_MOCK_PHONE_NAME = "hivirtus_user_mock_phone.txt"
         const val APP_CONFIG_NAME = "hivirtus_zygisk_mode_config.json"
         const val APP_INJECT_NAME = "hivirtus_inject.cmd"
         const val APP_OTP_NAME = "hivirtus_last_otp.json"

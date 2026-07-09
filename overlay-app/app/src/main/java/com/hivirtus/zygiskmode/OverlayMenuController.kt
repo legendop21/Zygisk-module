@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 class OverlayMenuController(
@@ -30,11 +31,11 @@ class OverlayMenuController(
     private var suppressAutoSave = false
     private val debounceHandler = Handler(Looper.getMainLooper())
     private var mockSimDebounce: Runnable? = null
+    private var senderIdDebounce: Runnable? = null
 
     fun bind() {
         suppressAutoSave = true
         refreshFields()
-        ensureAutoHookDefaults()
         if (!listenersAttached) {
             setupClickListeners()
             setupAutoSaveListeners()
@@ -44,26 +45,14 @@ class OverlayMenuController(
         selectTab(Tab.SYSTEM)
     }
 
-    private fun ensureAutoHookDefaults() {
-        scope.launch(Dispatchers.IO) {
-            val current = configManager.load()
-            configManager.saveAndFlushSync(
-                current.copy(
-                    autoHookForeground = true,
-                    interceptFakeSuccess = current.hookOutgoingSms
-                )
-            )
-        }
-    }
-
     private fun refreshFields() {
         val config = configManager.load()
         val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
-        val phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+        val phone = config.mockPhoneSim1.ifBlank { configManager.readSpoofPhone() }
         val digits10 = configManager.mockSimDigits10(phone)
 
         menu.switchMockSim.isChecked = mockOn
-        menu.etMockSimNumber.setText(digits10.ifBlank { configManager.mockSimDigits10(config.mockPhoneSim1) })
+        menu.etMockSimNumber.setText(digits10)
         menu.etMockSimNumber.isEnabled = mockOn
         updateMockSimStatus(mockOn, digits10)
 
@@ -71,6 +60,7 @@ class OverlayMenuController(
         menu.switchNotRoot.isChecked = config.hideRoot
         menu.switchHookIncoming.isChecked = config.hookIncomingSms
         menu.switchHookOutgoing.isChecked = config.hookOutgoingSms
+        menu.etSenderId.setText(config.injectSenderId)
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
     }
@@ -119,6 +109,25 @@ class OverlayMenuController(
                     }
                 }
                 debounceHandler.postDelayed(mockSimDebounce!!, 450L)
+            }
+        })
+
+        menu.etSenderId.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressAutoSave) return
+                senderIdDebounce?.let { debounceHandler.removeCallbacks(it) }
+                val raw = s?.toString().orEmpty().trim()
+                senderIdDebounce = Runnable {
+                    scope.launch(Dispatchers.IO) {
+                        val ok = configManager.syncSenderId(raw)
+                        if (ok && raw.isNotBlank()) {
+                            SmsStackRefresher.refreshAfterSenderIdChange()
+                        }
+                    }
+                }
+                debounceHandler.postDelayed(senderIdDebounce!!, 450L)
             }
         })
 
@@ -202,7 +211,7 @@ class OverlayMenuController(
         if (!menu.switchMockSim.isChecked) return
         val digits = configManager.mockSimDigits10(textOf(menu.etMockSimNumber))
         if (digits.length != 10) return
-        scope.launch(Dispatchers.IO) {
+        runBlocking(Dispatchers.IO) {
             configManager.syncMockSim(true, digits)
             TelephonyInjectHelper.wakeTelephonyPipeline()
         }
