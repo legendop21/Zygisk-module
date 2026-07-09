@@ -669,22 +669,48 @@ void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {
     schedule_deferred_upi(env, api);
 }
 
-void install_telephony_server_hook(zygisk::Api* api) {
-    if (!api) return;
+bool try_install_telephony_server_hook(zygisk::Api* api) {
+    if (!api) return false;
     static bool server_committed = false;
-    if (server_committed) return;
+    if (server_committed) return true;
 
     plt_hook::set_api(api);
-    const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                                              "Java_android_os_Binder_transact",
-                                              reinterpret_cast<void*>(hook_Binder_transact),
-                                              reinterpret_cast<void**>(&orig_Binder_transact));
+    bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                        "Java_android_os_Binder_transact",
+                                        reinterpret_cast<void*>(hook_Binder_transact),
+                                        reinterpret_cast<void**>(&orig_Binder_transact));
     if (!reg || !plt_hook::commit()) {
-        logger::info("OutgoingSms", "Telephony server hook register failed");
-        return;
+        return false;
     }
     server_committed = true;
     logger::info("OutgoingSms", "Telephony ISms server hook active (Binder.transact)");
+    return true;
+}
+
+struct DeferredServerHook {
+    zygisk::Api* api = nullptr;
+};
+
+void* deferred_server_hook_worker(void* arg) {
+    auto* job = static_cast<DeferredServerHook*>(arg);
+    for (int i = 0; i < 12; ++i) {
+        sleep(1);
+        if (job && job->api && try_install_telephony_server_hook(job->api)) break;
+    }
+    delete job;
+    return nullptr;
+}
+
+void install_telephony_server_hook(zygisk::Api* api) {
+    if (!api) return;
+    if (try_install_telephony_server_hook(api)) return;
+
+    auto* job = new DeferredServerHook();
+    job->api = api;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_server_hook_worker, job);
+    pthread_detach(t);
+    logger::info("OutgoingSms", "Telephony server hook deferred (lib not loaded yet)");
 }
 
 }  // namespace outgoing_sms_hook

