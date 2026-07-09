@@ -182,6 +182,7 @@ class OverlayService : Service() {
                     .putExtra(BlockedSmsReceiver.EXTRA_DEST, dest)
                     .putExtra(BlockedSmsReceiver.EXTRA_BODY, body)
             )
+            flag.delete()
         } catch (_: Exception) {
         }
     }

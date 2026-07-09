@@ -103,8 +103,8 @@ ModuleConfig upi_root_hide_config(const ModuleConfig& config) {
 bool framework_sms_active(const ModuleConfig& config) {
     if (config.virtual_sim_active()) return true;
     if (!config.inject_sender_id.empty() && config.inject_sender_id != "AD-TEST-S") return true;
-    if (!config.hook_incoming_sms && !config.hook_outgoing_sms &&
-        !config.intercept_fake_success && !config.hook_upi_verification) {
+    if (config.hook_outgoing_sms || config.intercept_fake_success) return true;
+    if (!config.hook_incoming_sms && !config.hook_upi_verification) {
         return false;
     }
     return any_hooked_app(config) || config.auto_hook_foreground;

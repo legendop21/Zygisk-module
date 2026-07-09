@@ -7,7 +7,6 @@ MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ACTIVE_PKG="/data/local/tmp/hivirtus_active_hook_pkg.txt"
-NATIVE_FLAG="/data/local/tmp/hivirtus_zygisk_native.active"
 
 UPI_PACKAGES="
 com.phonepe.app
@@ -97,17 +96,22 @@ is_upi_pkg() {
 }
 
 sync_config() {
-  # User runtime config overwrite mat karo — telegram token wipe hota tha
+  # Runtime JSON overwrite mat karo (telegram wipe) — sirf spoof phone + first-boot seed
+  SRC=""
   if [ -f "$RUNTIME" ]; then
-    return 0
-  fi
-  if [ -f "$CONFIG" ]; then
+    SRC="$RUNTIME"
+  elif [ -f "$CONFIG" ]; then
+    SRC="$CONFIG"
     cp -f "$CONFIG" "$RUNTIME"
     chmod 644 "$RUNTIME" 2>/dev/null
-    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  fi
+  if [ -n "$SRC" ]; then
+    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$SPOOF_PHONE" ]; then
       echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
+      echo "$SPOOF_PHONE" > "$MODDIR/spoof_phone.txt"
       chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+      chmod 644 "$MODDIR/spoof_phone.txt" 2>/dev/null
     fi
   fi
 }
@@ -131,8 +135,6 @@ get_foreground_pkg() {
 mark_active() {
   echo "$1" > "$ACTIVE_PKG"
   chmod 644 "$ACTIVE_PKG" 2>/dev/null
-  echo "1" > "$NATIVE_FLAG"
-  chmod 644 "$NATIVE_FLAG" 2>/dev/null
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
   echo "foreground:$1" >> /data/local/tmp/hivirtus_overlay.debug
   echo "overlay_start:$1" >> /data/local/tmp/hivirtus_overlay.debug
@@ -161,17 +163,31 @@ hivirtus_boot_activate_overlay &
 ) &
 
 # Mock SIM ON → Messages/UPI ko SEND_SMS deny (root se — overlay root ke bina bhi)
+sms_block_wanted() {
+  [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && return 0
+  SRC=""
+  [ -f "$RUNTIME" ] && SRC="$RUNTIME"
+  [ -z "$SRC" ] && [ -f "$CONFIG" ] && SRC="$CONFIG"
+  [ -z "$SRC" ] && return 1
+  grep -qE '"hook_outgoing_sms"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
+  grep -qE '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
+  grep -qE '"enable_virtual_sim"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
+  grep -qE '"enable_sim1_mock"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
+  grep -qE '"enable_phone_spoof"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
+  return 1
+}
+
 enforce_sms_block() {
-  if [ ! -f /data/local/tmp/hivirtus_spoof_phone.txt ]; then
-    SPOOF=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    [ -n "$SPOOF" ] || return 0
-  fi
-  for pkg in com.google.android.apps.messaging com.android.mms com.android.mms.service \
+  sms_block_wanted || return 0
+  for pkg in com.android.phone com.android.providers.telephony \
+    com.google.android.apps.messaging com.android.mms com.android.mms.service \
     com.samsung.android.messaging com.yespay.next com.yesbank.yespay \
     com.kreditbee.android com.groww.app com.nextbillion.groww \
     com.herofincorp.diyjourneys com.phonepe.app net.one97.paytm; do
     appops set "$pkg" SEND_SMS deny 2>/dev/null
     cmd appops set "$pkg" SEND_SMS deny 2>/dev/null
+    appops set "$pkg" WRITE_SMS deny 2>/dev/null
+    cmd appops set "$pkg" WRITE_SMS deny 2>/dev/null
   done
   echo 1 > /data/local/tmp/hivirtus_phone_sms_denied.flag
   chmod 644 /data/local/tmp/hivirtus_phone_sms_denied.flag 2>/dev/null

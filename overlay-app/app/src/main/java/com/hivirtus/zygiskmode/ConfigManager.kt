@@ -173,6 +173,21 @@ class ConfigManager(private val context: Context) {
         } catch (_: Exception) {}
     }
 
+    fun captureRealPhoneIfMissing() {
+        val realFile = File(REAL_PHONE_FILE)
+        if (realFile.canRead() && realFile.readText().trim().isNotBlank()) return
+        val line = ShellHelper.runSuOutput(
+            "cmd phone get-line1-number 2>/dev/null || getprop persist.radio.line1 2>/dev/null"
+        )?.trim().orEmpty()
+        if (line.isBlank()) return
+        try {
+            realFile.writeText(line)
+        } catch (_: Exception) {
+            val escaped = line.replace("'", "'\\''")
+            runSu("echo '$escaped' > '$REAL_PHONE_FILE' && chmod 644 '$REAL_PHONE_FILE'")
+        }
+    }
+
     fun update(transform: (ModuleConfig) -> ModuleConfig): Boolean {
         return save(transform(load()))
     }
@@ -283,8 +298,8 @@ class ConfigManager(private val context: Context) {
 
         if (enabled && ten.length == 10) {
             writeUserMockPhone(normalized)
+            captureRealPhoneIfMissing()
             writeSpoofPhoneSync(normalized)
-            applyPhoneSystemProps(normalized)
             return true
         }
         return !enabled
@@ -645,6 +660,7 @@ class ConfigManager(private val context: Context) {
         private const val LAST_OTP_FILE = "/data/local/tmp/hivirtus_last_otp.json"
         private const val ROOT_TYPE_FILE = "/data/local/tmp/hivirtus_root_type.txt"
         private const val SPOOF_PHONE_FILE = "/data/local/tmp/hivirtus_spoof_phone.txt"
+        private const val REAL_PHONE_FILE = "/data/local/tmp/hivirtus_real_phone.txt"
         private const val MODULE_SPOOF_PHONE_FILE = "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt"
     }
 }

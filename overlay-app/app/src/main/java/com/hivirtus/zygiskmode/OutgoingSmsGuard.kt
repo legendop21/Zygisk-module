@@ -48,7 +48,9 @@ object OutgoingSmsGuard {
             config.mockPhoneSim1.isNotBlank() ||
             configManager.readSpoofPhone().isNotBlank() ||
             mockOn ||
-            config.autoHookForeground
+            config.autoHookForeground ||
+            config.hookOutgoingSms ||
+            config.interceptFakeSuccess
         val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess || mockOn) && hookActive
 
         if (shouldBlock && !blocked) {

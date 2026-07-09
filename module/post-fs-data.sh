@@ -41,8 +41,6 @@ date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
 chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
-echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
-chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 # Virtual SIM: spoof phone + capture real SIM line1 for native scrub
 read_json_field() {

@@ -80,13 +80,15 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
     if (config.virtual_sim_active() && (verify_body || verify_dest)) return true;
 
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
+    if (config.virtual_sim_active()) {
+        if (verify_body || verify_dest) return true;
+    }
+    if (config.hook_outgoing_sms || config.intercept_fake_success) {
+        if (verify_body) return true;
+        if (verify_dest) return true;
+    }
     if (!any_hooked_app(config) && !config.virtual_sim_active() && !config.auto_hook_foreground) {
         return false;
-    }
-    if (verify_body) return true;
-    // Outgoing hook ON → short-code verify SMS block (Hero/Axis etc.)
-    if ((config.hook_outgoing_sms || config.intercept_fake_success) && verify_dest) {
-        return true;
     }
     return false;
 }
@@ -363,7 +365,8 @@ bool read_intent_sms(JNIEnv* env, jobject intent, std::string& dest, std::string
 
     const std::string action =
         zygisk_utils::jstring_to_string(env, (jstring)env->CallObjectMethod(intent, get_action));
-    if (action != "android.intent.action.SENDTO" && action != "android.intent.action.VIEW") {
+    if (action != "android.intent.action.SENDTO" && action != "android.intent.action.VIEW" &&
+        action != "android.intent.action.SEND") {
         return false;
     }
 
@@ -409,7 +412,7 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
     std::string dest;
     std::string body;
     if (read_intent_sms(env, intent, dest, body)) {
-        if (should_block_outgoing(config, body)) {
+        if (should_block_outgoing(config, body, dest)) {
             logger::info("OutgoingSms", "Blocked compose intent dest=%s len=%zu", dest.c_str(),
                          body.size());
             pipeline_outgoing(env, dest, body);
@@ -485,24 +488,66 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
     const bool virtual_sim_on = ConfigManager::instance().get().virtual_sim_active();
 
     plt_hook::set_api(g_api);
+    bool any_registered = false;
+
     if (!exec_committed) {
-        exec_committed = true;
-        plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                                 "Java_android_app_Instrumentation_execStartActivity",
-                                 reinterpret_cast<void*>(hook_execStartActivity),
-                                 reinterpret_cast<void**>(&orig_execStartActivity));
+        const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                                  "Java_android_app_Instrumentation_execStartActivity",
+                                                  reinterpret_cast<void*>(hook_execStartActivity),
+                                                  reinterpret_cast<void**>(&orig_execStartActivity));
+        if (reg) {
+            any_registered = true;
+            exec_committed = true;
+        }
     }
-    // virtual_sim handles binder when mock ON; else outgoing installs ISms block
-    if (enable_binder && !binder_committed && !virtual_sim_on) {
-        binder_committed = true;
-        plt_hook::register_regex(".*/libandroid_runtime\\.so$",
-                                 "Java_android_os_BinderProxy_transact",
-                                 reinterpret_cast<void*>(hook_BinderProxy_transact),
-                                 reinterpret_cast<void**>(&orig_BinderProxy_transact));
+    // virtual_sim binder fail ho to bhi ISms block — virtual_sim_on pe skip mat karo
+    if (enable_binder && !binder_committed) {
+        const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                                 "Java_android_os_BinderProxy_transact",
+                                                 reinterpret_cast<void*>(hook_BinderProxy_transact),
+                                                 reinterpret_cast<void**>(&orig_BinderProxy_transact));
+        if (reg) {
+            any_registered = true;
+            binder_committed = true;
+        }
     }
-    plt_hook::commit();
-    logger::info("OutgoingSms", "hooks: exec=%d binder=%d virtual_sim=%d", exec_committed ? 1 : 0,
-                 binder_committed ? 1 : 0, virtual_sim_on ? 1 : 0);
+    if (any_registered) {
+        plt_hook::commit();
+    }
+    logger::info("OutgoingSms", "hooks: exec=%d binder=%d virtual_sim=%d lib_loaded=%d",
+                 exec_committed ? 1 : 0, binder_committed ? 1 : 0, virtual_sim_on ? 1 : 0,
+                 plt_hook::lib_loaded(".*/libandroid_runtime\\.so$") ? 1 : 0);
+}
+
+struct DeferredPltHook {
+    zygisk::Api* api = nullptr;
+    bool enable_binder = false;
+};
+
+void* deferred_plt_hook_worker(void* arg) {
+    auto* job = static_cast<DeferredPltHook*>(arg);
+    for (int i = 0; i < 15; ++i) {
+        sleep(1);
+        if (job && job->api) {
+            g_api = job->api;
+            install_plt_hooks(nullptr, job->enable_binder);
+            if (plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+                logger::info("OutgoingSms", "Deferred PLT hooks installed (attempt %d)", i + 1);
+                break;
+            }
+        }
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_deferred_plt_hooks(zygisk::Api* api, bool enable_binder) {
+    auto* job = new DeferredPltHook();
+    job->api = api;
+    job->enable_binder = enable_binder;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_plt_hook_worker, job);
+    pthread_detach(t);
 }
 
 struct DeferredSmsHook {
@@ -516,7 +561,10 @@ void* deferred_sms_hook_worker(void* arg) {
         g_api = job->api;
         g_in_hooked_upi = true;
         install_plt_hooks(nullptr, true);
-        logger::info("OutgoingSms", "Deferred ISms block active (UPI app, exec only if virtual SIM)");
+        if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+            schedule_deferred_plt_hooks(job->api, true);
+        }
+        logger::info("OutgoingSms", "Deferred ISms block active (UPI app)");
     }
     delete job;
     return nullptr;
@@ -659,7 +707,11 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
     const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
 
     if (!phone_spoof && !sms_block && !in_telephony && !in_messaging && !in_upi) return;
-    install_plt_hooks(env, in_telephony || in_messaging || in_upi);
+    const bool enable_binder = in_telephony || in_messaging || in_upi;
+    install_plt_hooks(env, enable_binder);
+    if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+        schedule_deferred_plt_hooks(api, enable_binder);
+    }
     if (in_telephony) {
         install_telephony_server_hook(api);
     }

@@ -25,7 +25,10 @@ class HivirtusApp : Application() {
             if (mockOn && userPhone.isNotBlank()) {
                 cm.writeSpoofPhoneSync(userPhone)
             }
-            cm.save(updated)
+            cm.saveAndFlushSync(updated)
+            if (mockOn && userPhone.isNotBlank()) {
+                cm.captureRealPhoneIfMissing()
+            }
             FrameworkHookHelper.markScopeActivePublic()
         } catch (_: Exception) {
         }

@@ -72,11 +72,18 @@ struct DeferredBinder {
 void* deferred_binder_worker(void* arg) {
     auto* job = static_cast<DeferredBinder*>(arg);
     if (job && job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
-    if (job && job->api) {
-        if (!install_binder_plt(job->api)) {
-            sleep(2);
-            install_binder_plt(job->api);
+    bool ok = false;
+    for (int i = 0; job && job->api && i < 15; ++i) {
+        if (install_binder_plt(job->api)) {
+            ok = true;
+            break;
         }
+        sleep(1);
+    }
+    if (!ok && job && job->api) {
+        logger::info("VirtualSim", "Binder PLT failed — fallback outgoing ISms hook in %s",
+                     g_process.c_str());
+        outgoing_sms_hook::install(nullptr, job->api, false, false, true);
     }
     delete job;
     return nullptr;
@@ -171,7 +178,9 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     }
 
     if (is_telephony_process(process_name)) {
-        install_binder_plt(api);
+        if (!install_binder_plt(api)) {
+            schedule_deferred_binder(api, 0);
+        }
         outgoing_sms_hook::install_telephony_server_hook(api);
         logger::info("VirtualSim", "Dual virtual SIM + ISms server block in telephony (%s)",
                      process_name.c_str());
@@ -187,19 +196,20 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     }
 
     if (messaging_proc) {
-        install_binder_plt(api);
-        if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+        if (!install_binder_plt(api)) {
             schedule_deferred_binder(api, 0);
         }
+        outgoing_sms_hook::install(env, api, false, true, false);
         logger::info("VirtualSim", "Messages binder hook (ISms block + SIM) in %s",
                      process_name.c_str());
         return;
     }
 
-    // Groww/UPI — turant binder hook
-    install_binder_plt(api);
-    if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+    // Groww/UPI — turant binder hook; fallback outgoing PLT if binder fails
+    if (!install_binder_plt(api)) {
         schedule_deferred_binder(api, 0);
+    } else if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+        schedule_deferred_binder(api, 1);
     }
     logger::info("VirtualSim", "Virtual SIM binder active for %s", process_name.c_str());
 }
