@@ -40,6 +40,8 @@ const char* kUniversalSuPaths[] = {
     "/system/bin/su", "/system/xbin/su", "/sbin/su", "/vendor/bin/su",
     "/data/local/su", "/data/local/bin/su", "/data/local/xbin/su",
     "/cache/su", "/system/app/Superuser.apk", "/system/app/SuperSU",
+    "/system/bin/busybox", "/system/xbin/busybox", "/sbin/busybox",
+    "/data/local/tmp/re.frida.server", "/data/local/tmp/frida-server",
     nullptr
 };
 
@@ -86,8 +88,13 @@ bool is_blocked_path(const char* path) {
         return true;
     }
 
-    if (contains_keyword(path, "/proc/self/maps") && contains_keyword(path, "magisk")) {
-        return true;
+    if (g_config->hide_root) {
+        if (contains_keyword(path, "/data/adb/modules/") && !contains_keyword(path, "hivirtus")) {
+            return true;
+        }
+        if (contains_keyword(path, "test-keys") || contains_keyword(path, "debug.keystore")) {
+            return true;
+        }
     }
 
     if (g_config->hide_magisk) {
@@ -212,6 +219,18 @@ int hook___system_property_get(const char* name, char* value) {
         }
         if (strcmp(name, "sys.oem_unlock_allowed") == 0) {
             strcpy(value, "0");
+            return 1;
+        }
+        if (strcmp(name, "ro.kernel.qemu") == 0) {
+            strcpy(value, "0");
+            return 1;
+        }
+        if (strcmp(name, "ro.boot.flash.locked") == 0) {
+            strcpy(value, "1");
+            return 1;
+        }
+        if (strcmp(name, "ro.boot.veritymode") == 0) {
+            strcpy(value, "enforcing");
             return 1;
         }
         // zygisk props blank mat karo — Zygisk Next runtime break ho sakta hai.

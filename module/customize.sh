@@ -3,8 +3,8 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.29.0                 "
-ui_print "  Zygisk se through — MotaGian  "
+ui_print "        v2.31.0                 "
+ui_print "  Zygisk se through — Virtus    "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -29,8 +29,8 @@ if [ ! -f "$MODPATH/config.json" ]; then
   ui_print "- Creating default config"
   cat > "$MODPATH/config.json" << 'EOF'
 {
-  "hide_root": false,
-  "hide_developer": false,
+  "hide_root": true,
+  "hide_developer": true,
   "hide_magisk": true,
   "hide_kernelsu": true,
   "hide_apatch": true,
@@ -68,10 +68,10 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK NEXT / APATCH FIX v2.27.0:"
+ui_print "ZYGISK NEXT / APATCH v2.31.0:"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) UPI app kholo → MotaGian menu + pill"
+ui_print "  3) UPI app kholo → gold V bubble + Virtus menu"
 ui_print ""
 ui_print "Agar zygote crash ho: HMA-OSS disable karke test karo"
 ui_print "Config: $MODPATH/config.json"

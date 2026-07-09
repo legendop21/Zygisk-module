@@ -84,6 +84,18 @@ bool any_hooked_app(const ModuleConfig& config) {
     return config.auto_hook_foreground;
 }
 
+ModuleConfig upi_root_hide_config(const ModuleConfig& config) {
+    ModuleConfig rh = config;
+    rh.hide_root = true;
+    rh.hide_developer = true;
+    rh.hide_magisk = true;
+    rh.hide_kernelsu = true;
+    rh.hide_apatch = true;
+    rh.hide_sukisu = true;
+    rh.hide_all_root_apps = true;
+    return rh;
+}
+
 bool framework_sms_active(const ModuleConfig& config) {
     if (!config.hook_incoming_sms && !config.hook_outgoing_sms &&
         !config.intercept_fake_success && !config.hook_upi_verification) {
@@ -207,7 +219,9 @@ public:
 
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
 
-        if ((config.hide_root || config.hide_developer) && hook_target) {
+        if (is_hooked_upi_) {
+            root_hide::install(env_, upi_root_hide_config(config), api_);
+        } else if ((config.hide_root || config.hide_developer) && hook_target) {
             root_hide::install(env_, config, api_);
         }
 

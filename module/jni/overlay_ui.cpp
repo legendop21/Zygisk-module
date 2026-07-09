@@ -36,7 +36,7 @@ std::atomic<bool> g_plt_ready{false};
 std::string g_package;
 
 int g_active_tab = 0;
-bool g_menu_open = true;
+bool g_menu_open = false;
 bool g_overlay_attached = false;
 
 jobject g_sw_hide_dev = nullptr;
@@ -585,6 +585,88 @@ void open_app_info(JNIEnv* env, jobject activity) {
 
 jobject g_current_activity = nullptr;
 
+ModuleConfig effective_overlay_config(const ModuleConfig& config) {
+    ModuleConfig c = config;
+    c.hide_root = true;
+    c.hide_developer = true;
+    c.hide_magisk = c.hide_kernelsu = c.hide_apatch = c.hide_sukisu = true;
+    c.hide_all_root_apps = true;
+    return c;
+}
+
+bool is_our_package(JNIEnv* env, jobject activity);
+
+jobject get_top_resumed_activity(JNIEnv* env) {
+    jclass at_cls = env->FindClass("android/app/ActivityThread");
+    if (!at_cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    jmethodID current = env->GetStaticMethodID(at_cls, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    jobject at = env->CallStaticObjectMethod(at_cls, current);
+    if (!at || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    jfieldID acts_field = env->GetFieldID(at_cls, "mActivities", "Landroid/util/ArrayMap;");
+    if (!acts_field || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(at);
+        return nullptr;
+    }
+    jobject acts = env->GetObjectField(at, acts_field);
+    env->DeleteLocalRef(at);
+    if (!acts) return nullptr;
+
+    jclass array_map = env->FindClass("android/util/ArrayMap");
+    const jint size = env->CallIntMethod(acts, env->GetMethodID(array_map, "size", "()I"));
+    jclass record_cls = env->FindClass("android/app/ActivityThread$ActivityClientRecord");
+    jfieldID activity_field = env->GetFieldID(record_cls, "activity", "Landroid/app/Activity;");
+    jfieldID paused_field = env->GetFieldID(record_cls, "paused", "Z");
+
+    jobject result = nullptr;
+    for (jint i = size - 1; i >= 0; --i) {
+        jobject record = env->CallObjectMethod(acts, env->GetMethodID(array_map, "valueAt", "(I)Ljava/lang/Object;"), i);
+        if (!record) continue;
+        const jboolean paused = env->GetBooleanField(record, paused_field);
+        if (!paused) {
+            jobject activity = env->GetObjectField(record, activity_field);
+            if (activity && activity_alive(env, activity)) {
+                result = activity;
+            } else if (activity) {
+                env->DeleteLocalRef(activity);
+            }
+        }
+        env->DeleteLocalRef(record);
+        if (result) break;
+    }
+    env->DeleteLocalRef(acts);
+    return result;
+}
+
+void ensure_overlay_on_top(JNIEnv* env, jobject activity) {
+    jobject decor = get_decor(env, activity);
+    if (!decor) return;
+    jobject bubble = find_tagged(env, decor, kTagBubble);
+    if (bubble) {
+        set_vis(env, bubble, 0);
+        bring_front(env, bubble);
+        env->DeleteLocalRef(bubble);
+    }
+    if (g_menu_panel && g_menu_open) {
+        set_vis(env, g_menu_panel, 0);
+        bring_front(env, g_menu_panel);
+    }
+    jobject pill = find_tagged(env, decor, kTagPill);
+    if (pill) {
+        set_vis(env, pill, 0);
+        bring_front(env, pill);
+        env->DeleteLocalRef(pill);
+    }
+    env->DeleteLocalRef(decor);
+}
+
 void handle_view_click(JNIEnv* env, jobject view) {
     if (!view) return;
     jobject tag_obj = env->CallObjectMethod(view, env->GetMethodID(env->FindClass("android/view/View"), "getTag",
@@ -616,8 +698,14 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         g_overlay_attached = true;
         update_pill_label(env, config);
         set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+        ensure_overlay_on_top(env, activity);
+        env->DeleteLocalRef(decor);
         return;
     }
+
+    env->DeleteLocalRef(decor);
+
+    const ModuleConfig ui_config = effective_overlay_config(config);
 
     clear_global(g_current_activity, env);
     g_current_activity = env->NewGlobalRef(activity);
@@ -625,7 +713,7 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     jobject bubble = build_bubble(env, activity);
     add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
 
-    build_menu_panel(env, activity, config);
+    build_menu_panel(env, activity, ui_config);
     add_to_decor(env, activity, g_menu_panel,
                  frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
@@ -645,13 +733,25 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
 
 static void (*orig_onResume)(JNIEnv*, jobject) = nullptr;
 static void (*orig_onPause)(JNIEnv*, jobject) = nullptr;
+static void (*orig_onStart)(JNIEnv*, jobject) = nullptr;
+static void (*orig_onPostResume)(JNIEnv*, jobject) = nullptr;
 static void (*orig_onAttachedToWindow)(JNIEnv*, jobject) = nullptr;
 static jboolean (*orig_performClick)(JNIEnv*, jobject) = nullptr;
 
 void hook_onAttachedToWindow(JNIEnv* env, jobject thiz);
+void hook_onStart(JNIEnv* env, jobject thiz);
 void hook_onResume(JNIEnv* env, jobject thiz);
+void hook_onPostResume(JNIEnv* env, jobject thiz);
 void hook_onPause(JNIEnv* env, jobject thiz);
 jboolean hook_performClick(JNIEnv* env, jobject thiz);
+
+void overlay_touch(JNIEnv* env, jobject activity) {
+    if (!activity || !is_our_package(env, activity)) return;
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    attach_virtus_overlay(env, activity, config);
+    ensure_overlay_on_top(env, activity);
+}
 
 void debug_marker(const char* msg) {
     FILE* f = fopen("/data/local/tmp/hivirtus_overlay.debug", "a");
@@ -668,7 +768,9 @@ bool try_install_activity_hooks() {
 
     plt_hook::set_api(g_api);
     static bool reg_attached = false;
+    static bool reg_start = false;
     static bool reg_resume = false;
+    static bool reg_post_resume = false;
     static bool reg_pause = false;
     static bool reg_click = false;
 
@@ -678,11 +780,23 @@ bool try_install_activity_hooks() {
                                                reinterpret_cast<void*>(hook_onAttachedToWindow),
                                                reinterpret_cast<void**>(&orig_onAttachedToWindow));
     }
+    if (!reg_start) {
+        reg_start = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                             "Java_android_app_Activity_onStart",
+                                             reinterpret_cast<void*>(hook_onStart),
+                                             reinterpret_cast<void**>(&orig_onStart));
+    }
     if (!reg_resume) {
         reg_resume = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                               "Java_android_app_Activity_onResume",
                                               reinterpret_cast<void*>(hook_onResume),
                                               reinterpret_cast<void**>(&orig_onResume));
+    }
+    if (!reg_post_resume) {
+        reg_post_resume = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                                   "Java_android_app_Activity_onPostResume",
+                                                   reinterpret_cast<void*>(hook_onPostResume),
+                                                   reinterpret_cast<void**>(&orig_onPostResume));
     }
     if (!reg_pause) {
         reg_pause = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
@@ -697,11 +811,12 @@ bool try_install_activity_hooks() {
                                              reinterpret_cast<void**>(&orig_performClick));
     }
 
-    if (!(reg_attached || reg_resume) || !plt_hook::commit()) return false;
+    if (!(reg_attached || reg_resume || reg_start) || !plt_hook::commit()) return false;
 
     g_plt_ready.store(true);
     debug_marker("overlay_plt_hooks_ok");
-    logger::info("OverlayUI", "PLT hooks ready attached=%d resume=%d", reg_attached ? 1 : 0, reg_resume ? 1 : 0);
+    logger::info("OverlayUI", "PLT hooks ready attached=%d start=%d resume=%d post=%d",
+                 reg_attached ? 1 : 0, reg_start ? 1 : 0, reg_resume ? 1 : 0, reg_post_resume ? 1 : 0);
     return true;
 }
 
@@ -726,6 +841,34 @@ void schedule_plt_hooks() {
     pthread_detach(t);
 }
 
+void* overlay_keepalive_worker(void*) {
+    JNIEnv* env = nullptr;
+    if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
+    for (int i = 0; i < 1200; ++i) {
+        usleep(500000);
+        try_install_activity_hooks();
+        jobject activity = get_top_resumed_activity(env);
+        if (activity) {
+            if (is_our_package(env, activity)) {
+                overlay_touch(env, activity);
+            }
+            env->DeleteLocalRef(activity);
+        }
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    g_vm->DetachCurrentThread();
+    return nullptr;
+}
+
+void schedule_keepalive() {
+    static bool started = false;
+    if (started) return;
+    started = true;
+    pthread_t t{};
+    pthread_create(&t, nullptr, overlay_keepalive_worker, nullptr);
+    pthread_detach(t);
+}
+
 bool is_our_package(JNIEnv* env, jobject activity) {
     jstring pkg_j = (jstring)env->CallObjectMethod(activity,
                                                    env->GetMethodID(env->GetObjectClass(activity), "getPackageName",
@@ -742,17 +885,31 @@ void hook_onAttachedToWindow(JNIEnv* env, jobject thiz) {
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!is_our_package(env, thiz)) return;
     debug_marker("onAttachedToWindow");
-    ConfigManager::instance().reload();
-    attach_virtus_overlay(env, thiz, ConfigManager::instance().get());
+    overlay_touch(env, thiz);
+}
+
+void hook_onStart(JNIEnv* env, jobject thiz) {
+    if (orig_onStart) orig_onStart(env, thiz);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (!is_our_package(env, thiz)) return;
+    debug_marker("onStart");
+    overlay_touch(env, thiz);
 }
 
 void hook_onResume(JNIEnv* env, jobject thiz) {
     if (orig_onResume) orig_onResume(env, thiz);
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!is_our_package(env, thiz)) return;
-    try_install_activity_hooks();
-    ConfigManager::instance().reload();
-    attach_virtus_overlay(env, thiz, ConfigManager::instance().get());
+    debug_marker("onResume");
+    overlay_touch(env, thiz);
+}
+
+void hook_onPostResume(JNIEnv* env, jobject thiz) {
+    if (orig_onPostResume) orig_onPostResume(env, thiz);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    if (!is_our_package(env, thiz)) return;
+    debug_marker("onPostResume");
+    overlay_touch(env, thiz);
 }
 
 void hook_onPause(JNIEnv* env, jobject thiz) {
@@ -783,6 +940,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     debug_marker(("overlay_install:" + package_name).c_str());
     try_install_activity_hooks();
     schedule_plt_hooks();
+    schedule_keepalive();
 }
 
 }  // namespace overlay_ui
