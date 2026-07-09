@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.44.0
-versionCode=93
+version=v2.45.0
+versionCode=94
 author=@hivirtus
 description=Zygisk ONLY — Menu By Dev @Hivirtus @Liqdy @ClamFlat 🔥 Virtual SIM + SMS (No LSPosed)
 zygisk=1

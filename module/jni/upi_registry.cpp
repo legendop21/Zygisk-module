@@ -79,6 +79,38 @@ constexpr const char* kPackages[] = {
     "com.bajajfinserv",
     "com.hdbfs.hdbfsl",
     "in.medibuddy",
+    // --- expanded UPI / fintech (correct Play Store package IDs) ---
+    "com.paytmmoney",
+    "com.jar.app",
+    "com.supermoney",
+    "com.epifi.paisa",
+    "com.angelbroking.angelone",
+    "com.axis.acquiring",
+    "com.yesbank.mobile",
+    "com.balancehero.truebalance",
+    "com.onecode.hyper",
+    "com.uniclaret.app",
+    "com.smallcase.android",
+    "com.paisabazaar",
+    "com.snapwork.hdfc",
+    "com.niyo.equitassavingsaccount",
+    "com.fisglobal.bandhanupi",
+    "com.upi.federalbank.org.ifsc.upiapp",
+    "com.canarabank.mobility",
+    "com.unionbank.ebanking",
+    "com.indusind.indie",
+    "com.rbl.rblimobile",
+    "com.fincarebank",
+    "com.au.bank.android",
+    "com.fedmobile",
+    "com.southindianbank.eremit",
+    "com.kvb.mobilebanking",
+    "com.dbs.in.digitalbank",
+    "com.tatadigital.tcp",
+    "com.shriram.One",
+    "com.msf.sbi",
+    "com.msf.bob",
+    "com.msf.axis",
     nullptr,
 };
 
@@ -90,6 +122,10 @@ bool is_known_upi(const std::string& package) {
         if (package == *p) return true;
     }
     return false;
+}
+
+bool is_module_own_app(const std::string& package) {
+    return package == "com.hivirtus.zygiskmode";
 }
 
 bool is_denied_hook_package(const std::string& package) {

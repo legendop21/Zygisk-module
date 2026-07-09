@@ -54,6 +54,11 @@ com.payu.india
 com.msf.angelmobile
 com.groww.app
 com.nextbillion.groww
+com.paytmmoney
+com.jar.app
+com.supermoney
+com.epifi.paisa
+com.angelbroking.angelone
 com.mmt.mmtpay
 com.irctc.air
 com.truecaller

@@ -1,6 +1,7 @@
 #include "virtual_sim.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "outgoing_sms_hook.hpp"
 #include "plt_hook.hpp"
 #include "sim_mock.hpp"
 #include "telephony_spoof.hpp"
@@ -22,21 +23,16 @@ static jint (*orig_BinderProxy_transact)(JNIEnv*, jobject, jint, jobject, jobjec
 
 jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jobject reply,
                                jint flags) {
+    if (data && reply && outgoing_sms_hook::intercept_isms_transact(env, data, reply)) {
+        return 0;
+    }
+
     const jint result =
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
-        const std::string iface = data ? telephony_spoof::read_binder_interface(env, data) : "";
-        const auto profiles = telephony_spoof::load_subscriber_profiles();
-        if (telephony_spoof::is_subscription_binder_interface(iface)) {
-            if (telephony_spoof::inject_subscription_if_empty(env, reply, profiles)) {
-                return result;
-            }
-        }
-        if (iface.empty() || telephony_spoof::is_telephony_binder_interface(iface)) {
-            telephony_spoof::scrub_reply_parcel(env, reply, profiles, iface);
-        }
+    if (result == 0 && reply) {
+        telephony_spoof::handle_binder_reply(env, data, reply);
     }
     return result;
 }
@@ -141,8 +137,10 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     }
 
     if (is_gms_process(process_name)) {
-        schedule_deferred_binder(api, 2);
-        logger::info("VirtualSim", "Deferred binder spoof scheduled for GMS (2s)");
+        if (!install_binder_plt(api)) {
+            schedule_deferred_binder(api, 1);
+        }
+        logger::info("VirtualSim", "GMS binder spoof active (immediate)");
         return;
     }
 

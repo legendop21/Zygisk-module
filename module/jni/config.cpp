@@ -341,6 +341,10 @@ bool ModuleConfig::virtual_sim_active() const {
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     if (!upi_registry::is_hookable_user_app(package)) return false;
+    if (upi_registry::is_module_own_app(package)) return false;
+
+    // Virtual SIM ON → saari known UPI apps auto-hook (manual toggle ki zaroorat nahi)
+    if (virtual_sim_active() && upi_registry::is_known_upi(package)) return true;
 
     if (!hooked_upi_apps.empty()) {
         const auto star = hooked_upi_apps.find("*");

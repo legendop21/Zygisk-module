@@ -971,6 +971,7 @@ jboolean hook_performClick(JNIEnv* env, jobject thiz) {
 }  // namespace
 
 void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
+    if (package_name == "com.hivirtus.zygiskmode") return;
     if (g_hooks_installed.exchange(true)) return;
     g_api = api;
     g_package = package_name;

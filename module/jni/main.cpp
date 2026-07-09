@@ -226,6 +226,11 @@ public:
             return;
         }
 
+        if (upi_registry::is_module_own_app(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
@@ -287,7 +292,7 @@ public:
 
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
-            if (!overlay_only_mode()) {
+            if (!overlay_only_mode() && !upi_registry::is_module_own_app(process_name_)) {
                 schedule_deferred_root_hide(env_, config, api_);
             } else {
                 append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_only_mode");
@@ -296,9 +301,9 @@ public:
             root_hide::install(env_, config, api_);
         }
 
-        if (is_hooked_upi_) {
+        if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
             upi_hook::install(env_, api_, process_name_);
-            // SMS/Binder hooks sirf telephony — UPI me crash (Android 15 + Zygisk Next)
+            // Native overlay sirf UPI apps — Virtus APK ka apna menu hai (crash avoid)
             overlay_ui::install(env_, api_, process_name_);
             logger::info("Hivirtus", "UPI overlay in %s (overlay_only=%d)", process_name_.c_str(),
                          overlay_only_mode() ? 1 : 0);

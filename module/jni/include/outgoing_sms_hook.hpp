@@ -10,4 +10,7 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
 /** Deferred ISms block inside UPI app (KreditBee direct send). */
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api);
 
+/** Returns true if outgoing ISms was blocked and reply written (use before BinderProxy.transact). */
+bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply);
+
 }  // namespace outgoing_sms_hook

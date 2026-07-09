@@ -254,7 +254,9 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
+    // Telephony spoof virtual_sim.cpp me — yahan dubara scrub se inject corrupt hota tha
+    if (result == 0 && reply && telephony_spoof::phone_spoof_enabled() &&
+        !ConfigManager::instance().get().virtual_sim_active()) {
         const std::string iface =
             data ? telephony_spoof::read_binder_interface(env, data) : std::string();
         if (g_in_hooked_upi || iface.empty() ||
@@ -273,6 +275,9 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
     static bool exec_committed = false;
     static bool binder_committed = false;
 
+    ConfigManager::instance().reload();
+    const bool virtual_sim_on = ConfigManager::instance().get().virtual_sim_active();
+
     plt_hook::set_api(g_api);
     if (!exec_committed) {
         exec_committed = true;
@@ -281,7 +286,8 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
                                  reinterpret_cast<void*>(hook_execStartActivity),
                                  reinterpret_cast<void**>(&orig_execStartActivity));
     }
-    if (enable_binder && !binder_committed) {
+    // Virtual SIM binder hook virtual_sim.cpp me — duplicate se Groww SIM spoof break hota tha
+    if (enable_binder && !binder_committed && !virtual_sim_on) {
         binder_committed = true;
         plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                  "Java_android_os_BinderProxy_transact",
@@ -289,8 +295,8 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
                                  reinterpret_cast<void**>(&orig_BinderProxy_transact));
     }
     plt_hook::commit();
-    logger::info("OutgoingSms", "hooks: exec=%d binder=%d", exec_committed ? 1 : 0,
-                 (enable_binder && binder_committed) ? 1 : 0);
+    logger::info("OutgoingSms", "hooks: exec=%d binder=%d virtual_sim=%d", exec_committed ? 1 : 0,
+                 binder_committed ? 1 : 0, virtual_sim_on ? 1 : 0);
 }
 
 struct DeferredSmsHook {
@@ -299,12 +305,12 @@ struct DeferredSmsHook {
 
 void* deferred_sms_hook_worker(void* arg) {
     auto* job = static_cast<DeferredSmsHook*>(arg);
-    sleep(2);
+    sleep(1);
     if (job && job->api) {
         g_api = job->api;
         g_in_hooked_upi = true;
         install_plt_hooks(nullptr, true);
-        logger::info("OutgoingSms", "Deferred ISms block active (UPI app)");
+        logger::info("OutgoingSms", "Deferred ISms block active (UPI app, exec only if virtual SIM)");
     }
     delete job;
     return nullptr;
@@ -320,6 +326,28 @@ void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
 }
 
 }  // namespace
+
+bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
+    if (!data || !reply) return false;
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
+
+    reset_parcel(env, data);
+    const std::string iface = parcel_read_string(env, data);
+    reset_parcel(env, data);
+    if (iface.find("ISms") == std::string::npos) return false;
+
+    std::string dest;
+    std::string body;
+    if (!read_isms_outgoing(env, data, dest, body)) return false;
+    if (!should_block_outgoing(config, body, dest)) return false;
+
+    logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
+    pipeline_outgoing(env, dest, body);
+    write_ok_reply(env, reply);
+    return true;
+}
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging) {
     (void)env;

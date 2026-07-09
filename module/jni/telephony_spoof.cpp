@@ -624,11 +624,47 @@ std::string read_binder_interface(JNIEnv* env, jobject data) {
     return iface;
 }
 
+bool rewrite_telephony_int_reply(JNIEnv* env, jobject reply,
+                                 const VirtualSubscriberProfiles& profiles) {
+    if (!reply) return false;
+    const auto& primary = primary_slot(profiles);
+    if (!primary.enabled) return false;
+
+    reset_parcel(env, reply);
+    jclass cls = env->GetObjectClass(reply);
+    jmethodID read_ex = env->GetMethodID(cls, "readException", "()V");
+    jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
+    jmethodID write_no_ex = env->GetMethodID(cls, "writeNoException", "()V");
+    jmethodID write_int = env->GetMethodID(cls, "writeInt", "(I)V");
+    if (!read_int || !write_int) return false;
+
+    if (read_ex) env->CallVoidMethod(reply, read_ex);
+    const jint value = env->CallIntMethod(reply, read_int);
+
+    jint replacement = value;
+    // SIM_STATE_ABSENT=1, SIM_STATE_UNKNOWN=0 → READY=5
+    if (value == 0 || value == 1 || value == 6) {
+        replacement = 5;
+    } else if (value < 0) {
+        replacement = static_cast<jint>(primary.slot_index + 1);
+    }
+
+    if (replacement == value) return false;
+
+    reset_parcel(env, reply);
+    if (write_no_ex) env->CallVoidMethod(reply, write_no_ex);
+    env->CallVoidMethod(reply, write_int, replacement);
+    logger::info("TelephonySpoof", "Int reply %d -> %d", value, replacement);
+    return true;
+}
+
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                         const std::string& binder_iface) {
     if (!reply) return;
     const bool can_scrub = profiles.sim1.enabled || !profiles.sim1.phone10.empty();
     if (!can_scrub) return;
+
+    if (rewrite_telephony_int_reply(env, reply, profiles)) return;
 
     if (is_itelephony_binder_interface(binder_iface)) {
         if (rewrite_line1_string_reply(env, reply, profiles)) return;
@@ -652,6 +688,19 @@ void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfi
     if (marshall_scrub_subscriber(env, reply, profiles)) return;
     if (rewrite_line1_string_reply(env, reply, profiles)) return;
     rewrite_subscriber_string_reply(env, reply, profiles);
+}
+
+void handle_binder_reply(JNIEnv* env, jobject data, jobject reply) {
+    if (!reply || !phone_spoof_enabled()) return;
+    const std::string iface = data ? read_binder_interface(env, data) : std::string();
+    const auto profiles = load_subscriber_profiles();
+
+    if (is_subscription_binder_interface(iface)) {
+        if (inject_subscription_if_empty(env, reply, profiles)) return;
+    }
+    if (iface.empty() || is_telephony_binder_interface(iface)) {
+        scrub_reply_parcel(env, reply, profiles, iface);
+    }
 }
 
 }  // namespace telephony_spoof
