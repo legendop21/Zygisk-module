@@ -1,13 +1,16 @@
 #!/system/bin/sh
-# Magisk module runtime — config sync + foreground UPI detect (native Zygisk hooks)
+# Magisk module runtime — config sync + UPI detect + Virtus floating overlay APK
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ACTIVE_PKG="/data/local/tmp/hivirtus_active_hook_pkg.txt"
 NATIVE_FLAG="/data/local/tmp/hivirtus_zygisk_native.active"
+OVERLAY_APK="$MODDIR/virtus-overlay.apk"
+OVERLAY_PKG="com.hivirtus.zygiskmode"
+OVERLAY_SERVICE="$OVERLAY_PKG/.OverlayService"
+OVERLAY_ACTION="com.hivirtus.zygiskmode.SHOW_BUBBLE"
 
-# Built-in UPI / loan packages (match native upi_registry.cpp)
 UPI_PACKAGES="
 com.phonepe.app
 net.one97.paytm
@@ -94,7 +97,36 @@ sync_config() {
 }
 
 get_foreground_pkg() {
-  dumpsys activity activities 2>/dev/null | grep mResumedActivity | head -n1 | sed -n 's/.* \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p'
+  local pkg
+
+  pkg=$(dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity=ActivityRecord' | head -n1 | sed -n 's/.* u0 \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p')
+  [ -n "$pkg" ] && echo "$pkg" && return
+
+  pkg=$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity: ActivityRecord' | head -n1 | sed -n 's/.* u0 \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p')
+  [ -n "$pkg" ] && echo "$pkg" && return
+
+  pkg=$(dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | head -n1 | sed -n 's/.* \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p')
+  [ -n "$pkg" ] && echo "$pkg" && return
+
+  pkg=$(dumpsys activity activities 2>/dev/null | grep -E 'ResumedActivity' | head -n1 | sed -n 's/.* \([a-zA-Z0-9._]*\)\/[a-zA-Z0-9._]*.*/\1/p')
+  echo "$pkg"
+}
+
+install_overlay_apk() {
+  [ -f "$OVERLAY_APK" ] || return 1
+  if pm path "$OVERLAY_PKG" >/dev/null 2>&1; then
+    pm install -r -g "$OVERLAY_APK" >/dev/null 2>&1
+  else
+    pm install -g "$OVERLAY_APK" >/dev/null 2>&1
+  fi
+  pm path "$OVERLAY_PKG" >/dev/null 2>&1
+}
+
+start_overlay_bubble() {
+  install_overlay_apk || return 1
+  am start-foreground-service -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1 || \
+    am startservice -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1 || \
+    cmd activity start-foreground-service -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1
 }
 
 mark_active() {
@@ -105,11 +137,14 @@ mark_active() {
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
   echo "foreground:$1" >> /data/local/tmp/hivirtus_overlay.debug
   echo "foreground:$1" >> /data/local/tmp/hivirtus_inject.log
+  echo "overlay_start:$1" >> /data/local/tmp/hivirtus_overlay.debug
   chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
   chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
+  start_overlay_bubble
 }
 
 sync_config
+install_overlay_apk
 
 (
   LAST=""
@@ -122,6 +157,5 @@ sync_config
         LAST="$FG"
       fi
     fi
-    sleep 2
   done
 ) &

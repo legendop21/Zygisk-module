@@ -70,6 +70,14 @@ fi
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
+OVERLAY_APK="$ROOT_DIR/overlay-app/app/build/outputs/apk/release/app-release.apk"
+if [ -f "$OVERLAY_APK" ]; then
+  cp "$OVERLAY_APK" "$OUTPUT_DIR/virtus-overlay.apk"
+  echo "==> Bundled virtus-overlay.apk (floating bubble + menu)"
+else
+  echo "==> WARNING: virtus-overlay.apk missing — build overlay-app first"
+fi
+
 ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo ""

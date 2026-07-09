@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.34.0
-versionCode=82
+version=v2.35.0
+versionCode=83
 author=@hivirtus
-description=Zygisk Virtual SIM via SubscriptionInfo + Virtus Menu + UPI hooks.
+description=Zygisk hooks + Virtus floating overlay APK. Bubble+menu on UPI apps.
 zygisk=1

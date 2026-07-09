@@ -3,8 +3,8 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.33.0                 "
-ui_print "  Virtual SIM + Virtus Menu     "
+ui_print "        v2.35.0                 "
+ui_print "  Zygisk + Floating Overlay APK "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -79,10 +79,12 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK v2.33.0 — Virtual SIM + UPI hooks"
+ui_print "ZYGISK v2.35.0 — Floating bubble fix"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) UPI app kholo → gold V bubble + Virtus menu"
+ui_print "  3) Virtus APK auto-install hoga"
+ui_print "  4) Settings → Virtus → Display over other apps ON"
+ui_print "  5) UPI app kholo → gold V bubble + menu"
 ui_print ""
 ui_print "Agar zygote crash ho: HMA-OSS disable karke test karo"
 ui_print "Config: $MODPATH/config.json"
