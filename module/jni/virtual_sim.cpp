@@ -124,11 +124,24 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     const auto& config = ConfigManager::instance().get();
     if (!config.virtual_sim_active()) return;
 
-    // Sirf UPI / telephony / GMS — har user app pe binder hook = crash + heat
+    // UPI / telephony / GMS + is_upi_app_hooked (Groww etc.)
     const bool telephony_proc = is_telephony_process(process_name);
     const bool gms_proc = is_gms_process(process_name);
-    const bool upi_proc = upi_registry::is_known_upi(process_name);
+    const bool upi_proc = upi_registry::is_known_upi(process_name) ||
+                          config.is_upi_app_hooked(process_name);
     if (!telephony_proc && !gms_proc && !upi_proc) return;
+
+    std::string phone_sim1 = config.mock_phone_sim1;
+    if (phone_sim1.empty()) {
+        char buf[96] = {};
+        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+        if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
+        if (f) {
+            if (fgets(buf, sizeof(buf), f)) phone_sim1 = buf;
+            fclose(f);
+            if (!phone_sim1.empty() && phone_sim1.back() == '\n') phone_sim1.pop_back();
+        }
+    }
 
     g_api = api;
     g_process = process_name;
@@ -140,7 +153,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
                       config.enable_sim2_mock,
                       config.mock_country_iso,
                       true,
-                      config.mock_phone_sim1,
+                      phone_sim1,
                       config.mock_phone_sim2);
 
     if (is_telephony_process(process_name)) {
@@ -157,9 +170,10 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    // Groww/UPI — turant binder hook (1s delay se pehle SIM check ho jata tha)
-    if (!install_binder_plt(api)) {
-        schedule_deferred_binder(api, 1);
+    // Groww/UPI — turant binder hook
+    install_binder_plt(api);
+    if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+        schedule_deferred_binder(api, 0);
     }
     logger::info("VirtualSim", "Virtual SIM binder active for %s", process_name.c_str());
 }

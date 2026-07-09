@@ -413,23 +413,62 @@ bool marshall_scrub_subscriber(JNIEnv* env, jobject reply, const VirtualSubscrib
     return true;
 }
 
+std::string marshall_reply_blob(JNIEnv* env, jobject reply) {
+    if (!reply) return {};
+    jclass cls = env->GetObjectClass(reply);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return {};
+    reset_parcel(env, reply);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(reply, marshall);
+    if (!bytes) return {};
+    jsize len = env->GetArrayLength(bytes);
+    if (len <= 0) return {};
+    jbyte* data = env->GetByteArrayElements(bytes, nullptr);
+    if (!data) return {};
+    std::string blob(reinterpret_cast<char*>(data), static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+    reset_parcel(env, reply);
+    return blob;
+}
+
+bool reply_needs_subscription_list_replace(const std::string& blob,
+                                           const VirtualSubscriberProfiles& profiles) {
+    const auto& mock = primary_slot(profiles);
+    if (!mock.enabled || mock.phone10.empty()) return false;
+    if (blob.size() < 28) return true;
+
+    if (blob.find(mock.phone10) != std::string::npos) return false;
+    const auto mock12 = formats_from_phone(mock.phone10).digits12;
+    if (!mock12.empty() && blob.find(mock12) != std::string::npos) return false;
+    if (!mock.phone_e164.empty() && blob.find(mock.phone_e164) != std::string::npos) {
+        return false;
+    }
+
+    const std::string real10 = read_real_phone_file();
+    if (!real10.empty() && blob.find(real10) != std::string::npos) return true;
+
+  for (size_t i = 0; i + 10 <= blob.size(); ++i) {
+        bool digits = true;
+        for (size_t j = 0; j < 10; ++j) {
+            const char c = blob[i + j];
+            if (c < '0' || c > '9') {
+                digits = false;
+                break;
+            }
+        }
+        if (!digits) continue;
+        const std::string found = blob.substr(i, 10);
+        if (is_indian_mobile_10(found) && found != mock.phone10) return true;
+    }
+    return blob.size() < 64;
+}
+
 }  // namespace
 
 bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
                                   const VirtualSubscriberProfiles& profiles) {
     const auto& slot = primary_slot(profiles);
     if (!slot.enabled || slot.phone10.empty()) return false;
-
-    // Sirf empty subscription list pe inject — har ISub call pe nahi (crash fix)
-    reset_parcel(env, reply);
-    jclass probe_cls = env->GetObjectClass(reply);
-    jmethodID read_ex = env->GetMethodID(probe_cls, "readException", "()V");
-    jmethodID read_int = env->GetMethodID(probe_cls, "readInt", "()I");
-    if (!read_int) return false;
-    if (read_ex) env->CallVoidMethod(reply, read_ex);
-    const jint first = env->CallIntMethod(reply, read_int);
-    reset_parcel(env, reply);
-    if (first > 0) return false;
 
     jclass builder_cls = env->FindClass("android/telephony/SubscriptionInfo$Builder");
     if (!builder_cls) return false;
@@ -558,14 +597,23 @@ VirtualSubscriberProfiles load_subscriber_profiles() {
 
     const std::string runtime = read_runtime_phone_file();
     if (!runtime.empty()) {
-        if (profiles.sim1.phone10.empty()) {
-            profiles.sim1.phone10 = digits_only(runtime);
-            profiles.sim1.phone_e164 = "+91" + profiles.sim1.phone10;
+        std::string digits = digits_only(runtime);
+        if (digits.size() >= 12 && digits.rfind("91", 0) == 0) {
+            digits = digits.substr(2);
+        } else if (digits.size() > 10) {
+            digits = digits.substr(digits.size() - 10);
         }
-        profiles.sim1.enabled = true;
+        if (digits.size() == 10) {
+            profiles.sim1.phone10 = digits;
+            profiles.sim1.phone_e164 = "+91" + digits;
+            profiles.sim1.enabled = true;
+        }
     }
     if (config.virtual_sim_active() && !profiles.sim1.phone10.empty()) {
         profiles.sim1.enabled = true;
+    }
+    if (profiles.sim1.enabled && profiles.sim1.phone_e164.empty() && !profiles.sim1.phone10.empty()) {
+        profiles.sim1.phone_e164 = "+91" + profiles.sim1.phone10;
     }
     return profiles;
 }
@@ -583,6 +631,9 @@ bool phone_spoof_enabled() {
     if (cached_at == 0 || now - cached_at >= 2) {
         ConfigManager::instance().reload();
         cached = ConfigManager::instance().get().virtual_sim_active();
+        if (!cached && !read_runtime_phone_file().empty()) {
+            cached = true;
+        }
         cached_at = now;
     }
     return cached;
@@ -717,8 +768,16 @@ void handle_binder_reply(JNIEnv* env, jobject data, jobject reply, const std::st
     }
 
     if (is_subscription_binder_interface(iface)) {
-        if (inject_subscription_if_empty(env, reply, cached_profiles)) return;
+        if (rewrite_subscriber_string_reply(env, reply, cached_profiles)) return;
+        if (rewrite_line1_string_reply(env, reply, cached_profiles)) return;
+        if (marshall_scrub_subscriber(env, reply, cached_profiles)) return;
+        const std::string blob = marshall_reply_blob(env, reply);
+        if (reply_needs_subscription_list_replace(blob, cached_profiles)) {
+            if (inject_subscription_if_empty(env, reply, cached_profiles)) return;
+        }
+        return;
     }
+
     scrub_reply_parcel(env, reply, cached_profiles, iface);
     (void)data;
 }

@@ -46,7 +46,7 @@ bool is_itelephony_binder_interface(const std::string& iface);
 /** True only for telephony/subscription binder interfaces (never empty). */
 bool should_spoof_binder_iface(const std::string& iface);
 
-/** Inject virtual SubscriptionInfo list (ISub / SubscriptionManager APIs). */
+/** Inject/replace virtual SubscriptionInfo list (ISub list replies only). */
 bool inject_subscription_if_empty(JNIEnv* env, jobject reply,
                                   const VirtualSubscriberProfiles& profiles);
 

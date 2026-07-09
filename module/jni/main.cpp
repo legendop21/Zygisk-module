@@ -326,8 +326,8 @@ public:
 
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
-            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
-            logger::info("Hivirtus", "Deferred outgoing SMS block in %s", process_name_.c_str());
+            outgoing_sms_hook::install(env_, api_, false, false);
+            logger::info("Hivirtus", "Outgoing SMS block in %s (binder+exec)", process_name_.c_str());
         }
 
         if (is_hooked_upi_ && want_sender_spoof) {
