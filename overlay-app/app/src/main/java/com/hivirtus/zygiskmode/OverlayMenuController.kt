@@ -270,7 +270,7 @@ class OverlayMenuController(
         if (digits.length != 10) return
         runBlocking(Dispatchers.IO) {
             configManager.syncMockSim(true, digits)
-            TelephonyInjectHelper.wakeTelephonyPipeline()
+            MockSimPipeline.activate(appContext)
         }
     }
 
@@ -282,7 +282,7 @@ class OverlayMenuController(
             val digits = configManager.mockSimDigits10(phoneRaw)
             updateMockSimStatus(enabled, digits)
             if (ok) {
-                TelephonyInjectHelper.wakeTelephonyPipeline()
+                MockSimPipeline.activate(appContext)
                 HookStatusBarManager(appContext).refresh()
                 OutgoingSmsGuard.refresh(appContext)
                 if (enabled && digits.length == 10) {

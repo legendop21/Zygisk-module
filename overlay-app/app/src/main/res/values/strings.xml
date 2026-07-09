@@ -76,10 +76,11 @@
     <string name="hide_sukisu">Hide SukiSU Ultra</string>
     <string name="hide_all_root_apps">Hide ALL Root Apps (Universal)</string>
     <string name="enable_mock_sim">Mock SIM Enable (Virtual Number)</string>
-    <string name="mock_sim_status_on">✅ Mock SIM ON — %1$s (config auto-sync)</string>
+    <string name="mock_sim_help">Ye number app ko SIM dikhega. Real SIM se verify SMS block hoga. Number wahi daalo jo UPI app me register hai — koi bhi random number nahi.</string>
+    <string name="mock_sim_status_on">✅ Mock SIM ON — %1$s | SMS block + spoof active</string>
     <string name="mock_sim_status_off">Mock SIM OFF — asli SIM number dikhega</string>
     <string name="mock_sim_need_number">10-digit number daalo (app register wala)</string>
-    <string name="mock_sim_saved">Mock SIM save — UPI app band karke dubara kholo</string>
+    <string name="mock_sim_saved">Mock SIM save — SMS block ON. UPI + Messages band karke dubara kholo</string>
     <string name="phone_spoof_section">Virtual SIM / Mock Number</string>
     <string name="enable_phone_spoof">Fake Phone Number — Override number shown to apps</string>
     <string name="mock_phone_sim1">Verify Number (app registered — SIM ka nahi):</string>

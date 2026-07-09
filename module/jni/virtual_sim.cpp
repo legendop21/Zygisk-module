@@ -172,7 +172,9 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
 
     if (is_telephony_process(process_name)) {
         install_binder_plt(api);
-        logger::info("VirtualSim", "Dual virtual SIM ready in telephony (%s)", process_name.c_str());
+        outgoing_sms_hook::install_telephony_server_hook(api);
+        logger::info("VirtualSim", "Dual virtual SIM + ISms server block in telephony (%s)",
+                     process_name.c_str());
         return;
     }
 

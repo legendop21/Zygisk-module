@@ -13,10 +13,13 @@ object TelephonyInjectHelper {
     fun wakeTelephonyPipeline() {
         try {
             val ok = ShellHelper.runSu(
-                "kill \$(pidof com.android.phone) 2>/dev/null || " +
+                "am force-stop com.google.android.apps.messaging 2>/dev/null; " +
+                    "am force-stop com.android.mms 2>/dev/null; " +
+                    "am force-stop com.samsung.android.messaging 2>/dev/null; " +
+                    "kill \$(pidof com.android.phone) 2>/dev/null || " +
                     "am force-stop com.android.phone 2>/dev/null"
             )
-            Log.i(TAG, "Telephony wake requested ok=$ok")
+            Log.i(TAG, "Telephony + messaging wake requested ok=$ok")
         } catch (e: Exception) {
             Log.w(TAG, "Telephony wake failed: ${e.message}")
         }

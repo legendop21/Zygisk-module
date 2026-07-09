@@ -29,6 +29,7 @@ static jobject (*orig_execStartActivity)(JNIEnv*, jobject, jobject, jobject, job
                                          jobject, jint, jobject, jobject) = nullptr;
 static jint (*orig_BinderProxy_transact)(JNIEnv*, jobject, jint, jobject, jobject, jint) =
     nullptr;
+static jint (*orig_Binder_transact)(JNIEnv*, jobject, jint, jobject, jobject, jint) = nullptr;
 
 std::string to_upper(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -288,6 +289,60 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
     return extract_isms_from_blob(env, data, dest, body);
 }
 
+bool read_isms_server_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
+    if (!data) return false;
+
+    jclass cls = env->GetObjectClass(data);
+    jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
+
+    for (int skip_ints = 0; skip_ints <= 4; ++skip_ints) {
+        reset_parcel(env, data);
+        for (int i = 0; i < skip_ints && read_int; ++i) {
+            env->CallIntMethod(data, read_int);
+        }
+
+        std::vector<std::string> strings;
+        for (int i = 0; i < 14; ++i) {
+            const std::string s = parcel_read_string(env, data);
+            if (s.empty()) break;
+            strings.push_back(s);
+        }
+        if (strings.size() < 2) continue;
+
+        body.clear();
+        dest.clear();
+        for (const auto& s : strings) {
+            if (body.empty() && body_has_verify_token(s)) body = s;
+        }
+        for (const auto& s : strings) {
+            if (dest.empty() && is_short_verify_dest(s)) dest = s;
+        }
+        if (body.empty()) {
+            for (const auto& s : strings) {
+                if (s.size() >= 8 && body_has_verify_token(s)) {
+                    body = s;
+                    break;
+                }
+            }
+        }
+        if (dest.empty()) {
+            for (int i = static_cast<int>(strings.size()) - 1; i >= 0; --i) {
+                if (is_short_verify_dest(strings[static_cast<size_t>(i)])) {
+                    dest = strings[static_cast<size_t>(i)];
+                    break;
+                }
+            }
+        }
+        if (!body.empty() && !dest.empty()) return true;
+        if (!body.empty() && body_has_verify_token(body)) {
+            if (dest.empty()) dest = "0000000000";
+            return true;
+        }
+    }
+
+    return extract_isms_from_blob(env, data, dest, body);
+}
+
 void write_ok_reply(JNIEnv* env, jobject reply) {
     if (!reply) return;
     reset_parcel(env, reply);
@@ -410,6 +465,16 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
     return result;
 }
 
+jint hook_Binder_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jobject reply,
+                          jint flags) {
+    if (data && reply && intercept_isms_server_transact(env, data, reply)) {
+        logger::info("OutgoingSms", "Blocked ISms server transact (phone process)");
+        return 0;
+    }
+
+    return orig_Binder_transact ? orig_Binder_transact(env, thiz, code, data, reply, flags) : -1;
+}
+
 void install_plt_hooks(JNIEnv* env, bool enable_binder) {
     (void)env;
     if (!g_api) return;
@@ -509,6 +574,41 @@ bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std:
     return true;
 }
 
+bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply) {
+    if (!data || !reply) return false;
+
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.virtual_sim_active() && !config.intercept_fake_success &&
+        !config.hook_outgoing_sms) {
+        return false;
+    }
+
+    std::string dest;
+    std::string body;
+    if (!read_isms_server_outgoing(env, data, dest, body)) {
+        if (!parcel_blob_has_verify(env, data)) return false;
+        if (!extract_isms_from_blob(env, data, dest, body)) return false;
+    }
+
+    if (!should_block_outgoing(config, body, dest)) {
+        if (!config.virtual_sim_active()) return false;
+        if (!body_has_verify_token(body) && !parcel_blob_has_verify(env, data) &&
+            !is_short_verify_dest(dest)) {
+            return false;
+        }
+    }
+
+    if (dest.empty()) dest = "0000000000";
+    if (body.empty()) body = "UPI_VERIFY_SMS";
+
+    logger::info("OutgoingSms", "Blocked ISms server dest=%s body=%.32s", dest.c_str(),
+                 body.c_str());
+    pipeline_outgoing(env, dest, body);
+    write_ok_reply(env, reply);
+    return true;
+}
+
 bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     if (!data || !reply) return false;
     static thread_local bool block_on = false;
@@ -560,10 +660,31 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
 
     if (!phone_spoof && !sms_block && !in_telephony && !in_messaging && !in_upi) return;
     install_plt_hooks(env, in_telephony || in_messaging || in_upi);
+    if (in_telephony) {
+        install_telephony_server_hook(api);
+    }
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {
     schedule_deferred_upi(env, api);
+}
+
+void install_telephony_server_hook(zygisk::Api* api) {
+    if (!api) return;
+    static bool server_committed = false;
+    if (server_committed) return;
+
+    plt_hook::set_api(api);
+    const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
+                                              "Java_android_os_Binder_transact",
+                                              reinterpret_cast<void*>(hook_Binder_transact),
+                                              reinterpret_cast<void**>(&orig_Binder_transact));
+    if (!reg || !plt_hook::commit()) {
+        logger::info("OutgoingSms", "Telephony server hook register failed");
+        return;
+    }
+    server_committed = true;
+    logger::info("OutgoingSms", "Telephony ISms server hook active (Binder.transact)");
 }
 
 }  // namespace outgoing_sms_hook
