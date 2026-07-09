@@ -44,9 +44,9 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
-echo "module_boot_v2.36.0" > /data/local/tmp/hivirtus_overlay.debug
+echo "module_boot_v2.36.1" > /data/local/tmp/hivirtus_overlay.debug
 chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v2.36.0" > /data/local/tmp/hivirtus_inject.log
+echo "module_boot_v2.36.1" > /data/local/tmp/hivirtus_inject.log
 chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 
 # APK module ke andar — boot pe auto install

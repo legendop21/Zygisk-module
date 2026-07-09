@@ -2,9 +2,9 @@
 # Hivirtus — normal Magisk/KernelSU module (hooks Zygisk pipeline se inject hote hain)
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.36.0                 "
-ui_print "  Module+APK ek zip me bundled "
+ui_print "   Zygisk Mode Menu              "
+ui_print "        v2.36.1                 "
+ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -97,7 +97,7 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK v2.36.0 — Ek zip = Module + APK"
+ui_print "Zygisk mode Menu By Dev @Hivirtus @Liqdy @ClamFlat 🔥"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
 ui_print "  3) Virtus APK auto-install (module ke andar)"
