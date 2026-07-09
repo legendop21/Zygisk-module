@@ -29,7 +29,8 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
     if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
         const std::string iface = data ? telephony_spoof::read_binder_interface(env, data) : "";
         if (iface.empty() || telephony_spoof::is_telephony_binder_interface(iface)) {
-            telephony_spoof::scrub_reply_parcel(env, reply, telephony_spoof::load_formats());
+            const auto profiles = telephony_spoof::load_subscriber_profiles();
+            telephony_spoof::scrub_reply_parcel(env, reply, profiles, iface);
         }
     }
     return result;

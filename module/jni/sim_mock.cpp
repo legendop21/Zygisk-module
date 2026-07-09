@@ -40,21 +40,19 @@ void write_spoof_status(const std::string& phone) {
     }
 }
 
-bool should_spoof_property_key(const std::string& key) {
+bool should_spoof_subscriber_number_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (lower.find("line1") != std::string::npos) return true;
-    if (lower.find("phone") != std::string::npos) return true;
-    if (lower.find("msisdn") != std::string::npos) return true;
     if (lower.find("subscriber") != std::string::npos) return true;
+    if (lower.find("msisdn") != std::string::npos) return true;
     if (lower.find("simnum") != std::string::npos) return true;
-    if (lower.find("phone_number") != std::string::npos) return true;
-    if (lower.find("operator.numeric") != std::string::npos) return true;
-    if (lower.find("operator.alpha") != std::string::npos) return true;
-    if (lower.find("icc_id") != std::string::npos) return true;
-    if (lower.find("imsi") != std::string::npos) return true;
+    if (lower.find("subscription") != std::string::npos) return true;
     return false;
+}
+
+bool should_spoof_property_key(const std::string& key) {
+    return should_spoof_subscriber_number_key(key);
 }
 
 bool should_spoof_sim_state_key(const std::string& key) {
@@ -142,8 +140,8 @@ jstring hook_SystemProperties_get(JNIEnv* env, jclass clazz, jstring key_j, jstr
         if (!iccid.empty()) return zygisk_utils::string_to_jstring(env, iccid);
     }
 
-    if (g_phone_spoof && !phone.empty() && should_spoof_property_key(key)) {
-        logger::info("SimMock", "Spoof prop %s -> %s", key.c_str(), phone.c_str());
+    if (g_phone_spoof && !phone.empty() && should_spoof_subscriber_number_key(key)) {
+        logger::info("SimMock", "SubscriberInfo prop %s -> %s", key.c_str(), phone.c_str());
         return zygisk_utils::string_to_jstring(env, phone);
     }
 

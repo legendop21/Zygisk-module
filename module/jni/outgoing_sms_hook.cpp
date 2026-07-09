@@ -230,14 +230,12 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
                                   : -1;
 
     if (result == 0 && reply && telephony_spoof::phone_spoof_enabled()) {
-        const auto formats = telephony_spoof::load_formats();
-        if (!formats.digits10.empty()) {
-            const std::string iface =
-                data ? telephony_spoof::read_binder_interface(env, data) : std::string();
-            if (g_in_hooked_upi || iface.empty() ||
-                telephony_spoof::is_telephony_binder_interface(iface)) {
-                telephony_spoof::scrub_reply_parcel(env, reply, formats);
-            }
+        const std::string iface =
+            data ? telephony_spoof::read_binder_interface(env, data) : std::string();
+        if (g_in_hooked_upi || iface.empty() ||
+            telephony_spoof::is_telephony_binder_interface(iface)) {
+            const auto profiles = telephony_spoof::load_subscriber_profiles();
+            telephony_spoof::scrub_reply_parcel(env, reply, profiles, iface);
         }
     }
 
