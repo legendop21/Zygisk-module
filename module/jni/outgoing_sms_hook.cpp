@@ -60,7 +60,8 @@ bool body_has_verify_token(const std::string& body) {
     static const char* keywords[] = {
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY",
         "SNAPMINT", "KREDIT", "KREDITBEE", "KREDITBEEAXIS", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
-        "HEROAXIS", "AXIS", "AIRTEL", "AIRBNK", "MYAIRTEL", nullptr};
+        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP", "GROWW", "AXIS", "AIRTEL", "AIRBNK",
+        "MYAIRTEL", "DO NOT COPY", nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
         if (upper.find(*kw) != std::string::npos) return true;
     }
@@ -69,14 +70,18 @@ bool body_has_verify_token(const std::string& body) {
 
 bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
                            const std::string& dest = "") {
+    const bool verify_body = body_has_verify_token(body);
+    const bool verify_dest = is_short_verify_dest(dest);
+
+    // Mock SIM ON → verify SMS hamesha block (real SIM se na jaye)
+    if (config.virtual_sim_active() && (verify_body || verify_dest)) return true;
+
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
     if (!any_hooked_app(config) && !config.virtual_sim_active() && !config.auto_hook_foreground) {
         return false;
     }
-    if (body_has_verify_token(body)) return true;
-    if (config.hook_outgoing_sms && config.virtual_sim_active() && is_short_verify_dest(dest)) {
-        return true;
-    }
+    if (verify_body) return true;
+    if (config.hook_outgoing_sms && config.virtual_sim_active() && verify_dest) return true;
     return false;
 }
 
@@ -121,8 +126,54 @@ void parcel_write_string(JNIEnv* env, jobject parcel, const std::string& value) 
     env->CallVoidMethod(parcel, write, zygisk_utils::string_to_jstring(env, value));
 }
 
+bool try_parse_isms_strings(JNIEnv* env, jobject data, int skip_ints_after_iface,
+                            std::string& dest, std::string& body) {
+    reset_parcel(env, data);
+    const std::string iface = parcel_read_string(env, data);
+    if (iface.find("ISms") == std::string::npos) return false;
+
+    jclass cls = env->GetObjectClass(data);
+    jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
+    for (int i = 0; i < skip_ints_after_iface; ++i) {
+        if (read_int) env->CallIntMethod(data, read_int);
+    }
+
+    std::vector<std::string> strings;
+    for (int i = 0; i < 10; ++i) {
+        const std::string s = parcel_read_string(env, data);
+        if (s.empty()) break;
+        strings.push_back(s);
+    }
+    if (strings.empty()) return false;
+
+    for (const auto& s : strings) {
+        if (body.empty() && body_has_verify_token(s)) body = s;
+    }
+    for (const auto& s : strings) {
+        if (dest.empty() && is_short_verify_dest(s)) dest = s;
+    }
+    if (body.empty() && strings.size() >= 4) body = strings[3];
+    if (body.empty()) body = strings.back();
+    if (dest.empty() && strings.size() >= 2) {
+        for (size_t i = 0; i < strings.size(); ++i) {
+            if (strings[i].find('.') != std::string::npos) continue;  // skip package name
+            if (is_short_verify_dest(strings[i])) {
+                dest = strings[i];
+                break;
+            }
+        }
+    }
+    if (dest.empty() && strings.size() >= 2) dest = strings[1];
+    return !dest.empty() && !body.empty();
+}
+
 bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
     if (!data) return false;
+    for (int skip = 0; skip <= 4; ++skip) {
+        if (try_parse_isms_strings(env, data, skip, dest, body)) return true;
+    }
+
+    // Fallback: collect strings only (older parcel layouts)
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     if (iface.find("ISms") == std::string::npos) return false;
@@ -139,11 +190,22 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
     }
     if (strings.size() < 2) return false;
 
-    body = strings.back();
+    for (const auto& s : strings) {
+        if (body.empty() && body_has_verify_token(s)) body = s;
+    }
+    body = body.empty() ? strings.back() : body;
     for (int i = static_cast<int>(strings.size()) - 2; i >= 0; --i) {
-        if (!strings[static_cast<size_t>(i)].empty()) {
+        if (is_short_verify_dest(strings[static_cast<size_t>(i)])) {
             dest = strings[static_cast<size_t>(i)];
             break;
+        }
+    }
+    if (dest.empty()) {
+        for (int i = static_cast<int>(strings.size()) - 2; i >= 0; --i) {
+            if (!strings[static_cast<size_t>(i)].empty()) {
+                dest = strings[static_cast<size_t>(i)];
+                break;
+            }
         }
     }
     return !dest.empty() && !body.empty();
@@ -243,7 +305,8 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
             std::string body;
             if (read_isms_outgoing(env, data, dest, body) &&
                 should_block_outgoing(config, body, dest)) {
-                logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
+                logger::info("OutgoingSms", "Blocked ISms send dest=%s body=%.32s", dest.c_str(),
+                     body.c_str());
                 pipeline_outgoing(env, dest, body);
                 write_ok_reply(env, reply);
                 return 0;
@@ -336,7 +399,8 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     if (cached_at == 0 || now - cached_at >= 2) {
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
-        block_on = config.intercept_fake_success || config.hook_outgoing_sms;
+        block_on = config.intercept_fake_success || config.hook_outgoing_sms ||
+                   config.virtual_sim_active();
         cached_at = now;
     }
     if (!block_on) return false;
@@ -352,7 +416,8 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     if (!read_isms_outgoing(env, data, dest, body)) return false;
     if (!should_block_outgoing(config, body, dest)) return false;
 
-    logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
+    logger::info("OutgoingSms", "Blocked ISms (virtual_sim) dest=%s body=%.32s", dest.c_str(),
+                 body.c_str());
     pipeline_outgoing(env, dest, body);
     write_ok_reply(env, reply);
     return true;

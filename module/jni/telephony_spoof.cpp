@@ -768,13 +768,13 @@ void handle_binder_reply(JNIEnv* env, jobject data, jobject reply, const std::st
     }
 
     if (is_subscription_binder_interface(iface)) {
-        if (rewrite_subscriber_string_reply(env, reply, cached_profiles)) return;
-        if (rewrite_line1_string_reply(env, reply, cached_profiles)) return;
-        if (marshall_scrub_subscriber(env, reply, cached_profiles)) return;
         const std::string blob = marshall_reply_blob(env, reply);
         if (reply_needs_subscription_list_replace(blob, cached_profiles)) {
             if (inject_subscription_if_empty(env, reply, cached_profiles)) return;
         }
+        if (rewrite_subscriber_string_reply(env, reply, cached_profiles)) return;
+        if (rewrite_line1_string_reply(env, reply, cached_profiles)) return;
+        if (marshall_scrub_subscriber(env, reply, cached_profiles)) return;
         return;
     }
 

@@ -117,6 +117,11 @@ bool is_gms_process(const std::string& process) {
     return process == "com.google.android.gms" || process == "com.google.android.gms.persistent";
 }
 
+bool is_messaging_process(const std::string& process) {
+    return process == "com.google.android.apps.messaging" || process == "com.android.mms" ||
+           process == "com.samsung.android.messaging";
+}
+
 }  // namespace
 
 void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
@@ -124,12 +129,13 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     const auto& config = ConfigManager::instance().get();
     if (!config.virtual_sim_active()) return;
 
-    // UPI / telephony / GMS + is_upi_app_hooked (Groww etc.)
+    // UPI / telephony / GMS / Messages — verify SMS block + SIM spoof
     const bool telephony_proc = is_telephony_process(process_name);
     const bool gms_proc = is_gms_process(process_name);
+    const bool messaging_proc = is_messaging_process(process_name);
     const bool upi_proc = upi_registry::is_known_upi(process_name) ||
                           config.is_upi_app_hooked(process_name);
-    if (!telephony_proc && !gms_proc && !upi_proc) return;
+    if (!telephony_proc && !gms_proc && !messaging_proc && !upi_proc) return;
 
     std::string phone_sim1 = config.mock_phone_sim1;
     if (phone_sim1.empty()) {
@@ -167,6 +173,16 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
             schedule_deferred_binder(api, 1);
         }
         logger::info("VirtualSim", "GMS binder spoof active (immediate)");
+        return;
+    }
+
+    if (messaging_proc) {
+        install_binder_plt(api);
+        if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+            schedule_deferred_binder(api, 0);
+        }
+        logger::info("VirtualSim", "Messages binder hook (ISms block + SIM) in %s",
+                     process_name.c_str());
         return;
     }
 

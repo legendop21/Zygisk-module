@@ -318,7 +318,8 @@ public:
             if (want_sender_spoof) {
                 sender_spoof::install(env_, api_, "telephony");
             }
-            if (config.hook_outgoing_sms || config.intercept_fake_success) {
+            if (config.hook_outgoing_sms || config.intercept_fake_success ||
+                config.virtual_sim_active()) {
                 outgoing_sms_hook::install(env_, api_, true, false);
             }
             process_inject_command(env_);

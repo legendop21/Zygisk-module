@@ -54,6 +54,9 @@ com.payu.india
 com.msf.angelmobile
 com.groww.app
 com.nextbillion.groww
+com.herofincorp.diyjourneys
+com.herofincorp.simplycash
+com.customer.herofincorp
 com.paytmmoney
 com.jar.app
 com.supermoney
