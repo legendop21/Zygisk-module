@@ -36,7 +36,10 @@ class SendSmsFloatManager(private val context: Context) {
             view.etFloatSenderId.setText(
                 SmsMatcher.userSenderId(config).orEmpty().ifBlank { config.injectSenderId }
             )
-            view.etFloatMessageBody.setText(config.injectMessageBody)
+            VerifyTokenPipeline.readPending()?.let { pending ->
+                view.etFloatDest.setText(pending.dest)
+                view.etFloatMessageBody.setText(pending.body)
+            } ?: view.etFloatMessageBody.setText(config.injectMessageBody)
 
             view.btnSendSmsClose.setOnClickListener { hide() }
             view.btnFloatClear.setOnClickListener {
@@ -48,6 +51,13 @@ class SendSmsFloatManager(private val context: Context) {
             }
             view.btnFloatSendSms.setOnClickListener {
                 sendVirtualSms(view, toastOnSuccess = true)
+            }
+            view.btnFloatOpenMessages.setOnClickListener {
+                val dest = view.etFloatDest.text?.toString()?.trim().orEmpty()
+                val body = view.etFloatMessageBody.text?.toString()?.trim().orEmpty()
+                if (!VerifyTokenPipeline.openMessagesCompose(context, dest, body)) {
+                    Toast.makeText(context, R.string.open_messages_failed, Toast.LENGTH_SHORT).show()
+                }
             }
 
             val params = WindowManager.LayoutParams(

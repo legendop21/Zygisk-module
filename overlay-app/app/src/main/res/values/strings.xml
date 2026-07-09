@@ -122,7 +122,11 @@
     <string name="toast_sender_off">Sender ID override OFF</string>
     <string name="toast_sender_saved">Sender ID saved — %1$s</string>
     <string name="override_incoming_sender">Sender ID Override (incoming SMS)</string>
-    <string name="send_sms_title">Send SMS</string>
+    <string name="send_sms_title">Verify SMS</string>
+    <string name="verify_sms_to">To (short code):</string>
+    <string name="open_messages_verify">Open Messages — 2nd SIM se bhejo</string>
+    <string name="open_messages_failed">Messages open nahi hua</string>
+    <string name="verify_token_copied">Token copied — %1$s wali SIM se Messages me bhejo</string>
     <string name="sms_sender_label">Sms Sender</string>
     <string name="clear">Clear</string>
     <string name="paste_and_send">Paste &amp; send</string>

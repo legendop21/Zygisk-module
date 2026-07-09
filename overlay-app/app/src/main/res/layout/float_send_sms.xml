@@ -50,6 +50,28 @@
         android:inputType="textCapCharacters"
         android:padding="10dp"
         android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_hint"
+        android:visibility="gone" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/verify_sms_to"
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp" />
+
+    <EditText
+        android:id="@+id/etFloatDest"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/input_background"
+        android:fontFamily="monospace"
+        android:hint="08448189637"
+        android:inputType="phone"
+        android:padding="10dp"
+        android:textColor="@color/text_primary"
         android:textColorHint="@color/text_hint" />
 
     <TextView
@@ -101,13 +123,23 @@
     </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnFloatSendSms"
+        android:id="@+id/btnFloatOpenMessages"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:background="@drawable/button_gradient"
-        android:text="@string/send_virtual_sms"
+        android:text="@string/open_messages_verify"
         android:textColor="@color/button_text_on_gold"
         app:backgroundTint="@null" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnFloatSendSms"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/send_virtual_sms"
+        android:textColor="@color/gold_primary"
+        android:visibility="gone" />
 
 </LinearLayout>

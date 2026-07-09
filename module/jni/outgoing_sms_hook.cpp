@@ -401,6 +401,29 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
         fclose(f);
         chmod("/data/local/tmp/hivirtus_outgoing_blocked.flag", 0644);
     }
+
+    char phone[96] = {};
+    FILE* pf = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+    if (!pf) pf = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
+    if (pf) {
+        if (fgets(phone, sizeof(phone), pf)) {
+            size_t len = strlen(phone);
+            while (len > 0 && (phone[len - 1] == '\n' || phone[len - 1] == '\r')) {
+                phone[--len] = '\0';
+            }
+        }
+        fclose(pf);
+    }
+
+    FILE* jf = fopen("/data/local/tmp/hivirtus_pending_verify.json", "w");
+    if (jf) {
+        fprintf(jf,
+                "{\n  \"dest\": \"%s\",\n  \"body\": \"%s\",\n  \"send_from\": \"%s\",\n  "
+                "\"captured_at\": %ld\n}\n",
+                dest.c_str(), body.c_str(), phone, static_cast<long>(time(nullptr)));
+        fclose(jf);
+        chmod("/data/local/tmp/hivirtus_pending_verify.json", 0644);
+    }
 }
 
 jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject contextThread,

