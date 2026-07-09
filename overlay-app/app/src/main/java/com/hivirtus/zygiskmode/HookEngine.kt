@@ -25,7 +25,8 @@ object HookEngine {
 
         val display = UpiAppRegistry.displayNameFor(targetPkg)
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim().ifBlank { "+919876543210" }
+        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }.ifBlank { "+919876543210" }
+        val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
 
         val hooked = if (mergeSelection) {
             current.hookedUpiApps.toMutableMap()
@@ -46,8 +47,9 @@ object HookEngine {
             autoExtractOtp = true,
             autoHookForeground = true,
             overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
-            enablePhoneSpoof = true,
-            enableSim1Mock = true,
+            enablePhoneSpoof = mockOn,
+            enableSim1Mock = mockOn,
+            enableVirtualSim = mockOn,
             mockPhoneSim1 = phone
         )
 
@@ -55,7 +57,7 @@ object HookEngine {
             return ActiveHookManager.HookResult(false, targetPkg, display, "Config save fail")
         }
 
-        configManager.writeSpoofPhoneSync(phone)
+        if (mockOn) configManager.writeSpoofPhoneSync(phone)
         TelephonyInjectHelper.wakeTelephonyPipeline()
         SmsStackRefresher.refreshAfterSenderIdChange()
         ActiveHookManager.forceStopOnce(targetPkg)
@@ -79,7 +81,8 @@ object HookEngine {
         if (selected.isEmpty()) return 0
 
         val current = configManager.load()
-        val phone = current.mockPhoneSim1.trim().ifBlank { "+919876543210" }
+        val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }.ifBlank { "+919876543210" }
+        val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
 
         val senderId = current.injectSenderId.trim()
         val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
@@ -93,14 +96,15 @@ object HookEngine {
             autoExtractOtp = true,
             autoHookForeground = true,
             overrideIncomingSender = hasSenderId || current.overrideIncomingSender,
-            enablePhoneSpoof = true,
-            enableSim1Mock = true,
+            enablePhoneSpoof = mockOn,
+            enableSim1Mock = mockOn,
+            enableVirtualSim = mockOn,
             mockPhoneSim1 = phone
         )
 
         if (!configManager.saveAndFlushSync(updated)) return 0
 
-        configManager.writeSpoofPhoneSync(phone)
+        if (mockOn) configManager.writeSpoofPhoneSync(phone)
         TelephonyInjectHelper.wakeTelephonyPipeline()
         SmsStackRefresher.refreshAfterSenderIdChange()
         ActiveHookManager.clearRestartCache()

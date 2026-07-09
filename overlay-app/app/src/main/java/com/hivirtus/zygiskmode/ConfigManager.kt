@@ -13,6 +13,7 @@ data class ModuleConfig(
     val hideApatch: Boolean = true,
     val hideSukisu: Boolean = true,
     val hideAllRootApps: Boolean = true,
+    val enableVirtualSim: Boolean = false,
     val enableSim1Mock: Boolean = false,
     val enableSim2Mock: Boolean = false,
     val enablePhoneSpoof: Boolean = false,
@@ -175,6 +176,45 @@ class ConfigManager(private val context: Context) {
         }
     }
 
+    /**
+     * Mock SIM toggle + number — turant config.json + spoof_phone.txt sync (Zygisk native).
+     * @return true jab enabled ho aur 10-digit number valid ho, ya disabled save ho gaya ho
+     */
+    fun syncMockSim(enabled: Boolean, phoneRaw: String): Boolean {
+        val digits = phoneRaw.replace(Regex("[^0-9]"), "")
+        val ten = when {
+            digits.length >= 12 && digits.startsWith("91") -> digits.substring(2)
+            digits.length >= 10 -> digits.takeLast(10)
+            else -> ""
+        }
+        val normalized = if (ten.length == 10) "+91$ten" else phoneRaw.trim()
+
+        val current = load()
+        val updated = current.copy(
+            enableVirtualSim = enabled,
+            enableSim1Mock = enabled,
+            enablePhoneSpoof = enabled,
+            mockPhoneSim1 = if (ten.length == 10) normalized else current.mockPhoneSim1
+        )
+
+        if (!saveAndFlushSync(updated)) return false
+
+        if (enabled && ten.length == 10) {
+            writeSpoofPhoneSync(normalized)
+            return true
+        }
+        return !enabled
+    }
+
+    fun mockSimDigits10(phone: String): String {
+        val digits = phone.replace(Regex("[^0-9]"), "")
+        return when {
+            digits.length >= 12 && digits.startsWith("91") -> digits.substring(2)
+            digits.length >= 10 -> digits.takeLast(10)
+            else -> ""
+        }
+    }
+
     fun writeSpoofPhone(phone: String) {
         if (phone.isBlank()) return
         val normalized = normalizePhone(phone)
@@ -327,6 +367,9 @@ class ConfigManager(private val context: Context) {
                 hideApatch = json.optBoolean("hide_apatch", true),
                 hideSukisu = json.optBoolean("hide_sukisu", true),
                 hideAllRootApps = json.optBoolean("hide_all_root_apps", true),
+                enableVirtualSim = json.optBoolean("enable_virtual_sim", false) ||
+                    json.optBoolean("enable_sim1_mock", false) ||
+                    json.optBoolean("enable_phone_spoof", false),
                 enableSim1Mock = json.optBoolean("enable_sim1_mock", false),
                 enableSim2Mock = json.optBoolean("enable_sim2_mock", false),
                 enablePhoneSpoof = json.optBoolean("enable_phone_spoof", false),
@@ -411,6 +454,7 @@ class ConfigManager(private val context: Context) {
             put("hide_apatch", config.hideApatch)
             put("hide_sukisu", config.hideSukisu)
             put("hide_all_root_apps", config.hideAllRootApps)
+            put("enable_virtual_sim", config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof)
             put("enable_sim1_mock", config.enableSim1Mock)
             put("enable_sim2_mock", config.enableSim2Mock)
             put("enable_phone_spoof", config.enablePhoneSpoof)

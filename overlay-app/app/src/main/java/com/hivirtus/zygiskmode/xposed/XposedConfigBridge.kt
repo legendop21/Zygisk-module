@@ -106,7 +106,7 @@ object XposedConfigBridge {
 
     fun shouldSimSpoof(config: ModuleConfig): Boolean {
         if (readSpoofPhone(config).isNotBlank()) return true
-        return config.enablePhoneSpoof || config.enableSim1Mock || config.enableSim2Mock
+        return config.enableVirtualSim || config.enablePhoneSpoof || config.enableSim1Mock || config.enableSim2Mock
     }
 
     private fun bodyHasVerifyToken(body: String): Boolean {
@@ -147,6 +147,9 @@ object XposedConfigBridge {
         return ModuleConfig(
             hideRoot = json.optBoolean("hide_root", false),
             hideDeveloper = json.optBoolean("hide_developer", false),
+            enableVirtualSim = json.optBoolean("enable_virtual_sim", false) ||
+                json.optBoolean("enable_sim1_mock", false) ||
+                json.optBoolean("enable_phone_spoof", false),
             enableSim1Mock = json.optBoolean("enable_sim1_mock", false),
             enableSim2Mock = json.optBoolean("enable_sim2_mock", false),
             enablePhoneSpoof = json.optBoolean("enable_phone_spoof", false),

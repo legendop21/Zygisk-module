@@ -1,6 +1,8 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -26,6 +28,8 @@ class OverlayMenuController(
     private val configManager = ConfigManager(context)
     private var listenersAttached = false
     private var suppressAutoSave = false
+    private val debounceHandler = Handler(Looper.getMainLooper())
+    private var mockSimDebounce: Runnable? = null
 
     fun bind() {
         suppressAutoSave = true
@@ -54,6 +58,15 @@ class OverlayMenuController(
 
     private fun refreshFields() {
         val config = configManager.load()
+        val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
+        val phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+        val digits10 = configManager.mockSimDigits10(phone)
+
+        menu.switchMockSim.isChecked = mockOn
+        menu.etMockSimNumber.setText(digits10.ifBlank { configManager.mockSimDigits10(config.mockPhoneSim1) })
+        menu.etMockSimNumber.isEnabled = mockOn
+        updateMockSimStatus(mockOn, digits10)
+
         menu.switchNotDeveloper.isChecked = config.hideDeveloper
         menu.switchNotRoot.isChecked = config.hideRoot
         menu.switchHookIncoming.isChecked = config.hookIncomingSms
@@ -72,6 +85,40 @@ class OverlayMenuController(
     }
 
     private fun setupAutoSaveListeners() {
+        autoToggle(menu.switchMockSim) { checked ->
+            menu.etMockSimNumber.isEnabled = checked
+            if (checked) {
+                val digits = configManager.mockSimDigits10(textOf(menu.etMockSimNumber))
+                if (digits.length == 10) {
+                    persistMockSim(true, digits)
+                } else {
+                    updateMockSimStatus(true, "")
+                    toast(R.string.mock_sim_need_number, Toast.LENGTH_LONG)
+                }
+            } else {
+                persistMockSim(false, textOf(menu.etMockSimNumber))
+            }
+        }
+
+        menu.etMockSimNumber.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressAutoSave) return
+                if (!menu.switchMockSim.isChecked) return
+                mockSimDebounce?.let { debounceHandler.removeCallbacks(it) }
+                val digits = configManager.mockSimDigits10(s?.toString().orEmpty())
+                mockSimDebounce = Runnable {
+                    if (digits.length == 10) {
+                        persistMockSim(true, digits)
+                    } else {
+                        updateMockSimStatus(true, digits)
+                    }
+                }
+                debounceHandler.postDelayed(mockSimDebounce!!, 450L)
+            }
+        })
+
         menu.switchNotDeveloper.setOnCheckedChangeListener { _, checked ->
             if (suppressAutoSave) return@setOnCheckedChangeListener
             scope.launch(Dispatchers.IO) {
@@ -145,6 +192,36 @@ class OverlayMenuController(
                 } catch (_: Exception) {
                 }
             }
+        }
+    }
+
+    private fun persistMockSim(enabled: Boolean, phoneRaw: String) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                configManager.syncMockSim(enabled, phoneRaw)
+            }
+            val digits = configManager.mockSimDigits10(phoneRaw)
+            updateMockSimStatus(enabled, digits)
+            if (ok) {
+                HookStatusBarManager(appContext).refresh()
+                OutgoingSmsGuard.refresh(appContext)
+                if (enabled && digits.length == 10) {
+                    toast(R.string.mock_sim_saved, Toast.LENGTH_LONG)
+                }
+            } else if (enabled) {
+                toast(R.string.mock_sim_need_number, Toast.LENGTH_LONG)
+            }
+        }
+    }
+
+    private fun updateMockSimStatus(enabled: Boolean, digits10: String) {
+        menu.tvMockSimStatus.text = when {
+            enabled && digits10.length == 10 ->
+                appContext.getString(R.string.mock_sim_status_on, digits10)
+            enabled ->
+                appContext.getString(R.string.mock_sim_need_number)
+            else ->
+                appContext.getString(R.string.mock_sim_status_off)
         }
     }
 
