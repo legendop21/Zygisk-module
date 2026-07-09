@@ -54,19 +54,26 @@ bool install_binder_plt(zygisk::Api* api) {
 
 struct DeferredBinder {
     zygisk::Api* api = nullptr;
+    int delay_sec = 1;
 };
 
 void* deferred_binder_worker(void* arg) {
     auto* job = static_cast<DeferredBinder*>(arg);
-    sleep(5);
-    if (job && job->api) install_binder_plt(job->api);
+    if (job && job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
+    if (job && job->api) {
+        if (!install_binder_plt(job->api)) {
+            sleep(2);
+            install_binder_plt(job->api);
+        }
+    }
     delete job;
     return nullptr;
 }
 
-void schedule_deferred_binder(zygisk::Api* api) {
+void schedule_deferred_binder(zygisk::Api* api, int delay_sec) {
     auto* job = new DeferredBinder();
     job->api = api;
+    job->delay_sec = delay_sec;
     pthread_t t{};
     pthread_create(&t, nullptr, deferred_binder_worker, job);
     pthread_detach(t);
@@ -129,14 +136,14 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     }
 
     if (is_gms_process(process_name)) {
-        schedule_deferred_binder(api);
-        logger::info("VirtualSim", "Deferred binder spoof scheduled for GMS");
+        schedule_deferred_binder(api, 2);
+        logger::info("VirtualSim", "Deferred binder spoof scheduled for GMS (2s)");
         return;
     }
 
-    // UPI / loan apps — properties immediately, binder after 5s (Android 15 safe)
-    schedule_deferred_binder(api);
-    logger::info("VirtualSim", "Virtual SIM properties + deferred binder in %s", process_name.c_str());
+    // UPI / loan apps — properties immediately, binder after 1s (getLine1Number / SubscriptionInfo)
+    schedule_deferred_binder(api, 1);
+    logger::info("VirtualSim", "Virtual SIM properties + binder in 1s for %s", process_name.c_str());
 }
 
 }  // namespace virtual_sim

@@ -44,10 +44,15 @@ bool should_spoof_subscriber_number_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lower.find("line1") != std::string::npos) return true;
+    if (lower.find("phone_number") != std::string::npos) return true;
+    if (lower.find("nitz_number") != std::string::npos) return true;
     if (lower.find("subscriber") != std::string::npos) return true;
     if (lower.find("msisdn") != std::string::npos) return true;
     if (lower.find("simnum") != std::string::npos) return true;
     if (lower.find("subscription") != std::string::npos) return true;
+    if (lower.find("ril.") != std::string::npos && lower.find("number") != std::string::npos)
+        return true;
     return false;
 }
 

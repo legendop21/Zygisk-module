@@ -91,6 +91,11 @@ sync_config() {
   if [ -f "$CONFIG" ]; then
     cp -f "$CONFIG" "$RUNTIME"
     chmod 644 "$RUNTIME" 2>/dev/null
+    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    if [ -n "$SPOOF_PHONE" ]; then
+      echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
+      chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+    fi
   fi
 }
 

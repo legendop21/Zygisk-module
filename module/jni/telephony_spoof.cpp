@@ -44,6 +44,29 @@ std::string read_runtime_phone_file() {
     return {};
 }
 
+std::string read_real_phone_file() {
+    char buf[96] = {};
+    const char* paths[] = {
+        "/data/local/tmp/hivirtus_real_phone.txt",
+        "/data/adb/modules/hivirtus_zygisk_mode/real_phone.txt",
+        nullptr,
+    };
+    for (const char** path = paths; *path; ++path) {
+        FILE* f = fopen(*path, "r");
+        if (!f) continue;
+        if (fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            std::string phone = buf;
+            if (!phone.empty() && phone.back() == '\n') phone.pop_back();
+            const std::string digits = digits_only(phone);
+            if (digits.size() >= 10) return digits.substr(digits.size() - 10);
+        } else {
+            fclose(f);
+        }
+    }
+    return {};
+}
+
 bool is_indian_mobile_10(const std::string& ten) {
     return ten.size() == 10 && ten[0] >= '6' && ten[0] <= '9';
 }
@@ -54,6 +77,11 @@ bool looks_like_imsi(const std::string& digits) {
 
 bool looks_like_iccid(const std::string& digits) {
     return digits.size() >= 18 && digits.size() <= 22 && digits[0] == '8';
+}
+
+bool looks_like_phone12(const std::string& digits) {
+    return digits.size() == 12 && digits.rfind("91", 0) == 0 &&
+           is_indian_mobile_10(digits.substr(2));
 }
 
 void reset_parcel(JNIEnv* env, jobject parcel) {
@@ -150,6 +178,23 @@ bool replace_utf16_ascii(std::string& blob, const std::string& from, const std::
     return changed;
 }
 
+void scrub_real_phone_formats(std::string& blob, const std::string& real10,
+                              const std::string& virtual10) {
+    if (real10.empty() || virtual10.empty() || real10 == virtual10) return;
+    replace_ascii_run(blob, real10, virtual10);
+    replace_utf16_ascii(blob, real10, virtual10);
+    const auto real_f = formats_from_phone(real10);
+    const auto virt_f = formats_from_phone(virtual10);
+    if (!real_f.digits12.empty() && !virt_f.digits12.empty()) {
+        replace_ascii_run(blob, real_f.digits12, virt_f.digits12);
+        replace_utf16_ascii(blob, real_f.digits12, virt_f.digits12);
+    }
+    if (!real_f.e164.empty() && !virt_f.e164.empty()) {
+        replace_ascii_run(blob, real_f.e164, virt_f.e164);
+        replace_utf16_ascii(blob, real_f.e164, virt_f.e164);
+    }
+}
+
 void scrub_digit_run(std::string& blob, size_t len,
                      const std::function<bool(const std::string&)>& validator,
                      const std::string& replacement) {
@@ -188,15 +233,24 @@ void scrub_ascii_operator_names(std::string& blob, const VirtualSubscriberProfil
 void scrub_subscriber_blob(std::string& blob, const VirtualSubscriberProfiles& profiles) {
     const auto& s1 = profiles.sim1;
     const auto& s2 = profiles.sim2;
+    const std::string real10 = read_real_phone_file();
 
     if (s1.enabled && !s1.phone10.empty()) {
+        if (!real10.empty()) scrub_real_phone_formats(blob, real10, s1.phone10);
         scrub_digit_run(blob, 10, is_indian_mobile_10, s1.phone10);
         const auto f = formats_from_phone(s1.phone10);
-        if (!f.digits12.empty()) replace_ascii_run(blob, f.digits12, f.digits12);
-        if (!f.e164.empty()) replace_ascii_run(blob, f.e164, f.e164);
+        if (!f.digits12.empty()) {
+            scrub_digit_run(blob, 12, looks_like_phone12, f.digits12);
+            replace_utf16_ascii(blob, f.digits12, f.digits12);
+        }
+        if (!f.e164.empty()) {
+            replace_ascii_run(blob, f.e164, f.e164);
+            replace_utf16_ascii(blob, f.e164, f.e164);
+        }
         replace_utf16_ascii(blob, s1.phone10, s1.phone10);
     }
     if (profiles.dual_active && s2.enabled && !s2.phone10.empty()) {
+        if (!real10.empty()) scrub_real_phone_formats(blob, real10, s2.phone10);
         scrub_digit_run(blob, 10, is_indian_mobile_10, s2.phone10);
         replace_utf16_ascii(blob, s2.phone10, s2.phone10);
     }
@@ -220,6 +274,58 @@ void scrub_subscriber_blob(std::string& blob, const VirtualSubscriberProfiles& p
                         s1.operator_numeric);
     }
     scrub_ascii_operator_names(blob, profiles);
+}
+
+bool rewrite_line1_string_reply(JNIEnv* env, jobject reply,
+                                const VirtualSubscriberProfiles& profiles) {
+    if (!reply) return false;
+    const auto& primary = primary_slot(profiles);
+    if (!primary.enabled || primary.phone10.empty()) return false;
+
+    reset_parcel(env, reply);
+    jclass cls = env->GetObjectClass(reply);
+    jmethodID read_ex = env->GetMethodID(cls, "readException", "()V");
+    jmethodID read_string = env->GetMethodID(cls, "readString", "()Ljava/lang/String;");
+    jmethodID write_no_ex = env->GetMethodID(cls, "writeNoException", "()V");
+    jmethodID write_string = env->GetMethodID(cls, "writeString", "(Ljava/lang/String;)V");
+    if (!read_string || !write_string) return false;
+
+    if (read_ex) env->CallVoidMethod(reply, read_ex);
+    jstring current_j = (jstring)env->CallObjectMethod(reply, read_string);
+
+    std::string current;
+    if (current_j) current = zygisk_utils::jstring_to_string(env, current_j);
+
+    const std::string current_digits = digits_only(current);
+    std::string replacement;
+
+    if (current.empty() || current_digits.empty()) {
+        replacement = primary.phone10;
+    } else if (is_indian_mobile_10(current_digits)) {
+        if (current.find("+91") != std::string::npos) replacement = "+91" + primary.phone10;
+        else if (current_digits.size() == 12 && current_digits.rfind("91", 0) == 0)
+            replacement = "91" + primary.phone10;
+        else
+            replacement = primary.phone10;
+    } else if (looks_like_phone12(current_digits)) {
+        replacement = "91" + primary.phone10;
+    } else if (!primary.phone_e164.empty() &&
+               (current.find("+") != std::string::npos || current.find("91") == 0)) {
+        replacement = primary.phone_e164;
+    }
+
+    const std::string real10 = read_real_phone_file();
+    if (replacement.empty() && !real10.empty() && current_digits == real10) {
+        replacement = primary.phone10;
+    }
+
+    if (replacement.empty() || replacement == current) return false;
+
+    reset_parcel(env, reply);
+    if (write_no_ex) env->CallVoidMethod(reply, write_no_ex);
+    env->CallVoidMethod(reply, write_string, zygisk_utils::string_to_jstring(env, replacement));
+    logger::info("TelephonySpoof", "getLine1Number %s -> %s", current.c_str(), replacement.c_str());
+    return true;
 }
 
 bool rewrite_subscriber_string_reply(JNIEnv* env, jobject reply,
@@ -357,6 +463,16 @@ bool is_subscriber_id_binder_interface(const std::string& iface) {
            lower.find("iphonesubinfocontroller") != std::string::npos;
 }
 
+bool is_itelephony_binder_interface(const std::string& iface) {
+    if (iface.empty()) return false;
+    std::string lower = iface;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (is_subscriber_id_binder_interface(iface)) return false;
+    return lower.find("itelephony") != std::string::npos ||
+           lower.find("phoneinterfacemanager") != std::string::npos;
+}
+
 bool is_telephony_binder_interface(const std::string& iface) {
     if (iface.empty()) return false;
     std::string lower = iface;
@@ -386,17 +502,27 @@ void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfi
                         const std::string& binder_iface) {
     if (!reply || !profiles.sim1.enabled) return;
 
+    if (is_itelephony_binder_interface(binder_iface)) {
+        if (rewrite_line1_string_reply(env, reply, profiles)) return;
+        if (marshall_scrub_subscriber(env, reply, profiles)) return;
+        rewrite_subscriber_string_reply(env, reply, profiles);
+        return;
+    }
+
     if (is_subscription_binder_interface(binder_iface)) {
         if (marshall_scrub_subscriber(env, reply, profiles)) return;
         if (rewrite_subscriber_string_reply(env, reply, profiles)) return;
+        if (rewrite_line1_string_reply(env, reply, profiles)) return;
     }
 
     if (is_subscriber_id_binder_interface(binder_iface)) {
         if (rewrite_subscriber_string_reply(env, reply, profiles)) return;
+        if (rewrite_line1_string_reply(env, reply, profiles)) return;
         if (marshall_scrub_subscriber(env, reply, profiles)) return;
     }
 
     if (marshall_scrub_subscriber(env, reply, profiles)) return;
+    if (rewrite_line1_string_reply(env, reply, profiles)) return;
     rewrite_subscriber_string_reply(env, reply, profiles);
 }
 

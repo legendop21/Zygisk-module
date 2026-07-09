@@ -41,8 +41,9 @@ bool phone_spoof_enabled();
 bool is_telephony_binder_interface(const std::string& iface);
 bool is_subscription_binder_interface(const std::string& iface);
 bool is_subscriber_id_binder_interface(const std::string& iface);
+bool is_itelephony_binder_interface(const std::string& iface);
 
-/** Rewrite binder reply using SubscriptionInfo / ISub / IPhoneSubInfo (not getLine1Number). */
+/** Rewrite binder reply: SubscriptionInfo, ISub, IPhoneSubInfo, ITelephony getLine1Number. */
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                          const std::string& binder_iface);
 
