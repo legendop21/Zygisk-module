@@ -4,8 +4,7 @@ import android.content.Context
 import android.util.Log
 
 /**
- * LSPosed jaisa scope: UPI tab me jo select karo → sirf woh app hook.
- * Framework + Messages + GMS + telephony auto (SMS Modifier jaisa).
+ * Zygisk scope: UPI tab me jo select karo → sirf woh app hook (native module).
  */
 object FrameworkHookHelper {
 

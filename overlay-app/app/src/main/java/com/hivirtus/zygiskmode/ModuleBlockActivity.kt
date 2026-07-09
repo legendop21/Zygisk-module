@@ -32,20 +32,13 @@ class ModuleBlockActivity : AppCompatActivity() {
         binding.btnRetryModule.setOnClickListener {
             ModuleGate.bootstrap(this)
             if (ModuleGate.isModuleFlashed(this)) {
+                if (!ModuleGate.isZygiskLoaded()) {
+                    Toast.makeText(this, R.string.zygisk_not_loaded, Toast.LENGTH_LONG).show()
+                }
                 openApp()
             } else {
                 Toast.makeText(this, R.string.module_still_missing, Toast.LENGTH_LONG).show()
             }
-        }
-
-        binding.btnLsposedContinue.setOnClickListener {
-            if (!ModuleGate.isLsposedManagerInstalled(this)) {
-                Toast.makeText(this, R.string.lsposed_not_installed, Toast.LENGTH_LONG).show()
-                return@setOnClickListener
-            }
-            ModuleGate.confirmLsposedMode(this)
-            Toast.makeText(this, R.string.lsposed_mode_confirmed, Toast.LENGTH_LONG).show()
-            openApp()
         }
 
         binding.btnExitApp.setOnClickListener {

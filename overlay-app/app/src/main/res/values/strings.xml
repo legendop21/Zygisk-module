@@ -85,12 +85,11 @@
     <string name="mock_phone_sim1">Verify Number (app registered — SIM ka nahi):</string>
     <string name="fake_phone_hint">SIM alag hai? App wala number daalo: +919520752078</string>
     <string name="module_not_flashed_title">Virtus Zygisk Mode</string>
-    <string name="module_not_flashed_body">APK install ke baad seedha menu khulega — koi ZIP flash zaroori nahi.</string>
-    <string name="module_flash_steps">OPTION A — LSPosed (recommended):\n1. LSPosed install + reboot\n2. Virtus APK → LSPosed me ON\n3. Scope: Framework + Phone + GMS + apps\n4. Neeche \"LSPosed ON\" dabao\n\nOPTION B — Zygisk:\n1. hivirtus_zygisk_mode.zip flash\n2. Zygisk ON → reboot</string>
-    <string name="module_lsposed_continue">✅ LSPosed ON — Menu Kholo</string>
-    <string name="module_still_missing">Module abhi detect nahi — LSPosed enable + scope check karo</string>
-    <string name="lsposed_not_installed">LSPosed Manager install nahi mila</string>
-    <string name="lsposed_mode_confirmed">LSPosed mode active — menu khul raha hai</string>
+    <string name="module_not_flashed_body">Zygisk module flash karo — hooks sirf Zygisk se chalenge. LSPosed ki zaroorat nahi.</string>
+    <string name="module_flash_steps">Zygisk setup:\n1. Magisk / KernelSU / APatch me Zygisk ON\n2. hivirtus-zygisk-hook-v2.39.0.zip flash karo\n3. Reboot\n4. Virtus APK kholo → Mock SIM number set karo\n5. UPI app kholo (bubble menu)</string>
+    <string name="module_still_missing">Zygisk module detect nahi — ZIP flash + reboot check karo</string>
+    <string name="zygisk_not_loaded">Module flash hai lekin Zygisk load nahi — Zygisk ON + reboot karo</string>
+    <string name="hook_backend_zygisk">Hooks: Zygisk native (LSPosed nahi)</string>
     <string name="module_retry_check">Module Check (Retry)</string>
     <string name="module_exit_app">Exit App</string>
     <string name="fake_number_on">Fake Number ON: %1$s</string>
@@ -108,9 +107,9 @@
     <string name="paste_and_send">Paste &amp; send</string>
     <string name="send_virtual_sms">Send SMS</string>
     <string name="open_send_sms_float">Open Send SMS Float</string>
-    <string name="sender_id_notification_hint">ON = har SMS notification saved Sender ID se dikhega (LSPosed SMS Modifier jaisa)</string>
+    <string name="sender_id_notification_hint">ON = har SMS notification saved Sender ID se dikhega</string>
     <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
-    <string name="lsposed_compat_hint">LSPosed mode: Zygisk hata sakte ho. Not Root + Not Developer OFF. Debug log: /data/local/tmp/hivirtus_hook_debug.log</string>
+    <string name="zygisk_compat_hint">Zygisk mode only — LSPosed install mat karo. Debug: /data/local/tmp/hivirtus_zygisk_mode.log</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
     <string name="telegram_tap_copy_hint">Telegram pe SMS ek tap me copy — code block + phone clipboard</string>
     <string name="telegram_test_activated">Test bheja — Telegram check karo (MODULE ACTIVATED)</string>

@@ -59,16 +59,6 @@
                 android:textSize="12sp" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLsposedContinue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/button_gradient"
-                android:text="@string/module_lsposed_continue"
-                android:textColor="@color/button_text_on_gold"
-                app:backgroundTint="@null" />
-
-            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRetryModule"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

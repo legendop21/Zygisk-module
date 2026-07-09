@@ -11,8 +11,8 @@ android {
         applicationId = "com.hivirtus.zygiskmode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 67
-        versionName = "2.38.0"
+        versionCode = 68
+        versionName = "2.39.0"
     }
 
     buildTypes {
@@ -46,5 +46,4 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
-    compileOnly(files("libs/api-82.jar"))
 }
