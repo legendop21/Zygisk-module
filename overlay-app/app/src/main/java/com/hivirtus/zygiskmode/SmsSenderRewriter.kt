@@ -19,12 +19,12 @@ object SmsSenderRewriter {
     private val handler = Handler(Looper.getMainLooper())
 
     fun shouldRewrite(actualPeer: String, config: ModuleConfig): Boolean {
-        if (!config.overrideIncomingSender) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
-        if (senderId.isBlank()) return false
+        if (!config.overrideIncomingSender) return false
         val actual = actualPeer.trim()
+        if (actual.isBlank()) return false
         if (actual.equals(senderId, ignoreCase = true)) return false
-        // JK-AXISBK-S / JM-KREDBE-S / +91 sab → saved Sender ID (VM-YESBNK-S)
+        // Koi bhi incoming (+91, numeric, JK-AXISBK-S) → saved Sender ID
         return true
     }
 

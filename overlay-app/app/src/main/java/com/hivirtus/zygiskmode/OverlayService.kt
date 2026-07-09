@@ -149,8 +149,7 @@ class OverlayService : Service() {
                 AutoHookWatcher.tick(this@OverlayService, configManager)
                 OutgoingSmsGuard.refresh(this@OverlayService)
                 hookStatusBar.refresh()
-                forwardLatestOtp()
-                delay(1500)
+                delay(3000)
             }
         }
     }

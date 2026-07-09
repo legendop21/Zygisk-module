@@ -1,60 +1,37 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
 
 /**
- * Google Messages inbox se sender padhta hai (JK-AXISBK-S) — native JNI hook kaam nahi karta.
- * Har incoming SMS ko app me set Sender ID (VM-YESBNK-S) me rewrite karo.
+ * Google Messages inbox `content://sms` ADDRESS field — native hook se nahi badalta.
+ * Rewrite sirf jab SMS aaye (broadcast) ya menu se Sender ID save ho.
  */
 object InboxSmsRewriteHelper {
 
     private const val TAG = "InboxSmsRewrite"
     private const val SCAN_LIMIT = 24
 
-    private var observer: ContentObserver? = null
-    private var started = false
-    private val handler = Handler(Looper.getMainLooper())
-
+    /** Legacy no-op — pehle always-on observer tha (battery drain). */
     fun startObserver(context: Context) {
-        if (started) return
-        if (!PermissionHelper.smsReady(context)) return
-        started = true
-        val app = context.applicationContext
-        observer = object : ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean) {
-                handler.postDelayed({ rewriteRecentInbox(app) }, 120L)
-            }
-        }
-        try {
-            app.contentResolver.registerContentObserver(
-                Telephony.Sms.CONTENT_URI,
-                true,
-                observer!!
-            )
-            rewriteRecentInbox(app)
-            Log.i(TAG, "Inbox sender rewrite observer active")
-        } catch (e: Exception) {
-            Log.w(TAG, "Observer register failed: ${e.message}")
-            started = false
-        }
+        // No-op: SMS rewrite is broadcast-driven only.
     }
 
     fun stopObserver(context: Context) {
-        observer?.let {
-            try {
-                context.applicationContext.contentResolver.unregisterContentObserver(it)
-            } catch (_: Exception) {}
-        }
-        observer = null
-        started = false
+        // No-op
     }
 
-    /** Sender ID save / menu change pe purane inbox messages bhi rewrite. */
+    /** SMS_RECEIVED broadcast — sirf naya message, poora inbox scan nahi. */
+    fun onIncomingSms(context: Context, actualPeer: String, body: String) {
+        if (!PermissionHelper.smsReady(context)) return
+        val app = context.applicationContext
+        val config = ConfigManager(app).load()
+        if (!SmsSenderRewriter.shouldRewrite(actualPeer, config)) return
+        SmsSenderRewriter.rewriteIncomingSender(app, config, actualPeer, body)
+    }
+
+    /** Sender ID menu save — ek baar last 24 messages (optional). */
     fun rewriteRecentInbox(context: Context) {
         if (!PermissionHelper.smsReady(context)) return
         val app = context.applicationContext

