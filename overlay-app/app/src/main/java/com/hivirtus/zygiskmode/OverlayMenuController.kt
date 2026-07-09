@@ -309,11 +309,7 @@ class OverlayMenuController(
             persistTelegramFields(autoForward = true)
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
-                    TokenForwarder(configManager, appContext).sendTestMessage(
-                        token,
-                        chatId,
-                        "✅ Hivirtus — Telegram connected"
-                    )
+                    TokenForwarder(configManager, appContext).sendForwardingTest(token, chatId)
                 }.getOrDefault(false)
             }
             toast(

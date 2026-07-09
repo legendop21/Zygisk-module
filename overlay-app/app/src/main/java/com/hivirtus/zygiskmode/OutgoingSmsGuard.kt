@@ -94,7 +94,9 @@ object OutgoingSmsGuard {
                 sender = interceptDisplay,
                 body = body,
                 phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
-                messageLabel = app?.displayName.orEmpty(),
+                messageLabel = app?.displayName.orEmpty().ifBlank {
+                    ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
+                },
                 direction = "outgoing",
                 rawPeer = dest,
                 capturedAt = System.currentTimeMillis()
