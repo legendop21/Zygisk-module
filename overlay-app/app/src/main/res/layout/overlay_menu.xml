@@ -219,7 +219,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/input_background"
-                    android:hint="e.g. KREDITBEEAXIS"
+                    android:hint="e.g. VM-YESBNK-S"
                     android:inputType="textCapCharacters"
                     android:maxLength="20"
                     android:padding="12dp"

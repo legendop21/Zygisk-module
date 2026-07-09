@@ -122,7 +122,8 @@ class OverlayMenuController(
                 senderIdDebounce = Runnable {
                     scope.launch(Dispatchers.IO) {
                         val ok = configManager.syncSenderId(raw)
-                        if (ok && raw.isNotBlank()) {
+                        if (ok) {
+                            InboxSmsRewriteHelper.rewriteRecentInbox(appContext)
                             SmsStackRefresher.refreshAfterSenderIdChange()
                         }
                     }

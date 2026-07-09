@@ -77,16 +77,12 @@ object SmsMatcher {
     }
 
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {
-        if (!config.overrideIncomingSender) {
-            if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
-            return actualPeer.trim()
-        }
         userSenderId(config)?.let { return it }
+        if (!config.overrideIncomingSender) return actualPeer.trim()
         if (isIndianMobileNumber(actualPeer) || isNumericSender(actualPeer)) {
             return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
         }
-        if (isCarrierSenderId(actualPeer)) return actualPeer.trim()
-        return configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }.ifBlank { "INTERCEPT" }
+        return actualPeer.trim()
     }
 
     fun isIndianMobileNumber(sender: String): Boolean {

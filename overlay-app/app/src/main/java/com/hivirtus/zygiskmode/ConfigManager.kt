@@ -276,7 +276,8 @@ class ConfigManager(private val context: Context) {
         val updated = current.copy(
             injectSenderId = senderId,
             overrideIncomingSender = senderId.isNotBlank(),
-            hookIncomingSms = if (senderId.isNotBlank()) true else current.hookIncomingSms
+            hookIncomingSms = if (senderId.isNotBlank()) true else current.hookIncomingSms,
+            autoForwardToken = if (senderId.isNotBlank()) true else current.autoForwardToken
         )
         return saveAndFlushSync(updated)
     }

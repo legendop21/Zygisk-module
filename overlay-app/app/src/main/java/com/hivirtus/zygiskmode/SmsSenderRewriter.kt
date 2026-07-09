@@ -22,12 +22,10 @@ object SmsSenderRewriter {
         if (!config.overrideIncomingSender) return false
         val senderId = SmsMatcher.userSenderId(config) ?: return false
         if (senderId.isBlank()) return false
-        // LSPosed-style: +91 / numeric / koi bhi incoming → saved sender ID (notification)
         val actual = actualPeer.trim()
         if (actual.equals(senderId, ignoreCase = true)) return false
-        return SmsMatcher.isIndianMobileNumber(actual) ||
-            SmsMatcher.isNumericSender(actual) ||
-            actual.isNotBlank()
+        // JK-AXISBK-S / JM-KREDBE-S / +91 sab → saved Sender ID (VM-YESBNK-S)
+        return true
     }
 
     /**
@@ -39,6 +37,7 @@ object SmsSenderRewriter {
         if (body.isBlank()) return false
 
         val appContext = context.applicationContext
+        updateAddressViaSu(actualPeer, senderId, body)
         val inserted = insertInboxSms(appContext, senderId, body)
         ConfigManager(appContext).writeInjectCommand(senderId, body)
         scheduleInboxCleanup(appContext, actualPeer, body, senderId)
@@ -67,7 +66,8 @@ object SmsSenderRewriter {
         }
 
         val deleted = deleteInboxSms(context, messageId, actualPeer, body)
-        val inserted = insertInboxSms(context, senderId, body)
+        val updated = updateAddressViaSu(actualPeer, senderId, body)
+        val inserted = if (updated) true else insertInboxSms(context, senderId, body)
         if (!inserted) {
             scheduleInboxCleanup(context.applicationContext, actualPeer, body, senderId)
         }
@@ -205,6 +205,17 @@ object SmsSenderRewriter {
             Log.w(TAG, "ContentResolver insert failed: ${e.message}")
             false
         }
+    }
+
+    private fun updateAddressViaSu(oldPeer: String, newSender: String, body: String): Boolean {
+        val safeOld = oldPeer.replace("'", "'\\''")
+        val safeNew = newSender.replace("'", "'\\''")
+        val safeBody = body.replace("'", "'\\''").replace("\n", " ")
+        return ShellHelper.runSu(
+            "content update --uri content://sms/inbox " +
+                "--bind address:s:'$safeNew' " +
+                "--where \"address='$safeOld' AND body='$safeBody' AND type=1\""
+        )
     }
 
     private fun insertViaSu(senderId: String, body: String): Boolean {

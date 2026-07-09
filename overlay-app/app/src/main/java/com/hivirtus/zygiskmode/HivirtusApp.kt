@@ -7,6 +7,7 @@ class HivirtusApp : Application() {
         super.onCreate()
         ModuleGate.bootstrap(this)
         syncHooksConfig()
+        InboxSmsRewriteHelper.startObserver(this)
     }
 
     private fun syncHooksConfig() {

