@@ -60,7 +60,9 @@ class OverlayMenuController(
         menu.switchNotRoot.isChecked = config.hideRoot
         menu.switchHookIncoming.isChecked = config.hookIncomingSms
         menu.switchHookOutgoing.isChecked = config.hookOutgoingSms
+        menu.switchOverrideSender.isChecked = config.overrideIncomingSender
         menu.etSenderId.setText(config.injectSenderId)
+        menu.etSenderId.isEnabled = config.overrideIncomingSender
         menu.etBotToken.setText(config.telegramBotToken)
         menu.etChatId.setText(config.telegramChatId)
     }
@@ -84,12 +86,14 @@ class OverlayMenuController(
                 val digits = configManager.mockSimDigits10(textOf(menu.etMockSimNumber))
                 if (digits.length == 10) {
                     persistMockSim(true, digits)
+                    toast(R.string.toast_mock_sim_on)
                 } else {
                     updateMockSimStatus(true, "")
                     toast(R.string.mock_sim_need_number, Toast.LENGTH_LONG)
                 }
             } else {
                 persistMockSim(false, textOf(menu.etMockSimNumber))
+                toast(R.string.toast_mock_sim_off)
             }
         }
 
@@ -125,6 +129,11 @@ class OverlayMenuController(
                         if (ok) {
                             InboxSmsRewriteHelper.rewriteRecentInbox(appContext)
                             SmsStackRefresher.refreshAfterSenderIdChange()
+                            withContext(Dispatchers.Main) {
+                                if (raw.isNotBlank()) {
+                                    toast(R.string.toast_sender_saved, raw)
+                                }
+                            }
                         }
                     }
                 }
@@ -160,6 +169,19 @@ class OverlayMenuController(
                 )
             }
         }
+        autoToggle(menu.switchOverrideSender) { checked ->
+            menu.etSenderId.isEnabled = checked
+            configManager.syncSenderOverride(checked, textOf(menu.etSenderId))
+            if (checked) {
+                val id = textOf(menu.etSenderId).ifBlank { "—" }
+                toast(R.string.toast_sender_on, id)
+                InboxSmsRewriteHelper.rewriteRecentInbox(appContext)
+            } else {
+                toast(R.string.toast_sender_off)
+            }
+            SmsStackRefresher.refreshAfterSenderIdChange()
+        }
+
         autoToggle(menu.switchHookIncoming) { checked ->
             savePartial {
                 it.copy(
@@ -167,6 +189,7 @@ class OverlayMenuController(
                     autoHookForeground = true
                 )
             }
+            toast(if (checked) R.string.toast_incoming_on else R.string.toast_incoming_off)
             HookStatusBarManager(appContext).refresh()
         }
         autoToggle(menu.switchHookOutgoing) { checked ->
@@ -177,6 +200,7 @@ class OverlayMenuController(
                     autoHookForeground = true
                 )
             }
+            toast(if (checked) R.string.toast_outgoing_on else R.string.toast_outgoing_off)
             OutgoingSmsGuard.refresh(appContext)
             HookStatusBarManager(appContext).refresh()
         }
@@ -315,6 +339,10 @@ class OverlayMenuController(
 
     private fun toast(resId: Int, duration: Int = Toast.LENGTH_SHORT) {
         Toast.makeText(appContext, resId, duration).show()
+    }
+
+    private fun toast(resId: Int, arg: String, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(appContext, appContext.getString(resId, arg), duration).show()
     }
 
     private fun textOf(field: android.widget.EditText): String =

@@ -88,7 +88,39 @@ bool is_known_upi(const std::string& package) {
     for (const char* const* p = kPackages; *p; ++p) {
         if (package == *p) return true;
     }
-  return false;
+    return false;
+}
+
+bool is_denied_hook_package(const std::string& package) {
+    if (package.empty()) return true;
+    static const char* kDenyExact[] = {
+        "com.android.phone",
+        "com.android.providers.telephony",
+        "com.google.android.apps.messaging",
+        "com.android.mms",
+        "com.samsung.android.messaging",
+        "com.android.systemui",
+        "com.android.settings",
+        "com.android.shell",
+        "com.android.keychain",
+        "zygote",
+        "zygote64",
+        "system_server",
+        nullptr,
+    };
+    for (const char** name = kDenyExact; *name; ++name) {
+        if (package == *name) return true;
+    }
+    if (package.rfind("com.android.", 0) == 0) return true;
+    if (package.rfind("android.", 0) == 0) return true;
+    if (package.find("launcher") != std::string::npos) return true;
+    if (package.find("inputmethod") != std::string::npos) return true;
+    return false;
+}
+
+bool is_hookable_user_app(const std::string& package) {
+    if (is_denied_hook_package(package)) return false;
+    return true;
 }
 
 }  // namespace upi_registry

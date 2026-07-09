@@ -100,7 +100,16 @@
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
     <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
-    <string name="override_incoming_sender">Override Sender ID</string>
+    <string name="toast_mock_sim_on">Mock Number ON</string>
+    <string name="toast_mock_sim_off">Mock Number OFF</string>
+    <string name="toast_outgoing_on">Outgoing SMS ON — real SMS block, fake success</string>
+    <string name="toast_outgoing_off">Outgoing SMS OFF</string>
+    <string name="toast_incoming_on">Incoming SMS hook ON</string>
+    <string name="toast_incoming_off">Incoming SMS hook OFF</string>
+    <string name="toast_sender_on">Sender ID override ON — %1$s</string>
+    <string name="toast_sender_off">Sender ID override OFF</string>
+    <string name="toast_sender_saved">Sender ID saved — %1$s</string>
+    <string name="override_incoming_sender">Sender ID Override (incoming SMS)</string>
     <string name="send_sms_title">Send SMS</string>
     <string name="sms_sender_label">Sms Sender</string>
     <string name="clear">Clear</string>

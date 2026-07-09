@@ -340,15 +340,27 @@ bool ModuleConfig::virtual_sim_active() const {
 }
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
-    if (package.empty()) return false;
+    if (!upi_registry::is_hookable_user_app(package)) return false;
+
     if (!hooked_upi_apps.empty()) {
+        const auto star = hooked_upi_apps.find("*");
+        if (star != hooked_upi_apps.end() && star->second) return true;
+
         const auto it = hooked_upi_apps.find(package);
-        if (it != hooked_upi_apps.end()) return it->second;
+        if (it != hooked_upi_apps.end() && it->second) return true;
+
+        bool any_explicit = false;
+        for (const auto& [pkg, enabled] : hooked_upi_apps) {
+            if (enabled && pkg != "*") {
+                any_explicit = true;
+                break;
+            }
+        }
+        if (any_explicit) return false;
     }
-    if (auto_hook_foreground) {
-        return upi_registry::is_known_upi(package);
-    }
-    return false;
+
+    if (auto_hook_foreground) return true;
+    return upi_registry::is_known_upi(package);
 }
 
 int default_timer_for_package(const std::string& package) {

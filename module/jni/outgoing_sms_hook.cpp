@@ -6,6 +6,7 @@
 #include "telephony_spoof.hpp"
 #include "zygisk_utils.hpp"
 
+#include <vector>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -41,7 +42,15 @@ bool any_hooked_app(const ModuleConfig& config) {
         (void)pkg;
         if (enabled) return true;
     }
-    return false;
+    return config.auto_hook_foreground;
+}
+
+bool is_short_verify_dest(const std::string& dest) {
+    std::string d;
+    for (char c : dest) {
+        if (std::isdigit(static_cast<unsigned char>(c))) d += c;
+    }
+    return d.length() >= 4 && d.length() <= 10;
 }
 
 bool body_has_verify_token(const std::string& body) {
@@ -57,17 +66,17 @@ bool body_has_verify_token(const std::string& body) {
     return false;
 }
 
-bool body_matches_hooked_upi(const ModuleConfig& config, const std::string& body) {
-    if (!any_hooked_app(config)) return false;
-    return body_has_verify_token(body);
-}
-
-bool should_block_outgoing(const ModuleConfig& config, const std::string& body) {
+bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
+                           const std::string& dest = "") {
     if (!config.intercept_fake_success && !config.hook_outgoing_sms) return false;
     if (!any_hooked_app(config) && !config.virtual_sim_active() && !config.auto_hook_foreground) {
         return false;
     }
-    return body_has_verify_token(body);
+    if (body_has_verify_token(body)) return true;
+    if (config.hook_outgoing_sms && config.virtual_sim_active() && is_short_verify_dest(dest)) {
+        return true;
+    }
+    return false;
 }
 
 std::string read_spoof_phone() {
@@ -119,11 +128,23 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
 
     jclass cls = env->GetObjectClass(data);
     jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
-    env->CallIntMethod(data, read_int);  // subId
-    parcel_read_string(env, data);       // callingPackage / attribution
-    dest = parcel_read_string(env, data);
-    parcel_read_string(env, data);  // scAddr
-    body = parcel_read_string(env, data);
+    if (read_int) env->CallIntMethod(data, read_int);
+
+    std::vector<std::string> strings;
+    for (int i = 0; i < 12; ++i) {
+        const std::string s = parcel_read_string(env, data);
+        if (s.empty()) break;
+        strings.push_back(s);
+    }
+    if (strings.size() < 2) return false;
+
+    body = strings.back();
+    for (int i = static_cast<int>(strings.size()) - 2; i >= 0; --i) {
+        if (!strings[static_cast<size_t>(i)].empty()) {
+            dest = strings[static_cast<size_t>(i)];
+            break;
+        }
+    }
     return !dest.empty() && !body.empty();
 }
 
@@ -220,7 +241,7 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
             std::string dest;
             std::string body;
             if (read_isms_outgoing(env, data, dest, body) &&
-                should_block_outgoing(config, body)) {
+                should_block_outgoing(config, body, dest)) {
                 logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
                 pipeline_outgoing(env, dest, body);
                 write_ok_reply(env, reply);
@@ -274,7 +295,6 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
 
 struct DeferredSmsHook {
     zygisk::Api* api = nullptr;
-    JNIEnv* env = nullptr;
 };
 
 void* deferred_sms_hook_worker(void* arg) {
@@ -283,7 +303,7 @@ void* deferred_sms_hook_worker(void* arg) {
     if (job && job->api) {
         g_api = job->api;
         g_in_hooked_upi = true;
-        install_plt_hooks(job->env, true);
+        install_plt_hooks(nullptr, true);
         logger::info("OutgoingSms", "Deferred ISms block active (UPI app)");
     }
     delete job;
@@ -291,9 +311,9 @@ void* deferred_sms_hook_worker(void* arg) {
 }
 
 void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
+    (void)env;
     auto* job = new DeferredSmsHook();
     job->api = api;
-    job->env = env;
     pthread_t t{};
     pthread_create(&t, nullptr, deferred_sms_hook_worker, job);
     pthread_detach(t);

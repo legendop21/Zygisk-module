@@ -227,6 +227,15 @@
                     android:textColorHint="@color/text_hint" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchOverrideSender"
+                    style="@style/HivirtusSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/override_incoming_sender"
+                    android:textColor="@color/text_primary" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/switchHookIncoming"
                     style="@style/HivirtusSwitch"
                     android:layout_width="match_parent"

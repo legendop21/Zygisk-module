@@ -263,8 +263,10 @@ public:
             return;
         }
 
-        const bool keep_process = any_hooked_app(config) || config.virtual_sim_active() ||
-                                  is_telephony_ || is_messaging_ || is_hooked_upi_;
+        const bool keep_process = config.virtual_sim_active() || any_hooked_app(config) ||
+                                  is_telephony_ || is_messaging_ || is_hooked_upi_ ||
+                                  (config.auto_hook_foreground &&
+                                   upi_registry::is_hookable_user_app(process_name_));
         if (!keep_process) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -277,9 +279,9 @@ public:
 
         const bool virtual_sim_on = config.virtual_sim_active();
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
+        const bool user_app = upi_registry::is_hookable_user_app(process_name_);
 
-        if (virtual_sim_on &&
-            (is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_)) {
+        if (virtual_sim_on && (user_app || is_telephony_ || is_messaging_ || is_gms_)) {
             virtual_sim::install(env_, api_, process_name_);
         }
 

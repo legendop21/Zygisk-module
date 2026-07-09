@@ -270,6 +270,17 @@ class ConfigManager(private val context: Context) {
         return !enabled
     }
 
+    fun syncSenderOverride(enabled: Boolean, senderIdRaw: String = ""): Boolean {
+        val senderId = senderIdRaw.trim().uppercase()
+        val current = load()
+        val updated = current.copy(
+            overrideIncomingSender = enabled,
+            injectSenderId = if (enabled && senderId.isNotBlank()) senderId else current.injectSenderId,
+            hookIncomingSms = if (enabled) true else current.hookIncomingSms
+        )
+        return saveAndFlushSync(updated)
+    }
+
     fun syncSenderId(senderIdRaw: String): Boolean {
         val senderId = senderIdRaw.trim().uppercase()
         val current = load()

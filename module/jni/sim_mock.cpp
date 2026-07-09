@@ -21,13 +21,35 @@ std::string g_country_iso = "in";
 std::string g_phone_sim1;
 std::string g_phone_sim2;
 
+std::string read_runtime_phone_file() {
+    char buf[96] = {};
+    const char* paths[] = {
+        "/data/local/tmp/hivirtus_spoof_phone.txt",
+        "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt",
+        nullptr,
+    };
+    for (const char** path = paths; *path; ++path) {
+        FILE* f = fopen(*path, "r");
+        if (!f) continue;
+        if (fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            std::string phone = buf;
+            if (!phone.empty() && phone.back() == '\n') phone.pop_back();
+            if (!phone.empty()) return phone;
+        } else {
+            fclose(f);
+        }
+    }
+    return {};
+}
+
 std::string active_phone() {
     if (!g_phone_spoof) return "";
     if (g_sim1 && !g_phone_sim1.empty()) return g_phone_sim1;
     if (g_sim2 && !g_phone_sim2.empty()) return g_phone_sim2;
     if (!g_phone_sim1.empty()) return g_phone_sim1;
     if (!g_phone_sim2.empty()) return g_phone_sim2;
-    return "";
+    return read_runtime_phone_file();
 }
 
 void write_spoof_status(const std::string& phone) {
@@ -64,7 +86,11 @@ bool should_spoof_sim_state_key(const std::string& key) {
     std::string lower = key;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return lower.find("sim.state") != std::string::npos;
+    return lower.find("sim.state") != std::string::npos ||
+           lower.find("sim.absent") != std::string::npos ||
+           lower.find("icc.card") != std::string::npos ||
+           lower.find("has.icc") != std::string::npos ||
+           lower.find("sim.present") != std::string::npos;
 }
 
 bool should_spoof_operator_alpha_key(const std::string& key) {
@@ -121,6 +147,12 @@ jstring hook_SystemProperties_get(JNIEnv* env, jclass clazz, jstring key_j, jstr
     const auto& cfg = current_config();
 
     if (g_phone_spoof && should_spoof_sim_state_key(key)) {
+        std::string lower = key;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lower.find("absent") != std::string::npos || lower.find("present") != std::string::npos) {
+            return zygisk_utils::string_to_jstring(env, "0");
+        }
         return zygisk_utils::string_to_jstring(env, "READY");
     }
 

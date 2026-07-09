@@ -113,7 +113,7 @@ SubscriberSlotProfile build_slot(const ModuleConfig& config, int slot) {
     SubscriberSlotProfile p;
     p.slot_index = slot;
     if (slot == 0) {
-        p.enabled = config.enable_sim1_mock || config.enable_phone_spoof;
+        p.enabled = config.virtual_sim_active() || config.enable_sim1_mock || config.enable_phone_spoof;
         p.phone10 = digits_only(config.mock_phone_sim1);
         p.imsi = digits_only(config.mock_imsi_sim1);
         p.iccid = digits_only(config.mock_iccid_sim1);
@@ -500,7 +500,9 @@ std::string read_binder_interface(JNIEnv* env, jobject data) {
 
 void scrub_reply_parcel(JNIEnv* env, jobject reply, const VirtualSubscriberProfiles& profiles,
                         const std::string& binder_iface) {
-    if (!reply || !profiles.sim1.enabled) return;
+    if (!reply) return;
+    const bool can_scrub = profiles.sim1.enabled || !profiles.sim1.phone10.empty();
+    if (!can_scrub) return;
 
     if (is_itelephony_binder_interface(binder_iface)) {
         if (rewrite_line1_string_reply(env, reply, profiles)) return;

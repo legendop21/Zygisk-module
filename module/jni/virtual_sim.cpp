@@ -141,7 +141,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    // UPI / loan apps — properties immediately, binder after 1s (getLine1Number / SubscriptionInfo)
+    // All user/UPI apps — properties immediately, binder after 1s (getLine1Number / SubscriptionInfo)
     schedule_deferred_binder(api, 1);
     logger::info("VirtualSim", "Virtual SIM properties + binder in 1s for %s", process_name.c_str());
 }
