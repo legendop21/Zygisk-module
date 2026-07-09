@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.35.0
-versionCode=83
+version=v2.36.0
+versionCode=84
 author=@hivirtus
-description=Zygisk hooks + Virtus floating overlay APK. Bubble+menu on UPI apps.
+description=One ZIP: Zygisk hooks + bundled Virtus APK auto-install on reboot.
 zygisk=1

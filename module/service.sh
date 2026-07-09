@@ -2,14 +2,12 @@
 # Magisk module runtime — config sync + UPI detect + Virtus floating overlay APK
 
 MODDIR=${0%/*}
+. "$MODDIR/overlay_install.sh"
+
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ACTIVE_PKG="/data/local/tmp/hivirtus_active_hook_pkg.txt"
 NATIVE_FLAG="/data/local/tmp/hivirtus_zygisk_native.active"
-OVERLAY_APK="$MODDIR/virtus-overlay.apk"
-OVERLAY_PKG="com.hivirtus.zygiskmode"
-OVERLAY_SERVICE="$OVERLAY_PKG/.OverlayService"
-OVERLAY_ACTION="com.hivirtus.zygiskmode.SHOW_BUBBLE"
 
 UPI_PACKAGES="
 com.phonepe.app
@@ -112,23 +110,6 @@ get_foreground_pkg() {
   echo "$pkg"
 }
 
-install_overlay_apk() {
-  [ -f "$OVERLAY_APK" ] || return 1
-  if pm path "$OVERLAY_PKG" >/dev/null 2>&1; then
-    pm install -r -g "$OVERLAY_APK" >/dev/null 2>&1
-  else
-    pm install -g "$OVERLAY_APK" >/dev/null 2>&1
-  fi
-  pm path "$OVERLAY_PKG" >/dev/null 2>&1
-}
-
-start_overlay_bubble() {
-  install_overlay_apk || return 1
-  am start-foreground-service -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1 || \
-    am startservice -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1 || \
-    cmd activity start-foreground-service -n "$OVERLAY_SERVICE" -a "$OVERLAY_ACTION" >/dev/null 2>&1
-}
-
 mark_active() {
   echo "$1" > "$ACTIVE_PKG"
   chmod 644 "$ACTIVE_PKG" 2>/dev/null
@@ -136,15 +117,15 @@ mark_active() {
   chmod 644 "$NATIVE_FLAG" 2>/dev/null
   date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
   echo "foreground:$1" >> /data/local/tmp/hivirtus_overlay.debug
-  echo "foreground:$1" >> /data/local/tmp/hivirtus_inject.log
   echo "overlay_start:$1" >> /data/local/tmp/hivirtus_overlay.debug
   chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-  chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
-  start_overlay_bubble
+  hivirtus_start_overlay_service
 }
 
 sync_config
-install_overlay_apk
+
+# Reboot ke baad APK install + overlay permission + service start
+hivirtus_boot_activate_overlay &
 
 (
   LAST=""
@@ -157,5 +138,6 @@ install_overlay_apk
         LAST="$FG"
       fi
     fi
+    sleep 2
   done
 ) &

@@ -63,11 +63,13 @@ cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
+cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
+[ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
 OVERLAY_APK="$ROOT_DIR/overlay-app/app/build/outputs/apk/release/app-release.apk"

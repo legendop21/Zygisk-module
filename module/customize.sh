@@ -3,8 +3,8 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook         "
-ui_print "        v2.35.0                 "
-ui_print "  Zygisk + Floating Overlay APK "
+ui_print "        v2.36.0                 "
+ui_print "  Module+APK ek zip me bundled "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -20,6 +20,24 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
 [ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
+[ -f "$MODPATH/virtus-overlay.apk" ] && set_perm "$MODPATH/virtus-overlay.apk" 0 0 0644
+[ -f "$MODPATH/overlay_install.sh" ] && set_perm "$MODPATH/overlay_install.sh" 0 0 0755
+
+if [ -f "$MODPATH/virtus-overlay.apk" ]; then
+  ui_print "- Virtus APK module ke andar bundled"
+  ui_print "- Reboot ke baad auto-install + active"
+  . "$MODPATH/overlay_install.sh" 2>/dev/null
+  if command -v pm >/dev/null 2>&1; then
+    if hivirtus_install_overlay_apk 2>/dev/null; then
+      hivirtus_grant_overlay_permission 2>/dev/null
+      ui_print "- Virtus APK install OK (flash time)"
+    else
+      ui_print "- APK reboot pe install hoga"
+    fi
+  fi
+else
+  ui_print "! WARNING: virtus-overlay.apk missing in zip"
+fi
 
 if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
   ui_print "! WARNING: Native lib missing — ./build.sh se dubara banao"
@@ -79,12 +97,12 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "ZYGISK v2.35.0 — Floating bubble fix"
+ui_print "ZYGISK v2.36.0 — Ek zip = Module + APK"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) Virtus APK auto-install hoga"
-ui_print "  4) Settings → Virtus → Display over other apps ON"
-ui_print "  5) UPI app kholo → gold V bubble + menu"
+ui_print "  3) Virtus APK auto-install (module ke andar)"
+ui_print "  4) Overlay permission auto-grant (root)"
+ui_print "  5) UPI app kholo → bubble + menu"
 ui_print ""
 ui_print "Agar zygote crash ho: HMA-OSS disable karke test karo"
 ui_print "Config: $MODPATH/config.json"

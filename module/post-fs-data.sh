@@ -3,6 +3,8 @@
 # Boot pe sirf config sync — resetprop / denylist NAHI (Zygisk Next + LSPosed safe)
 
 MODDIR=${0%/*}
+. "$MODDIR/overlay_install.sh" 2>/dev/null
+
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 ROOT_TYPE_FILE="/data/local/tmp/hivirtus_root_type.txt"
@@ -42,19 +44,14 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
-echo "module_boot_v2.35.0" > /data/local/tmp/hivirtus_overlay.debug
+echo "module_boot_v2.36.0" > /data/local/tmp/hivirtus_overlay.debug
 chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v2.35.0" > /data/local/tmp/hivirtus_inject.log
+echo "module_boot_v2.36.0" > /data/local/tmp/hivirtus_inject.log
 chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 
-# Virtus overlay APK auto-install (floating bubble + menu)
-if [ -f "$MODDIR/virtus-overlay.apk" ]; then
-  if pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
-    pm install -r -g "$MODDIR/virtus-overlay.apk" >/dev/null 2>&1
-  else
-    pm install -g "$MODDIR/virtus-overlay.apk" >/dev/null 2>&1
-  fi
-fi
+# APK module ke andar — boot pe auto install
+hivirtus_install_overlay_apk && echo "apk_post_fs_ok" >> /data/local/tmp/hivirtus_overlay.debug
+hivirtus_grant_overlay_permission
 
 # Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
 HIDE_ROOT=$(read_bool "hide_root")
