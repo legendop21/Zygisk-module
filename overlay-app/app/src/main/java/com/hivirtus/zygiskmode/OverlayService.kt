@@ -157,9 +157,10 @@ class OverlayService : Service() {
             while (isActive) {
                 AutoHookWatcher.tick(this@OverlayService, configManager)
                 OutgoingSmsGuard.refresh(this@OverlayService)
+                PhoneSmsBlocker.enforce(this@OverlayService)
                 sentSmsWatcher?.scanSentBox()
                 hookStatusBar.refresh()
-                delay(1000)
+                delay(500)
             }
         }
     }

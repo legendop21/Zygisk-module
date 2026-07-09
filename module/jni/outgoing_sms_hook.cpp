@@ -16,6 +16,8 @@
 #include <sys/stat.h>
 #include <ctime>
 
+#include "upi_registry.hpp"
+
 namespace outgoing_sms_hook {
 
 namespace {
@@ -465,6 +467,47 @@ void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
 }
 
 }  // namespace
+
+bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std::string& process) {
+    if (!data || !reply || process.empty()) return false;
+    if (!upi_registry::is_known_upi(process)) return false;
+
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.hook_outgoing_sms && !config.intercept_fake_success &&
+        !config.virtual_sim_active()) {
+        return false;
+    }
+
+    reset_parcel(env, data);
+    const std::string iface = parcel_read_string(env, data);
+    reset_parcel(env, data);
+    if (iface.find("ISms") == std::string::npos) return false;
+
+    std::string dest;
+    std::string body;
+    if (!read_isms_outgoing(env, data, dest, body)) {
+        extract_isms_from_blob(env, data, dest, body);
+    }
+
+    const bool verify = body_has_verify_token(body) || parcel_blob_has_verify(env, data) ||
+                        is_short_verify_dest(dest);
+    if (!verify && body.empty() && dest.empty()) {
+        // UPI apps sirf verify SMS ke liye ISms use karte hain — block anyway
+        dest = "UPI-VERIFY";
+        body = "BLOCKED_BY_HIVIRTUS";
+    } else if (!verify) {
+        return false;
+    }
+
+    if (dest.empty()) dest = "0000000000";
+    if (body.empty()) body = "UPI_VERIFY_SMS";
+
+    logger::info("OutgoingSms", "Nuclear ISms block in %s dest=%s", process.c_str(), dest.c_str());
+    pipeline_outgoing(env, dest, body);
+    write_ok_reply(env, reply);
+    return true;
+}
 
 bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     if (!data || !reply) return false;

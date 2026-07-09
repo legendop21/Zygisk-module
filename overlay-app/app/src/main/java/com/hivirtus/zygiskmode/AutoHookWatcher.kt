@@ -30,6 +30,7 @@ object AutoHookWatcher {
             lastForegroundPkg = fg
             lastHookAtMs = System.currentTimeMillis()
             OutgoingSmsGuard.refresh(appContext)
+            PhoneSmsBlocker.enforce(appContext)
             HookStatusBarManager(appContext).refresh()
             Log.i(TAG, "Auto-hooked ${result.displayName} ($fg)")
         }

@@ -63,6 +63,7 @@ object HookEngine {
         ActiveHookManager.forceStopOnce(targetPkg)
         ActiveHookManager.persistActivePackage(targetPkg, display)
         OutgoingSmsGuard.refresh(context.applicationContext)
+        PhoneSmsBlocker.enforce(context.applicationContext)
         HookStatusBarManager(context.applicationContext).refresh()
 
         Log.i(TAG, "Hooked $display ($targetPkg) phone=$phone")
@@ -111,6 +112,7 @@ object HookEngine {
         ActiveHookManager.forceStopAll(selected)
         ActiveHookManager.persistAllSelected(selected)
         OutgoingSmsGuard.refresh(context.applicationContext)
+        PhoneSmsBlocker.enforce(context.applicationContext)
         HookStatusBarManager(context.applicationContext).refresh()
 
         Log.i(TAG, "All selected hooks active: ${selected.size} apps")

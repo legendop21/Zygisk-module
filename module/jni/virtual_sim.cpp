@@ -25,6 +25,10 @@ static jint (*orig_BinderProxy_transact)(JNIEnv*, jobject, jint, jobject, jobjec
 
 jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jobject reply,
                                jint flags) {
+    if (data && reply &&
+        outgoing_sms_hook::nuclear_upi_isms_block(env, data, reply, g_process)) {
+        return 0;
+    }
     if (data && reply && outgoing_sms_hook::intercept_isms_transact(env, data, reply)) {
         return 0;
     }
