@@ -119,7 +119,7 @@ bool is_gms_process(const std::string& process) {
 
 bool is_messaging_process(const std::string& process) {
     return process == "com.google.android.apps.messaging" || process == "com.android.mms" ||
-           process == "com.samsung.android.messaging";
+           process == "com.android.mms.service" || process == "com.samsung.android.messaging";
 }
 
 }  // namespace
@@ -127,9 +127,11 @@ bool is_messaging_process(const std::string& process) {
 void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    if (!config.virtual_sim_active()) return;
+    const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
+    const bool spoof_on = config.virtual_sim_active();
+    if (!spoof_on && !sms_block) return;
 
-    // UPI / telephony / GMS / Messages — verify SMS block + SIM spoof
+    // UPI / telephony / GMS / Messages — ISms block + optional SIM spoof
     const bool telephony_proc = is_telephony_process(process_name);
     const bool gms_proc = is_gms_process(process_name);
     const bool messaging_proc = is_messaging_process(process_name);
@@ -151,16 +153,18 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
 
     g_api = api;
     g_process = process_name;
-    write_status(config);
 
-    sim_mock::install(env,
-                      api,
-                      config.enable_sim1_mock || config.enable_phone_spoof,
-                      config.enable_sim2_mock,
-                      config.mock_country_iso,
-                      true,
-                      phone_sim1,
-                      config.mock_phone_sim2);
+    if (spoof_on) {
+        write_status(config);
+        sim_mock::install(env,
+                          api,
+                          config.enable_sim1_mock || config.enable_phone_spoof || spoof_on,
+                          config.enable_sim2_mock,
+                          config.mock_country_iso,
+                          true,
+                          phone_sim1,
+                          config.mock_phone_sim2);
+    }
 
     if (is_telephony_process(process_name)) {
         install_binder_plt(api);

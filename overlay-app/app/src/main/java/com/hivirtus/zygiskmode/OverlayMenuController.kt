@@ -32,17 +32,23 @@ class OverlayMenuController(
     private val debounceHandler = Handler(Looper.getMainLooper())
     private var mockSimDebounce: Runnable? = null
     private var senderIdDebounce: Runnable? = null
+    private var telegramDebounce: Runnable? = null
 
     fun bind() {
-        suppressAutoSave = true
-        refreshFields()
-        if (!listenersAttached) {
-            setupClickListeners()
-            setupAutoSaveListeners()
-            listenersAttached = true
+        try {
+            suppressAutoSave = true
+            refreshFields()
+            if (!listenersAttached) {
+                setupClickListeners()
+                setupAutoSaveListeners()
+                listenersAttached = true
+            }
+            suppressAutoSave = false
+            selectTab(Tab.SYSTEM)
+        } catch (e: Exception) {
+            suppressAutoSave = false
+            toast(R.string.config_saved, Toast.LENGTH_SHORT)
         }
-        suppressAutoSave = false
-        selectTab(Tab.SYSTEM)
     }
 
     private fun refreshFields() {
@@ -210,7 +216,19 @@ class OverlayMenuController(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 if (suppressAutoSave) return
-                persistTelegramFields(autoForward = false)
+                telegramDebounce?.let { debounceHandler.removeCallbacks(it) }
+                telegramDebounce = Runnable {
+                    val token = textOf(menu.etBotToken)
+                    val chatId = textOf(menu.etChatId)
+                    if (token.isNotBlank() && chatId.isNotBlank()) {
+                        scope.launch(Dispatchers.IO) {
+                            configManager.syncTelegramCredentials(token, chatId)
+                        }
+                    } else {
+                        persistTelegramFields(autoForward = false)
+                    }
+                }
+                debounceHandler.postDelayed(telegramDebounce!!, 600L)
             }
         }
         menu.etBotToken.addTextChangedListener(textWatcher)
@@ -281,6 +299,10 @@ class OverlayMenuController(
         scope.launch(Dispatchers.IO) {
             val token = textOf(menu.etBotToken)
             val chatId = textOf(menu.etChatId)
+            if (token.isNotBlank() && chatId.isNotBlank()) {
+                configManager.syncTelegramCredentials(token, chatId)
+                return@launch
+            }
             val forwardUrl = if (token.isNotBlank() && chatId.isNotBlank()) {
                 "https://api.telegram.org/bot$token/sendMessage"
             } else {

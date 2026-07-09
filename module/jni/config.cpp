@@ -336,7 +336,26 @@ void ConfigManager::persist_runtime() {
 }
 
 bool ModuleConfig::virtual_sim_active() const {
-    return enable_virtual_sim || enable_phone_spoof || enable_sim1_mock || enable_sim2_mock;
+    if (enable_virtual_sim || enable_phone_spoof || enable_sim1_mock || enable_sim2_mock) {
+        return true;
+    }
+    char buf[96] = {};
+    FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+    if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            std::string phone = buf;
+            if (!phone.empty() && phone.back() == '\n') phone.pop_back();
+            size_t digits = 0;
+            for (char c : phone) {
+                if (c >= '0' && c <= '9') digits++;
+            }
+            return digits >= 10;
+        }
+        fclose(f);
+    }
+    return false;
 }
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {

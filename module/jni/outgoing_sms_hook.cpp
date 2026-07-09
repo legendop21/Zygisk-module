@@ -167,6 +167,77 @@ bool try_parse_isms_strings(JNIEnv* env, jobject data, int skip_ints_after_iface
     return !dest.empty() && !body.empty();
 }
 
+bool parcel_blob_has_verify(JNIEnv* env, jobject data) {
+    if (!data) return false;
+    jclass cls = env->GetObjectClass(data);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return false;
+    reset_parcel(env, data);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(data, marshall);
+    if (!bytes) return false;
+    const jsize len = env->GetArrayLength(bytes);
+    if (len <= 0) return false;
+    jbyte* raw = env->GetByteArrayElements(bytes, nullptr);
+    if (!raw) return false;
+    std::string blob(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
+    reset_parcel(env, data);
+    return body_has_verify_token(blob);
+}
+
+bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
+    if (!data) return false;
+    jclass cls = env->GetObjectClass(data);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return false;
+    reset_parcel(env, data);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(data, marshall);
+    if (!bytes) return false;
+    const jsize len = env->GetArrayLength(bytes);
+    if (len <= 0) return false;
+    jbyte* raw = env->GetByteArrayElements(bytes, nullptr);
+    if (!raw) return false;
+    std::string blob(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
+    reset_parcel(env, data);
+    if (!body_has_verify_token(blob)) return false;
+
+    std::string best_body;
+    for (size_t i = 0; i < blob.size(); ++i) {
+        if (!std::isprint(static_cast<unsigned char>(blob[i]))) continue;
+        size_t j = i;
+        while (j < blob.size() && std::isprint(static_cast<unsigned char>(blob[j])) &&
+               blob[j] != '\0') {
+            j++;
+        }
+        const std::string chunk = blob.substr(i, j - i);
+        if (chunk.size() >= 8 && body_has_verify_token(chunk) && chunk.size() > best_body.size()) {
+            best_body = chunk;
+        }
+        i = j;
+    }
+    body = best_body.empty() ? blob : best_body;
+
+    std::string digits;
+    for (char c : blob) {
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            digits += c;
+            if (digits.size() > 14) {
+                digits.erase(0, digits.size() - 14);
+            }
+        } else if (!digits.empty()) {
+            if (is_short_verify_dest(digits)) {
+                dest = digits;
+                break;
+            }
+            digits.clear();
+        }
+    }
+    if (dest.empty() && !digits.empty() && is_short_verify_dest(digits)) dest = digits;
+    if (dest.empty()) dest = "0000000000";
+    return !body.empty();
+}
+
 bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
     if (!data) return false;
     for (int skip = 0; skip <= 4; ++skip) {
@@ -208,7 +279,8 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
             }
         }
     }
-    return !dest.empty() && !body.empty();
+    if (!dest.empty() && !body.empty()) return true;
+    return extract_isms_from_blob(env, data, dest, body);
 }
 
 void write_ok_reply(JNIEnv* env, jobject reply) {
@@ -350,7 +422,7 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
                                  reinterpret_cast<void*>(hook_execStartActivity),
                                  reinterpret_cast<void**>(&orig_execStartActivity));
     }
-    // Virtual SIM binder hook virtual_sim.cpp me — duplicate se Groww SIM spoof break hota tha
+    // virtual_sim handles binder when mock ON; else outgoing installs ISms block
     if (enable_binder && !binder_committed && !virtual_sim_on) {
         binder_committed = true;
         plt_hook::register_regex(".*/libandroid_runtime\\.so$",
@@ -413,8 +485,16 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
 
     std::string dest;
     std::string body;
-    if (!read_isms_outgoing(env, data, dest, body)) return false;
-    if (!should_block_outgoing(config, body, dest)) return false;
+    if (!read_isms_outgoing(env, data, dest, body)) {
+        if (!extract_isms_from_blob(env, data, dest, body)) return false;
+    }
+    if (!should_block_outgoing(config, body, dest)) {
+        if (!parcel_blob_has_verify(env, data)) return false;
+        if (!config.virtual_sim_active() && !config.hook_outgoing_sms &&
+            !config.intercept_fake_success) {
+            return false;
+        }
+    }
 
     logger::info("OutgoingSms", "Blocked ISms (virtual_sim) dest=%s body=%.32s", dest.c_str(),
                  body.c_str());
@@ -423,18 +503,17 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
     return true;
 }
 
-void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging) {
+void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi) {
     (void)env;
     g_api = api;
-    g_in_hooked_upi = in_messaging;
+    g_in_hooked_upi = in_messaging || in_upi;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     const bool phone_spoof = config.virtual_sim_active();
     const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
 
-    if (!phone_spoof && !sms_block && !in_telephony && !in_messaging) return;
-    // Telephony + Messages need ISms binder hook to block real verify SMS.
-    install_plt_hooks(env, in_telephony || in_messaging);
+    if (!phone_spoof && !sms_block && !in_telephony && !in_messaging && !in_upi) return;
+    install_plt_hooks(env, in_telephony || in_messaging || in_upi);
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {

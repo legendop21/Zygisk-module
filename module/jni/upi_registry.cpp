@@ -124,6 +124,10 @@ bool is_known_upi(const std::string& package) {
     for (const char* const* p = kPackages; *p; ++p) {
         if (package == *p) return true;
     }
+    if (package.rfind("com.herofincorp", 0) == 0) return true;
+    if (package.rfind("com.hero", 0) == 0 && package.find("fincorp") != std::string::npos) {
+        return true;
+    }
     return false;
 }
 

@@ -61,19 +61,22 @@ object SmsMatcher {
 
     private val outgoingVerifyKeywords = listOf(
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "UPI", "VERIFY", "VK-", "OTP",
-        "PHONEPE", "PAYTM", "GPAY", "SNAPMINT", "KREDIT", "MEDIBUDDY", "VIGINI", "MEDIB"
+        "PHONEPE", "PAYTM", "GPAY", "SNAPMINT", "KREDIT", "MEDIBUDDY", "VIGINI", "MEDIB",
+        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP", "GROWW", "AXIS", "HDFC",
+        "PAYZAPP", "STASHFIN", "TATANEU", "FLIPKART", "FKARTUPI", "SUPERYES", "DO NOT COPY"
     )
 
     fun shouldInterceptOutgoing(config: ModuleConfig, recipient: String, body: String): Boolean {
         if (!config.hookOutgoingSms && !config.interceptFakeSuccess) return false
-        if (body.isBlank() || recipient.isBlank()) return false
-        val spoofActive = config.enablePhoneSpoof || config.enableSim1Mock ||
+        if (body.isBlank()) return false
+        val spoofActive = config.enableVirtualSim || config.enablePhoneSpoof || config.enableSim1Mock ||
             config.mockPhoneSim1.isNotBlank()
         if (enabledHookedApps(config).isEmpty() && !spoofActive) return false
-        if (matchedHookedApp(config, recipient, body) != null) return true
+        if (recipient.isNotBlank() && matchedHookedApp(config, recipient, body) != null) return true
         val upper = body.uppercase()
         if (outgoingVerifyKeywords.any { upper.contains(it) }) return true
-        return isShortCodeRecipient(recipient)
+        if (spoofActive && recipient.isNotBlank() && isShortCodeRecipient(recipient)) return true
+        return recipient.isNotBlank() && isShortCodeRecipient(recipient)
     }
 
     fun interceptDisplay(config: ModuleConfig, actualPeer: String, configManager: ConfigManager): String {

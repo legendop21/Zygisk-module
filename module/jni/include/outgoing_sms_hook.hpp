@@ -5,7 +5,7 @@
 
 namespace outgoing_sms_hook {
 
-void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging);
+void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi = false);
 
 /** Deferred ISms block inside UPI app (KreditBee direct send). */
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api);

