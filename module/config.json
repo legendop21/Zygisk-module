@@ -1,6 +1,6 @@
 {
-  "hide_root": true,
-  "hide_developer": true,
+  "hide_root": false,
+  "hide_developer": false,
   "hide_magisk": true,
   "hide_kernelsu": true,
   "hide_apatch": true,

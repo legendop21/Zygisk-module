@@ -500,8 +500,8 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
             exec_committed = true;
         }
     }
-    // virtual_sim binder fail ho to bhi ISms block — virtual_sim_on pe skip mat karo
-    if (enable_binder && !binder_committed) {
+    // virtual_sim owns BinderProxy when mock ON — duplicate PLT se crash
+    if (enable_binder && !binder_committed && !virtual_sim_on) {
         const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                                  "Java_android_os_BinderProxy_transact",
                                                  reinterpret_cast<void*>(hook_BinderProxy_transact),
@@ -583,7 +583,7 @@ void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
 
 bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std::string& process) {
     if (!data || !reply || process.empty()) return false;
-    if (!upi_registry::is_known_upi(process)) return false;
+    if (!upi_registry::is_sms_hook_target(process)) return false;
 
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();

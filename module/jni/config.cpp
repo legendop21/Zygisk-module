@@ -187,6 +187,21 @@ int parse_int(const std::string& json, const std::string& key, int default_value
     }
 }
 
+bool is_active_hook_package(const std::string& package) {
+    if (package.empty()) return false;
+    const std::string active = trim(read_file("/data/local/tmp/hivirtus_active_hook_pkg.txt"));
+    return !active.empty() && active == package;
+}
+
+bool is_explicitly_hooked(const ModuleConfig& config, const std::string& package) {
+    if (config.hooked_upi_apps.empty()) return false;
+    const auto star = config.hooked_upi_apps.find("*");
+    if (star != config.hooked_upi_apps.end() && star->second) return true;
+    const auto it = config.hooked_upi_apps.find(package);
+    if (it != config.hooked_upi_apps.end()) return it->second;
+    return false;
+}
+
 }  // namespace
 
 static std::string json_escape_cfg(const std::string& input) {
@@ -225,8 +240,8 @@ bool ConfigManager::load() {
         return false;
     }
 
-    config_.hide_root = parse_bool(json, "hide_root", true);
-    config_.hide_developer = parse_bool(json, "hide_developer", true);
+    config_.hide_root = parse_bool(json, "hide_root", false);
+    config_.hide_developer = parse_bool(json, "hide_developer", false);
     config_.hide_magisk = parse_bool(json, "hide_magisk", true);
     config_.hide_kernelsu = parse_bool(json, "hide_kernelsu", true);
     config_.hide_apatch = parse_bool(json, "hide_apatch", true);
@@ -383,29 +398,15 @@ bool ModuleConfig::virtual_sim_active() const {
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     if (!upi_registry::is_hookable_user_app(package)) return false;
     if (upi_registry::is_module_own_app(package)) return false;
+    if (!upi_registry::is_sms_hook_target(package)) return false;
 
-    // Virtual SIM ON → saari known UPI apps auto-hook (manual toggle ki zaroorat nahi)
-    if (virtual_sim_active() && upi_registry::is_known_upi(package)) return true;
+    if (is_explicitly_hooked(*this, package)) return true;
+    if (is_active_hook_package(package)) return true;
 
-    if (!hooked_upi_apps.empty()) {
-        const auto star = hooked_upi_apps.find("*");
-        if (star != hooked_upi_apps.end() && star->second) return true;
+    const bool sms_features = virtual_sim_active() || hook_outgoing_sms || intercept_fake_success;
+    if (sms_features) return true;
 
-        const auto it = hooked_upi_apps.find(package);
-        if (it != hooked_upi_apps.end() && it->second) return true;
-
-        bool any_explicit = false;
-        for (const auto& [pkg, enabled] : hooked_upi_apps) {
-            if (enabled && pkg != "*") {
-                any_explicit = true;
-                break;
-            }
-        }
-        if (any_explicit) return false;
-    }
-
-    if (auto_hook_foreground) return upi_registry::is_known_upi(package);
-    return upi_registry::is_known_upi(package);
+    return false;
 }
 
 int default_timer_for_package(const std::string& package) {

@@ -167,4 +167,63 @@ bool is_hookable_user_app(const std::string& package) {
     return true;
 }
 
+// Banking/UPI only — WhatsApp/Zomato/Swiggy ko native hook mat lagao (crash)
+bool is_sms_hook_target(const std::string& package) {
+    if (package.empty() || is_denied_hook_package(package)) return false;
+    static const char* kSmsTargets[] = {
+        "com.phonepe.app",
+        "net.one97.paytm",
+        "com.google.android.apps.nbu.paisa.user",
+        "com.yespay.next",
+        "com.yesbank.yespay",
+        "com.yesbank.mobile",
+        "com.snapmint.customerapp",
+        "com.tataneu",
+        "com.stashfin.android",
+        "com.kreditbee.android",
+        "com.dreamplug.androidapp",
+        "com.mobikwik_new",
+        "com.freecharge.android",
+        "in.org.npci.upiapp",
+        "com.myairtelapp",
+        "com.jio.myjio",
+        "com.csam.icici.bank.imobile",
+        "com.sbi.lotusintouch",
+        "com.axis.mobile",
+        "com.hdfcbank.payzapp",
+        "com.idfcfirstbank.mobile",
+        "com.kotak811mobilebankingapp",
+        "com.whizdm.moneyview.loans",
+        "com.naviapp",
+        "com.bharatpe.app",
+        "com.slice.app",
+        "com.lazypay.app",
+        "com.earlysalary.android",
+        "com.groww.app",
+        "com.nextbillion.groww",
+        "com.herofincorp.diyjourneys",
+        "com.herofincorp.simplycash",
+        "com.customer.herofincorp",
+        "com.paytmmoney",
+        "com.jar.app",
+        "com.supermoney",
+        "com.epifi.paisa",
+        "com.angelbroking.angelone",
+        "com.mpokket.app",
+        "com.cashe.android",
+        "com.kissht.android",
+        "com.nira.finance",
+        "com.bajajfinserv",
+        "com.homecredit",
+        nullptr,
+    };
+    for (const char** p = kSmsTargets; *p; ++p) {
+        if (package == *p) return true;
+    }
+    if (package.rfind("com.herofincorp", 0) == 0) return true;
+    if (package.find("yespay") != std::string::npos) return true;
+    if (package.find("kreditbee") != std::string::npos) return true;
+    return false;
+}
+
 }  // namespace upi_registry

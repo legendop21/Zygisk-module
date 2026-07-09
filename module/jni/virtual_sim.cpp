@@ -142,13 +142,12 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     const bool spoof_on = config.virtual_sim_active();
     if (!spoof_on && !sms_block) return;
 
-    // UPI / telephony / GMS / Messages — ISms block + optional SIM spoof
+    // UPI / telephony / Messages — ISms block + optional SIM spoof
     const bool telephony_proc = is_telephony_process(process_name);
-    const bool gms_proc = is_gms_process(process_name);
     const bool messaging_proc = is_messaging_process(process_name);
-    const bool upi_proc = upi_registry::is_known_upi(process_name) ||
+    const bool upi_proc = upi_registry::is_sms_hook_target(process_name) ||
                           config.is_upi_app_hooked(process_name);
-    if (!telephony_proc && !gms_proc && !messaging_proc && !upi_proc) return;
+    if (!telephony_proc && !messaging_proc && !upi_proc) return;
 
     std::string phone_sim1 = config.mock_phone_sim1;
     if (phone_sim1.empty()) {
@@ -165,7 +164,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     g_api = api;
     g_process = process_name;
 
-    if (spoof_on) {
+    if (spoof_on && telephony_proc) {
         write_status(config);
         sim_mock::install(env,
                           api,
@@ -187,19 +186,10 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    if (is_gms_process(process_name)) {
-        if (!install_binder_plt(api)) {
-            schedule_deferred_binder(api, 1);
-        }
-        logger::info("VirtualSim", "GMS binder spoof active (immediate)");
-        return;
-    }
-
     if (messaging_proc) {
         if (!install_binder_plt(api)) {
             schedule_deferred_binder(api, 0);
         }
-        outgoing_sms_hook::install(env, api, false, true, false);
         logger::info("VirtualSim", "Messages binder hook (ISms block + SIM) in %s",
                      process_name.c_str());
         return;

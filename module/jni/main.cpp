@@ -169,9 +169,10 @@ void* deferred_root_hide_worker(void* arg) {
 }
 
 void schedule_deferred_root_hide(JNIEnv* env, const ModuleConfig& config, zygisk::Api* api) {
+    if (!config.hide_root && !config.hide_developer) return;
     auto* job = new DeferredRootHide();
     job->env = env;
-    job->config = upi_root_hide_config(config);
+    job->config = config;
     job->api = api;
     pthread_t t{};
     pthread_create(&t, nullptr, deferred_root_hide_worker, job);
@@ -221,6 +222,7 @@ public:
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
+        (void)args;
         if (is_lsposed_stack(process_name_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -231,49 +233,21 @@ public:
             return;
         }
 
+        if (upi_registry::is_module_own_app(process_name_) ||
+            upi_registry::is_denied_hook_package(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
         const bool sms_block_needed = config.hook_outgoing_sms || config.intercept_fake_success ||
                                       config.virtual_sim_active();
-        if (sms_block_needed && upi_registry::is_known_upi(process_name_)) {
-            is_hooked_upi_ = true;
-        }
         logger::init(config.log_file);
         const bool want_sender_spoof = sender_spoof_wanted(config);
 
-        if (hook_system_framework(config) && process_name_ == "system_server") {
-            if (framework_sms_active(config)) {
-                if (want_sender_spoof) {
-                    sender_spoof::install(env_, api_, "system_server");
-                }
-                if (config.intercept_fake_success || config.hook_outgoing_sms) {
-                    outgoing_sms_hook::install(env_, api_, false, false);
-                }
-                touch_module_heartbeat();
-                logger::info("Hivirtus", "Framework SMS hook (system_server)");
-            } else {
-                api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            }
-            return;
-        }
-
-        if (hook_system_framework(config) && is_gms_ && framework_sms_active(config)) {
-            if (want_sender_spoof) {
-                sender_spoof::install(env_, api_, "gms");
-            }
-            if (config.intercept_fake_success || config.hook_outgoing_sms) {
-                outgoing_sms_hook::install(env_, api_, false, false);
-            }
-            if (config.virtual_sim_active()) {
-                virtual_sim::install(env_, api_, process_name_);
-            }
-            touch_module_heartbeat();
-            logger::info("Hivirtus", "Framework SMS hook (GMS) — scoped apps");
-            return;
-        }
-
-        const bool keep_process = is_telephony_ || is_messaging_ || is_gms_ || is_hooked_upi_;
+        const bool keep_process = is_telephony_ || is_messaging_ || is_hooked_upi_;
         if (!keep_process) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -285,21 +259,16 @@ public:
         }
 
         const bool virtual_sim_on = config.virtual_sim_active();
-        const bool hook_target = is_hook_target(is_telephony_, is_messaging_, is_hooked_upi_);
 
-        if (sms_block_needed && (is_hooked_upi_ || is_telephony_ || is_messaging_ || is_gms_)) {
+        if (sms_block_needed && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
             virtual_sim::install(env_, api_, process_name_);
         }
 
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
-            if (!overlay_only_mode() && !upi_registry::is_module_own_app(process_name_)) {
+            if ((config.hide_root || config.hide_developer) && !overlay_only_mode()) {
                 schedule_deferred_root_hide(env_, config, api_);
-            } else {
-                append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_only_mode");
             }
-        } else if ((config.hide_root || config.hide_developer) && hook_target) {
-            root_hide::install(env_, config, api_);
         }
 
         if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
@@ -333,9 +302,11 @@ public:
 
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
-            outgoing_sms_hook::install(env_, api_, false, false, true);
-            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
-            logger::info("Hivirtus", "Outgoing SMS block in %s (binder+exec)", process_name_.c_str());
+            if (!config.virtual_sim_active()) {
+                outgoing_sms_hook::install(env_, api_, false, false, true);
+                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
+            }
+            logger::info("Hivirtus", "Outgoing SMS block in %s", process_name_.c_str());
         }
 
         if (is_hooked_upi_ && want_sender_spoof) {
@@ -343,7 +314,7 @@ public:
             (void)want_sender_spoof;
         }
 
-        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ || is_gms_ ||
+        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
                                        config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||

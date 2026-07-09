@@ -5,6 +5,7 @@
 namespace upi_registry {
 
 bool is_known_upi(const std::string& package);
+bool is_sms_hook_target(const std::string& package);
 bool is_module_own_app(const std::string& package);
 bool is_denied_hook_package(const std::string& package);
 bool is_hookable_user_app(const std::string& package);
