@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">𝙑𝙞𝙧𝙩𝙪𝙨 𝙕𝙮𝙜𝙞𝙨𝙠 𝙈𝙤𝙙𝙚</string>
-    <string name="mod_menu_title">Hivirtus Menu</string>
+    <string name="mod_menu_title">Hivirtus</string>
+    <string name="status_label">Status  </string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_active">Active — SMS block + spoof ON</string>
+    <string name="status_partial">Partial — mock number / Telegram check karo</string>
+    <string name="status_offline">Module offline — flash + reboot</string>
+    <string name="mock_sim_card_desc">UPI apps ko mock number dikhega. Real SIM se verify SMS block hoga.</string>
+    <string name="block_outgoing_title">Block Outgoing SMS</string>
+    <string name="block_outgoing_desc">HEROAXISUPI / YESPRO verify SMS real SIM se nahi jayega — fake success + Telegram forward.</string>
+    <string name="hook_incoming_title">Hook Incoming SMS</string>
+    <string name="hook_incoming_desc">Incoming OTP capture + Telegram forward. UPI app kholo to auto hook.</string>
+    <string name="telegram_forward_title">Telegram Forward</string>
     <string name="menu_subtitle"></string>
     <string name="main_description">Start dabao — bubble menu khulega. Koi UPI app kholo, auto hook ON.</string>
     <string name="tab_message">MESSAGES</string>
@@ -99,7 +110,7 @@
     <string name="sim_settings_saved">SIM settings saved — KreditBee/UPI band karke dubara kholo</string>
     <string name="root_hide_active">Root hide active on all apps</string>
     <string name="hook_incoming_sms">Hook Incoming SMS</string>
-    <string name="hook_outgoing_sms">Hook Outgoing SMS</string>
+    <string name="hook_outgoing_sms">Block Outgoing SMS</string>
     <string name="auto_extract_otp">Auto Extract OTP</string>
     <string name="toast_mock_sim_on">Mock Number ON</string>
     <string name="toast_mock_sim_off">Mock Number OFF</string>
@@ -141,7 +152,7 @@
     <string name="enter_message_body">Message body enter karein</string>
     <string name="sms_injected">Local SMS injected</string>
     <string name="dev_credit">dev by @hivirtus</string>
-    <string name="dev_credit_footer">Dev: Hivirtus</string>
+    <string name="dev_credit_footer">@hivirtus @liqdy — Zygisk SMS Block</string>
     <string name="vip_access_title">◆ VIP ACCESS ◆</string>
     <string name="developer_hide_saved">Developer mode hide saved — apps restart karo</string>
     <string name="root_hide_saved">Root hide saved — stealth active</string>

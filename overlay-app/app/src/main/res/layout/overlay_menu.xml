@@ -5,38 +5,79 @@
     android:layout_height="wrap_content"
     android:background="@drawable/overlay_background"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="18dp">
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|center_vertical"
+            android:letterSpacing="0.08"
+            android:text="@string/mod_menu_title"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <ImageButton
             android:id="@+id/btnClose"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_gravity="top|end"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="end|center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/close"
             android:src="@drawable/ic_close"
-            app:tint="@color/gold_primary" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingEnd="28dp"
-            android:paddingStart="28dp"
-            android:text="@string/mod_menu_title"
-            android:textColor="@color/text_primary"
-            android:textSize="17sp"
-            android:textStyle="bold" />
+            app:tint="@color/text_label" />
     </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/mrdk_divider_gradient" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:background="@drawable/mrdk_card_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="16dp">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:background="@drawable/status_dot_yellow" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="@string/status_label"
+            android:textColor="@color/text_label"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvStatusValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_connecting"
+            android:textColor="@color/status_connecting"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
         android:orientation="horizontal">
 
         <TextView
@@ -79,18 +120,12 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="4dp"
-        android:background="@color/divider" />
-
     <ScrollView
         android:id="@+id/tabContentScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fillViewport="true"
-        android:maxHeight="340dp"
+        android:maxHeight="360dp"
         android:scrollbars="vertical">
 
         <FrameLayout
@@ -104,99 +139,113 @@
                 android:orientation="vertical"
                 android:paddingTop="14dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/phone_spoof_section"
-                    android:textColor="@color/gold_primary"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:background="@drawable/mrdk_card_bg"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchMockSim"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/enable_mock_sim"
-                    android:textColor="@color/text_primary" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/phone_spoof_section"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/mock_phone_sim1"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/mock_sim_card_desc"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
 
-                <EditText
-                    android:id="@+id/etMockSimNumber"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="@string/fake_phone_hint"
-                    android:inputType="phone"
-                    android:maxLength="14"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchMockSim"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/enable_mock_sim"
+                        android:textColor="@color/text_primary" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/mock_sim_help"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/mock_phone_sim1"
+                        android:textColor="@color/text_label"
+                        android:textSize="12sp" />
 
-                <TextView
-                    android:id="@+id/tvMockSimStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:textColor="@color/gold_primary"
-                    android:textSize="11sp" />
+                    <EditText
+                        android:id="@+id/etMockSimNumber"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/input_background"
+                        android:fontFamily="monospace"
+                        android:hint="@string/fake_phone_hint"
+                        android:inputType="phone"
+                        android:maxLength="14"
+                        android:padding="12dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint" />
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="4dp"
-                    android:background="@color/divider" />
+                    <TextView
+                        android:id="@+id/tvMockSimStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/accent_primary"
+                        android:textSize="11sp" />
+                </LinearLayout>
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/system_tab_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchNotDeveloper"
-                    style="@style/HivirtusSwitch"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="@string/i_am_not_developer"
-                    android:textColor="@color/text_primary" />
+                    android:background="@drawable/mrdk_card_bg"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchNotRoot"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/i_am_not_root"
-                    android:textColor="@color/text_primary" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/root_hide_section"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnShowAppInfo"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/show_app_info"
-                    android:textColor="@color/text_primary"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchNotDeveloper"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/i_am_not_developer"
+                        android:textColor="@color/text_primary" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchNotRoot"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/i_am_not_root"
+                        android:textColor="@color/text_primary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnShowAppInfo"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="@string/show_app_info"
+                        android:textColor="@color/accent_primary"
+                        app:strokeColor="@color/card_border" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -207,59 +256,109 @@
                 android:paddingTop="14dp"
                 android:visibility="gone">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/message_tab_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    android:background="@drawable/mrdk_card_bg"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-                <TextView
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/block_outgoing_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/block_outgoing_desc"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchHookOutgoing"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/hook_outgoing_sms"
+                        android:textColor="@color/text_primary" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="@string/intercept_sender_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    android:background="@drawable/mrdk_card_bg"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-                <EditText
-                    android:id="@+id/etSenderId"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="e.g. VM-YESBNK-S"
-                    android:inputType="textCapCharacters"
-                    android:maxLength="20"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/hook_incoming_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchOverrideSender"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/override_incoming_sender"
-                    android:textColor="@color/text_primary" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/hook_incoming_desc"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchHookIncoming"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/hook_incoming_sms"
-                    android:textColor="@color/text_primary" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchHookIncoming"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/hook_incoming_sms"
+                        android:textColor="@color/text_primary" />
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchHookOutgoing"
-                    style="@style/HivirtusSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/hook_outgoing_sms"
-                    android:textColor="@color/text_primary" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="@color/divider" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/intercept_sender_hint"
+                        android:textColor="@color/text_label"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etSenderId"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/input_background"
+                        android:fontFamily="monospace"
+                        android:hint="e.g. VM-YESBNK-S"
+                        android:inputType="textCapCharacters"
+                        android:maxLength="20"
+                        android:padding="12dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchOverrideSender"
+                        style="@style/HivirtusSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/override_incoming_sender"
+                        android:textColor="@color/text_primary" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -270,60 +369,81 @@
                 android:paddingTop="14dp"
                 android:visibility="gone">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/telegram_tab_hint"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    android:background="@drawable/mrdk_card_bg"
+                    android:orientation="vertical"
+                    android:padding="18dp">
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/telegram_bot_token"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/telegram_forward_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-                <EditText
-                    android:id="@+id/etBotToken"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="@string/telegram_token_hint"
-                    android:inputType="textPassword"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/telegram_tab_hint"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/telegram_chat_id"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="@string/telegram_bot_token"
+                        android:textColor="@color/text_label"
+                        android:textSize="12sp" />
 
-                <EditText
-                    android:id="@+id/etChatId"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/input_background"
-                    android:hint="@string/telegram_chat_hint"
-                    android:inputType="numberSigned"
-                    android:padding="12dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint" />
+                    <EditText
+                        android:id="@+id/etBotToken"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/input_background"
+                        android:fontFamily="monospace"
+                        android:hint="@string/telegram_token_hint"
+                        android:inputType="textPassword"
+                        android:padding="12dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnVerifyTelegram"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:background="@drawable/button_gradient"
-                    android:text="@string/verify_and_submit"
-                    android:textColor="@color/button_text_on_gold"
-                    app:backgroundTint="@null" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/telegram_chat_id"
+                        android:textColor="@color/text_label"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etChatId"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/input_background"
+                        android:fontFamily="monospace"
+                        android:hint="@string/telegram_chat_hint"
+                        android:inputType="numberSigned"
+                        android:padding="12dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVerifyTelegram"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/button_gradient"
+                        android:text="@string/verify_and_submit"
+                        android:textColor="@color/button_text_on_accent"
+                        app:backgroundTint="@null" />
+                </LinearLayout>
             </LinearLayout>
         </FrameLayout>
     </ScrollView>
@@ -331,7 +451,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:gravity="center"
         android:text="@string/dev_credit_footer"
         android:textColor="@color/text_hint"

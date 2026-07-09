@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class OverlayMenuController(
     private val context: Context,
@@ -45,6 +46,7 @@ class OverlayMenuController(
             }
             suppressAutoSave = false
             selectTab(Tab.SYSTEM)
+            refreshStatus()
         } catch (e: Exception) {
             suppressAutoSave = false
             toast(R.string.config_saved, Toast.LENGTH_SHORT)
@@ -214,6 +216,7 @@ class OverlayMenuController(
             toast(if (checked) R.string.toast_outgoing_on else R.string.toast_outgoing_off)
             OutgoingSmsGuard.refresh(appContext)
             HookStatusBarManager(appContext).refresh()
+            refreshStatus()
         }
 
         val textWatcher = object : TextWatcher {
@@ -291,6 +294,7 @@ class OverlayMenuController(
             } else if (enabled) {
                 toast(R.string.mock_sim_need_number, Toast.LENGTH_LONG)
             }
+            refreshStatus()
         }
     }
 
@@ -352,6 +356,7 @@ class OverlayMenuController(
                 if (ok) R.string.telegram_verified else R.string.telegram_verify_failed,
                 Toast.LENGTH_LONG
             )
+            refreshStatus()
         }
     }
 
@@ -381,6 +386,37 @@ class OverlayMenuController(
         field.text?.toString()?.trim().orEmpty()
 
     private enum class Tab { SYSTEM, MESSAGE, TG }
+
+    private fun refreshStatus() {
+        scope.launch {
+            val health = withContext(Dispatchers.IO) { ModuleHealthChecker.check(appContext) }
+            val config = withContext(Dispatchers.IO) { configManager.load() }
+            val creds = withContext(Dispatchers.IO) { TelegramCredentialStore.load(appContext) }
+            val smsDenied = File("/data/local/tmp/hivirtus_phone_sms_denied.flag").exists()
+            val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
+            val mockReady = mockOn && configManager.mockSimDigits10(
+                config.mockPhoneSim1.ifBlank { configManager.readSpoofPhone() }
+            ).length == 10
+            val telegramReady = (creds.botToken.isNotBlank() && creds.chatId.isNotBlank()) ||
+                (config.telegramBotToken.isNotBlank() && config.telegramChatId.isNotBlank())
+            val outgoingOn = config.hookOutgoingSms
+
+            val (textRes, dotRes, colorRes) = when {
+                !health.moduleInstalled || !health.zygiskLoaded ->
+                    Triple(R.string.status_offline, R.drawable.status_dot_red, R.color.status_error)
+                mockReady && outgoingOn && telegramReady && smsDenied ->
+                    Triple(R.string.status_active, R.drawable.status_dot_green, R.color.status_connected)
+                mockReady || outgoingOn ->
+                    Triple(R.string.status_partial, R.drawable.status_dot_yellow, R.color.status_connecting)
+                else ->
+                    Triple(R.string.status_partial, R.drawable.status_dot_yellow, R.color.status_connecting)
+            }
+
+            menu.statusDot.setBackgroundResource(dotRes)
+            menu.tvStatusValue.setText(textRes)
+            menu.tvStatusValue.setTextColor(ContextCompat.getColor(appContext, colorRes))
+        }
+    }
 
     private fun selectTab(tab: Tab) {
         menu.panelSystem.visibility = if (tab == Tab.SYSTEM) View.VISIBLE else View.GONE

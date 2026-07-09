@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- MaterialComponents base — SwitchMaterial / MaterialButton inflate without crash -->
     <style name="Theme.HivirtusZygiskMode" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/gold_primary</item>
-        <item name="colorOnPrimary">@color/button_text_on_gold</item>
-        <item name="colorSecondary">@color/gold_dark</item>
-        <item name="colorPrimaryDark">@color/gold_dark</item>
-        <item name="colorAccent">@color/gold_primary</item>
+        <item name="colorPrimary">@color/accent_primary</item>
+        <item name="colorOnPrimary">@color/button_text_on_accent</item>
+        <item name="colorSecondary">@color/accent_primary_dark</item>
+        <item name="colorPrimaryDark">@color/background_dark</item>
+        <item name="colorAccent">@color/accent_primary</item>
         <item name="android:colorBackground">@color/background_dark</item>
         <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:windowBackground">@color/background_dark</item>
-        <item name="android:statusBarColor">@color/background_dark</item>
-        <item name="android:navigationBarColor">@color/background_dark</item>
-        <item name="materialButtonStyle">@style/HivirtusGoldButton</item>
+        <item name="android:statusBarColor">#0A0C18</item>
+        <item name="android:navigationBarColor">#0A0C18</item>
+        <item name="materialButtonStyle">@style/HivirtusAccentButton</item>
     </style>
 
     <style name="Theme.HivirtusZygiskMode.Overlay" parent="Theme.HivirtusZygiskMode">
@@ -23,13 +22,15 @@
     </style>
 
     <style name="HivirtusSwitch" parent="Widget.MaterialComponents.CompoundButton.Switch">
-        <item name="thumbTint">@color/gold_primary</item>
-        <item name="trackTint">@color/switch_track</item>
+        <item name="thumbTint">@color/switch_thumb_tint</item>
+        <item name="trackTint">@color/switch_track_tint</item>
     </style>
 
-    <style name="HivirtusGoldButton" parent="Widget.MaterialComponents.Button">
+    <style name="HivirtusAccentButton" parent="Widget.MaterialComponents.Button">
         <item name="android:background">@drawable/button_gradient</item>
-        <item name="android:textColor">@color/button_text_on_gold</item>
+        <item name="android:textColor">@color/button_text_on_accent</item>
         <item name="backgroundTint">@null</item>
     </style>
+
+    <style name="HivirtusGoldButton" parent="HivirtusAccentButton" />
 </resources>

@@ -1,48 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VORTEX-style premium gold + pure black -->
-    <color name="background_dark">#000000</color>
-    <color name="overlay_bg">#0A0A0A</color>
-    <color name="input_bg">#111111</color>
-    <color name="card_bg">#0D0D0D</color>
+    <!-- MrDK-inspired dark purple theme (Hivirtus backend unchanged) -->
+    <color name="background_dark">#080A16</color>
+    <color name="overlay_bg">#080A16</color>
+    <color name="input_bg">#0D1020</color>
+    <color name="card_bg">#141729</color>
+    <color name="card_border">#252C50</color>
 
-    <color name="gold_primary">#FFD700</color>
-    <color name="gold_dark">#C9A84C</color>
-    <color name="gold_light">#F5E6B8</color>
-    <color name="gold_muted">#8B7340</color>
-    <color name="gold_dim">#5C4E2E</color>
-    <color name="button_text_on_gold">#000000</color>
+    <color name="accent_primary">#6C63FF</color>
+    <color name="accent_primary_dark">#4B44CC</color>
+    <color name="accent_cyan">#00D4FF</color>
+    <color name="accent_gradient_start">#6C63FF</color>
+    <color name="accent_gradient_end">#00D4FF</color>
+    <color name="button_text_on_accent">#FFFFFF</color>
 
-    <!-- Legacy names → gold (layouts unchanged) -->
-    <color name="menu_blue">#FFD700</color>
-    <color name="menu_blue_dark">#C9A84C</color>
-    <color name="teal_primary">#FFD700</color>
-    <color name="teal_dark">#C9A84C</color>
-    <color name="teal_light">#F5E6B8</color>
-    <color name="teal_pale">#2A2418</color>
-    <color name="accent_yellow">#FFD700</color>
-    <color name="accent_red">#FF6B4A</color>
-    <color name="sharingan_red">#C9A84C</color>
-    <color name="sharingan_glow">#FFD700</color>
-    <color name="primary_blue">#FFD700</color>
-    <color name="primary_blue_dark">#C9A84C</color>
-    <color name="primary_purple">#C9A84C</color>
-    <color name="primary_purple_dark">#8B7340</color>
-    <color name="primary_yellow">#FFD700</color>
-    <color name="primary_yellow_dark">#C9A84C</color>
-    <color name="accent_gradient_start">#FFE566</color>
-    <color name="accent_gradient_end">#C9A84C</color>
+    <!-- Legacy gold names → purple accent (layouts keep working) -->
+    <color name="gold_primary">#6C63FF</color>
+    <color name="gold_dark">#4B44CC</color>
+    <color name="gold_light">#9D97FF</color>
+    <color name="gold_muted">#3A3C5A</color>
+    <color name="gold_dim">#252C50</color>
+    <color name="button_text_on_gold">#FFFFFF</color>
 
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#B8A882</color>
-    <color name="text_hint">#6B6355</color>
-    <color name="tab_active">#FFD700</color>
-    <color name="tab_inactive">#5C5345</color>
-    <color name="tab_bg_active">#1A1608</color>
-    <color name="divider">#2A2418</color>
-    <color name="switch_track">#2A2418</color>
-    <color name="switch_track_active">#3D3520</color>
-    <color name="bubble_purple">#000000</color>
-    <color name="bubble_yellow">#FFD700</color>
-    <color name="wolf_outline">#000000</color>
+    <color name="menu_blue">#6C63FF</color>
+    <color name="menu_blue_dark">#4B44CC</color>
+    <color name="teal_primary">#6C63FF</color>
+    <color name="teal_dark">#4B44CC</color>
+    <color name="teal_light">#9D97FF</color>
+    <color name="teal_pale">#1A1D35</color>
+    <color name="accent_yellow">#FFB300</color>
+    <color name="accent_red">#FF6B6B</color>
+    <color name="sharingan_red">#FF6B6B</color>
+    <color name="sharingan_glow">#6C63FF</color>
+    <color name="primary_blue">#6C63FF</color>
+    <color name="primary_blue_dark">#4B44CC</color>
+    <color name="primary_purple">#6C63FF</color>
+    <color name="primary_purple_dark">#4B44CC</color>
+    <color name="primary_yellow">#FFB300</color>
+    <color name="primary_yellow_dark">#CC8F00</color>
+
+    <color name="text_primary">#EAEEFF</color>
+    <color name="text_secondary">#5A6A90</color>
+    <color name="text_label">#8899BB</color>
+    <color name="text_hint">#384060</color>
+    <color name="tab_active">#6C63FF</color>
+    <color name="tab_inactive">#384060</color>
+    <color name="tab_bg_active">#1A1D35</color>
+    <color name="divider">#252C50</color>
+    <color name="switch_track">#252C50</color>
+    <color name="switch_track_active">#3A3C5A</color>
+
+    <color name="status_connected">#00E676</color>
+    <color name="status_connecting">#FFB300</color>
+    <color name="status_error">#FF6B6B</color>
+
+    <color name="bubble_purple">#141729</color>
+    <color name="bubble_yellow">#6C63FF</color>
+    <color name="wolf_outline">#080A16</color>
 </resources>

@@ -11,63 +11,47 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="18dp"
+        android:paddingTop="24dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.1"
+            android:text="@string/mod_menu_title"
+            android:textColor="@color/text_primary"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/dev_credit_footer"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="18dp"
+            android:background="@drawable/mrdk_divider_gradient" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/license_card_bg"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="24dp">
-
-            <ImageView
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:contentDescription="@string/app_name"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_hivirtus_logo" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/app_name"
-                android:textColor="@color/text_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/dev_credit"
-                android:textColor="@color/gold_primary"
-                android:textSize="11sp"
-                android:textStyle="italic" />
-
-            <TextView
-                android:id="@+id/tvVipStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:visibility="gone"
-                android:text="@string/vip_active"
-                android:textColor="@color/gold_primary"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <View
-                android:layout_width="120dp"
-                android:layout_height="1dp"
-                android:layout_marginTop="14dp"
-                android:background="@color/divider" />
+            android:padding="22dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
                 android:text="@string/permission_section"
-                android:textColor="@color/text_secondary"
+                android:textColor="@color/text_label"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -75,8 +59,8 @@
                 android:id="@+id/tvOverlayStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="@color/text_hint"
+                android:layout_marginTop="10dp"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <com.google.android.material.button.MaterialButton
@@ -85,7 +69,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/open_overlay_settings"
-                android:textColor="@color/gold_primary"
+                android:textColor="@color/accent_primary"
                 android:textSize="12sp" />
 
             <TextView
@@ -93,7 +77,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/text_hint"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <com.google.android.material.button.MaterialButton
@@ -102,7 +86,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/open_notification_settings"
-                android:textColor="@color/gold_primary"
+                android:textColor="@color/accent_primary"
                 android:textSize="12sp" />
 
             <TextView
@@ -110,7 +94,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/text_hint"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <com.google.android.material.button.MaterialButton
@@ -119,14 +103,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/open_sms_settings"
-                android:textColor="@color/gold_primary"
+                android:textColor="@color/accent_primary"
                 android:textSize="12sp" />
 
             <LinearLayout
                 android:id="@+id/miuiSection"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
                 android:orientation="vertical"
                 android:visibility="gone">
 
@@ -134,7 +118,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/miui_section"
-                    android:textColor="@color/gold_primary"
+                    android:textColor="@color/accent_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -143,7 +127,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:textColor="@color/text_hint"
+                    android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -152,7 +136,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/miui_autostart_btn"
-                    android:textColor="@color/gold_primary"
+                    android:textColor="@color/accent_primary"
                     android:textSize="12sp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -161,7 +145,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/miui_battery_btn"
-                    android:textColor="@color/gold_primary"
+                    android:textColor="@color/accent_primary"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -169,10 +153,10 @@
                 android:id="@+id/btnStartOverlay"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="18dp"
                 android:background="@drawable/button_gradient"
                 android:text="@string/start_overlay"
-                android:textColor="@color/button_text_on_gold"
+                android:textColor="@color/button_text_on_accent"
                 app:backgroundTint="@null" />
 
             <com.google.android.material.button.MaterialButton
@@ -182,17 +166,20 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="@string/stop_overlay"
-                android:textColor="@color/gold_primary"
-                app:strokeColor="@color/gold_primary" />
+                android:textColor="@color/accent_primary"
+                app:strokeColor="@color/card_border" />
         </LinearLayout>
 
         <TextView
+            android:id="@+id/tvVipStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/dev_credit_footer"
-            android:textColor="@color/text_hint"
-            android:textSize="11sp" />
+            android:layout_marginTop="14dp"
+            android:text="@string/vip_active"
+            android:textColor="@color/accent_primary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>
