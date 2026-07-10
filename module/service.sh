@@ -186,16 +186,19 @@ sync_config() {
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > /data/local/tmp/hivirtus_telegram_credentials.json
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-      # Save / ui_save change → hamesha test queue (same token pe bhi Save = test)
-      SAVE_MT=$(stat -c %Y /data/local/tmp/hivirtus_ui_save.json 2>/dev/null || echo 0)
-      LAST_MT=$(cat /data/local/tmp/hivirtus_ui_save.mt 2>/dev/null || echo 0)
-      if [ "$NEW_HASH" != "$OLD_HASH" ] || [ "$SAVE_MT" != "$LAST_MT" ]; then
+      # Test ONLY when token/chat hash changes (Save with new/same re-type) — mtime spam band
+      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
         echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-        echo "$SAVE_MT" > /data/local/tmp/hivirtus_ui_save.mt
         echo 1 > /data/local/tmp/hivirtus_tg_test.request
         rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
         echo "tg_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      elif [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
+        # Explicit Save from UI (flag) — one test then clear flag
+        rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
+        echo 1 > /data/local/tmp/hivirtus_tg_test.request
+        chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+        echo "tg_test_queued_save $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       fi
     fi
   fi
@@ -257,13 +260,15 @@ sync_config
 (
   hivirtus_seed_app_writable_files
   hivirtus_seed_app_code_cache
-  # Boot test: pehle se token ho to 🚀 test bhejo (Save ke bina bhi)
-  if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ]; then
+  # Boot test: pehle se token ho to 🚀 test bhejo — SIRF EK BAAR per boot
+  if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+     [ ! -f /data/local/tmp/hivirtus_tg_boot_sent.flag ]; then
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$TG_T" ] && [ -n "$TG_C" ] && [ "$TG_T" != "{" ] && [ ${#TG_T} -gt 10 ]; then
       echo 1 > /data/local/tmp/hivirtus_tg_test.request
       chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+      echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
       echo "tg_boot_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     fi
   fi

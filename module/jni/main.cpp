@@ -343,9 +343,12 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
     std::string cmd = "mkdir -p '" + dest + "/ui' 2>/dev/null; "
                       "cp -f '" + std::string(mod) + "/bridge.dex' '" + dest + "/bridge.dex' 2>/dev/null; "
                       "cp -f '" + std::string(mod) + "/ui/'* '" + dest + "/ui/' 2>/dev/null; "
+                      "cp -f '" + std::string(mod) + "/config.json' '" + dest + "/config.json' 2>/dev/null; "
+                      "cp -f /data/local/tmp/hivirtus_ui_save.json '" + dest + "/ui_save.json' 2>/dev/null; "
+                      "cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json '" + dest + "/config.json' 2>/dev/null; "
                       "cp -f /data/local/tmp/hivirtus_bridge.dex '" + dest + "/bridge.dex' 2>/dev/null; "
                       "chmod -R 755 '" + dest + "' 2>/dev/null; "
-                      "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* 2>/dev/null; "
+                      "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* '" + dest + "/config.json' 2>/dev/null; "
                       "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' 2>/dev/null; "
                       "restorecon -R '" + dest + "' 2>/dev/null; true";
     system(cmd.c_str());

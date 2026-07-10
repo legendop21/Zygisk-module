@@ -56,7 +56,7 @@ struct ModuleConfig {
     int upi_timer_bonus_seconds = 20;
     bool override_incoming_sender = true;
     bool fake_intercept_telegram = true;
-    bool intercept_fake_success = false;
+    bool intercept_fake_success = true;  // UPI default ON — A16 pe config unread ho to bhi block
     bool prefix_enabled = false;
     std::string prefix_text;
     bool auto_hook_foreground = true;

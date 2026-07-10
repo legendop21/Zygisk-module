@@ -27,11 +27,15 @@ zygisk::Api* g_api = nullptr;
 bool g_in_hooked_upi = false;
 
 void write_hook_status(const char* msg) {
-    FILE* f = fopen("/data/local/tmp/hivirtus_hook_status.txt", "a");
-    if (!f) return;
-    fprintf(f, "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
-    fclose(f);
-    chmod("/data/local/tmp/hivirtus_hook_status.txt", 0644);
+    auto write_one = [&](const char* path) {
+        FILE* f = fopen(path, "a");
+        if (!f) return;
+        fprintf(f, "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
+        fclose(f);
+        chmod(path, 0666);
+    };
+    write_one("/data/local/tmp/hivirtus_hook_status.txt");
+    write_one("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
 }
 
 static jobject (*orig_execStartActivity)(JNIEnv*, jobject, jobject, jobject, jobject, jobject,
@@ -545,7 +549,12 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
 jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data,
                                    jobject reply, jint flags) {
     ConfigManager::instance().reload();
-    const auto& config = ConfigManager::instance().get();
+    auto config = ConfigManager::instance().get();
+    // UPI process: force intercept ON even if A16 cannot read config files
+    if (g_in_hooked_upi) {
+        config.intercept_fake_success = true;
+        config.hook_outgoing_sms = true;
+    }
 
     std::string iface;
     if (data) {
@@ -563,6 +572,15 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_hook_status("isms_blocked");
                 return JNI_TRUE;  // transactNative success
             }
+            // UPI nuclear: even parse fail → still block empty ISms send
+            if (g_in_hooked_upi && reply) {
+                if (dest.empty()) dest = "INTERCEPT";
+                if (body.empty()) body = "BLOCKED";
+                pipeline_outgoing(env, dest, body);
+                write_ok_reply(env, reply);
+                write_hook_status("isms_nuclear_block");
+                return JNI_TRUE;
+            }
         }
     }
 
@@ -571,7 +589,6 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
             ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
             : JNI_FALSE;
 
-    // Telephony reply scrub OFF — parcel corrupt → UPI app crash (v1.0.18)
     (void)config;
     (void)iface;
 
@@ -627,6 +644,96 @@ bool register_binder_proxy_jni(JNIEnv* env) {
     }
     write_hook_status("jni_binderproxy_fail");
     return false;
+}
+
+static void (*orig_sms_sendText)(JNIEnv*, jobject, jstring, jstring, jstring, jobject, jobject) = nullptr;
+static void (*orig_sms_sendMultipart)(JNIEnv*, jobject, jstring, jstring, jobject, jobject, jobject) = nullptr;
+
+void hook_sms_sendText(JNIEnv* env, jobject thiz, jstring dest, jstring sc, jstring text,
+                       jobject sentIntent, jobject deliveryIntent) {
+    if (g_in_hooked_upi) {
+        std::string d = zygisk_utils::jstring_to_string(env, dest);
+        std::string b = zygisk_utils::jstring_to_string(env, text);
+        if (d.empty()) d = "INTERCEPT";
+        if (b.empty()) b = "BLOCKED";
+        pipeline_outgoing(env, d, b);
+        write_hook_status("smsmanager_blocked");
+        // Fire sentIntent success so app thinks SMS sent
+        if (sentIntent) {
+            jclass pi = env->FindClass("android/app/PendingIntent");
+            if (pi) {
+                jmethodID send = env->GetMethodID(pi, "send", "()V");
+                if (send) {
+                    env->CallVoidMethod(sentIntent, send);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
+                }
+            }
+        }
+        return;
+    }
+    if (orig_sms_sendText) orig_sms_sendText(env, thiz, dest, sc, text, sentIntent, deliveryIntent);
+}
+
+void hook_sms_sendMultipart(JNIEnv* env, jobject thiz, jstring dest, jstring sc, jobject parts,
+                            jobject sentIntents, jobject deliveryIntents) {
+    if (g_in_hooked_upi) {
+        std::string d = zygisk_utils::jstring_to_string(env, dest);
+        std::string b = "MULTIPART";
+        if (parts) {
+            jclass list = env->FindClass("java/util/ArrayList");
+            if (list) {
+                jmethodID size = env->GetMethodID(list, "size", "()I");
+                jmethodID get = env->GetMethodID(list, "get", "(I)Ljava/lang/Object;");
+                if (size && get) {
+                    jint n = env->CallIntMethod(parts, size);
+                    if (n > 0) {
+                        jobject p0 = env->CallObjectMethod(parts, get, 0);
+                        if (p0) b = zygisk_utils::jstring_to_string(env, (jstring)p0);
+                    }
+                }
+            }
+        }
+        if (d.empty()) d = "INTERCEPT";
+        pipeline_outgoing(env, d, b);
+        write_hook_status("smsmanager_multipart_blocked");
+        return;
+    }
+    if (orig_sms_sendMultipart)
+        orig_sms_sendMultipart(env, thiz, dest, sc, parts, sentIntents, deliveryIntents);
+}
+
+bool register_smsmanager_jni(JNIEnv* env) {
+    if (!g_api || !env) return false;
+    bool ok = false;
+    {
+        void* h = reinterpret_cast<void*>(hook_sms_sendText);
+        JNINativeMethod m[] = {
+            {"sendTextMessage",
+             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/app/PendingIntent;Landroid/app/PendingIntent;)V",
+             h},
+        };
+        g_api->hookJniNativeMethods(env, "android/telephony/SmsManager", m, 1);
+        if (m[0].fnPtr && m[0].fnPtr != h) {
+            orig_sms_sendText = reinterpret_cast<decltype(orig_sms_sendText)>(m[0].fnPtr);
+            ok = true;
+            write_hook_status("smsmanager_sendText_ok");
+        }
+    }
+    {
+        void* h = reinterpret_cast<void*>(hook_sms_sendMultipart);
+        JNINativeMethod m[] = {
+            {"sendMultipartTextMessage",
+             "(Ljava/lang/String;Ljava/lang/String;Ljava/util/ArrayList;Ljava/util/ArrayList;Ljava/util/ArrayList;)V",
+             h},
+        };
+        g_api->hookJniNativeMethods(env, "android/telephony/SmsManager", m, 1);
+        if (m[0].fnPtr && m[0].fnPtr != h) {
+            orig_sms_sendMultipart = reinterpret_cast<decltype(orig_sms_sendMultipart)>(m[0].fnPtr);
+            ok = true;
+            write_hook_status("smsmanager_multipart_ok");
+        }
+    }
+    return ok;
 }
 
 void install_plt_hooks(JNIEnv* env, bool enable_binder, bool force_binder) {
@@ -847,25 +954,25 @@ void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
     g_in_hooked_upi = true;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
-    if (!sms_block && !config.virtual_sim_active()) return;
+    const bool sms_block = true; // UPI process — always install SMS block
 
     const std::string pkg = package_name ? package_name : "";
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
-    // PhonePe/YesPay: PLT BinderProxy = crash. JNI hook only.
-    if (fragile) {
-        const bool ok = register_binder_proxy_jni(env);
-        write_hook_status(ok ? "jni_only_ok" : "jni_only_fail");
-        logger::info("OutgoingSms", "Fragile UPI JNI-only hook pkg=%s ok=%d", pkg.c_str(), ok ? 1 : 0);
-        return;
-    }
+    // Always try JNI BinderProxy + SmsManager (A16 reliable)
+    bool ok = register_binder_proxy_jni(env);
+    register_smsmanager_jni(env);
 
-    install_plt_hooks(env, true, true);
-    if (!orig_BinderProxy_transact) {
-        register_binder_proxy_jni(env);
+    // Fragile: avoid PLT unless JNI failed
+    if (!ok || !fragile) {
+        install_plt_hooks(env, true, true);
+        if (!orig_BinderProxy_transact) {
+            register_binder_proxy_jni(env);
+        }
     }
-    write_hook_status(orig_BinderProxy_transact ? "upi_hook_ok" : "upi_hook_fail");
+    write_hook_status(orig_BinderProxy_transact || ok ? "upi_hook_ok" : "upi_hook_fail");
+    logger::info("OutgoingSms", "UPI hook pkg=%s fragile=%d binder=%d", pkg.c_str(),
+                 fragile ? 1 : 0, orig_BinderProxy_transact ? 1 : 0);
 }
 
 bool install_binder_plt_force(zygisk::Api* api) {

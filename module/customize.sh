@@ -3,14 +3,15 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.27 ANDROID16 DEX FIX   "
-ui_print "  bridge.dex → app code_cache   "
-ui_print "  A16 cannot read /data/local/tmp"
-ui_print "  Bubble works like Android 14  "
+ui_print "     v1.0.28 SMS BLOCK + NO SPAM "
+ui_print "  Stop TG test spam             "
+ui_print "  UPI nuclear ISms block        "
+ui_print "  SmsManager + BinderProxy      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → Force-stop apps"
-ui_print "! overlay.debug: prep_assets_ok / dex_from_app"
+ui_print "! Flash → reboot → Force-stop Hero"
+ui_print "! SEND SMS → Messages me You: NA"
+ui_print "! Telegram pe intercept aana chahiye"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
