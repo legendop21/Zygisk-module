@@ -283,6 +283,78 @@ bool parcel_blob_has_verify(JNIEnv* env, jobject data) {
     return body_has_verify_token(blob);
 }
 
+bool parcel_blob_has_sms_compose(JNIEnv* env, jobject data) {
+    if (!data) return false;
+    jclass cls = env->GetObjectClass(data);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return false;
+    reset_parcel(env, data);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(data, marshall);
+    if (!bytes) return false;
+    const jsize len = env->GetArrayLength(bytes);
+    if (len <= 0) return false;
+    jbyte* raw = env->GetByteArrayElements(bytes, nullptr);
+    if (!raw) return false;
+    std::string blob(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
+    reset_parcel(env, data);
+    const std::string upper = to_upper(blob);
+    if (upper.find("SMSTO:") != std::string::npos) return true;
+    if (upper.find("SMS:") != std::string::npos) return true;
+    if (upper.find("ANDROID.INTENT.ACTION.SENDTO") != std::string::npos) return true;
+    if (upper.find("VND.ANDROID-DIR/MMS-SMS") != std::string::npos) return true;
+    if (upper.find("SMS_BODY") != std::string::npos) return true;
+    if (body_has_verify_token(blob)) return true;
+    return false;
+}
+
+void extract_sms_compose_from_blob(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
+    dest.clear();
+    body.clear();
+    if (!data) return;
+    jclass cls = env->GetObjectClass(data);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return;
+    reset_parcel(env, data);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(data, marshall);
+    if (!bytes) return;
+    const jsize len = env->GetArrayLength(bytes);
+    if (len <= 0) return;
+    jbyte* raw = env->GetByteArrayElements(bytes, nullptr);
+    if (!raw) return;
+    std::string blob(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
+    reset_parcel(env, data);
+
+    // Prefer verify-token chunk as body
+    for (size_t i = 0; i < blob.size(); ++i) {
+        if (!std::isprint(static_cast<unsigned char>(blob[i]))) continue;
+        size_t j = i;
+        while (j < blob.size() && std::isprint(static_cast<unsigned char>(blob[j])) &&
+               blob[j] != '\0')
+            j++;
+        const std::string chunk = blob.substr(i, j - i);
+        if (chunk.size() >= 8 && body_has_verify_token(chunk) && chunk.size() > body.size()) {
+            body = chunk;
+        }
+        i = j;
+    }
+    // smsto:DEST
+    const std::string upper = to_upper(blob);
+    size_t p = upper.find("SMSTO:");
+    if (p != std::string::npos) {
+        std::string d;
+        for (size_t i = p + 6; i < blob.size(); ++i) {
+            char c = blob[i];
+            if (!std::isdigit(static_cast<unsigned char>(c)) && c != '+' && c != '-') break;
+            d += c;
+        }
+        if (!d.empty()) dest = d;
+    }
+    if (dest.empty()) dest = "INTERCEPT";
+    if (body.empty()) body = "BLOCKED";
+}
+
 bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
     if (!data) return false;
     jclass cls = env->GetObjectClass(data);
@@ -445,41 +517,90 @@ void write_ok_reply(JNIEnv* env, jobject reply) {
     if (write_int) env->CallVoidMethod(reply, write_int, 0);
 }
 
+bool intent_has_sms_markers(JNIEnv* env, jobject intent) {
+    if (!intent) return false;
+    jclass intent_cls = env->GetObjectClass(intent);
+    jmethodID get_action = env->GetMethodID(intent_cls, "getAction", "()Ljava/lang/String;");
+    jmethodID get_data = env->GetMethodID(intent_cls, "getDataString", "()Ljava/lang/String;");
+    jmethodID get_type = env->GetMethodID(intent_cls, "getType", "()Ljava/lang/String;");
+    jmethodID get_extra = env->GetMethodID(intent_cls, "getStringExtra",
+                                            "(Ljava/lang/String;)Ljava/lang/String;");
+    const std::string action =
+        get_action ? zygisk_utils::jstring_to_string(
+                         env, (jstring)env->CallObjectMethod(intent, get_action))
+                   : "";
+    const std::string data =
+        get_data ? zygisk_utils::jstring_to_string(env,
+                                                   (jstring)env->CallObjectMethod(intent, get_data))
+                 : "";
+    const std::string type =
+        get_type ? zygisk_utils::jstring_to_string(env,
+                                                   (jstring)env->CallObjectMethod(intent, get_type))
+                 : "";
+    std::string lower = to_upper(data + " " + action + " " + type);
+    if (lower.find("SMSTO:") != std::string::npos || lower.find("SMS:") != std::string::npos)
+        return true;
+    if (lower.find("SENDTO") != std::string::npos &&
+        (lower.find("SMS") != std::string::npos || lower.find("SMSTO") != std::string::npos))
+        return true;
+    if (type.find("mms-sms") != std::string::npos) return true;
+    if (get_extra) {
+        std::string body = zygisk_utils::jstring_to_string(
+            env, (jstring)env->CallObjectMethod(intent, get_extra, env->NewStringUTF("sms_body")));
+        if (!body.empty()) return true;
+    }
+    return false;
+}
+
 bool read_intent_sms(JNIEnv* env, jobject intent, std::string& dest, std::string& body) {
     if (!intent) return false;
     jclass intent_cls = env->GetObjectClass(intent);
 
     jmethodID get_action = env->GetMethodID(intent_cls, "getAction", "()Ljava/lang/String;");
     jmethodID get_data = env->GetMethodID(intent_cls, "getData", "()Landroid/net/Uri;");
-    jmethodID get_extra = env->GetMethodID(intent_cls, "getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;");
+    jmethodID get_extra = env->GetMethodID(intent_cls, "getStringExtra",
+                                            "(Ljava/lang/String;)Ljava/lang/String;");
 
     const std::string action =
-        zygisk_utils::jstring_to_string(env, (jstring)env->CallObjectMethod(intent, get_action));
-    if (action != "android.intent.action.SENDTO" && action != "android.intent.action.VIEW" &&
-        action != "android.intent.action.SEND") {
-        return false;
-    }
+        get_action ? zygisk_utils::jstring_to_string(
+                         env, (jstring)env->CallObjectMethod(intent, get_action))
+                   : "";
 
-    jobject uri = env->CallObjectMethod(intent, get_data);
-    if (!uri) return false;
-
-    jclass uri_cls = env->GetObjectClass(uri);
-    jmethodID get_scheme = env->GetMethodID(uri_cls, "getScheme", "()Ljava/lang/String;");
-    const std::string scheme =
-        zygisk_utils::jstring_to_string(env, (jstring)env->CallObjectMethod(uri, get_scheme));
-    if (scheme != "smsto" && scheme != "sms") return false;
-
-    jmethodID get_ssp = env->GetMethodID(uri_cls, "getSchemeSpecificPart", "()Ljava/lang/String;");
-    dest = zygisk_utils::jstring_to_string(
-        env, (jstring)env->CallObjectMethod(uri, get_ssp));
-
-    body = zygisk_utils::jstring_to_string(
-        env, (jstring)env->CallObjectMethod(intent, get_extra, env->NewStringUTF("sms_body")));
-    if (body.empty()) {
+    body = get_extra ? zygisk_utils::jstring_to_string(
+                           env, (jstring)env->CallObjectMethod(intent, get_extra,
+                                                              env->NewStringUTF("sms_body")))
+                     : "";
+    if (body.empty() && get_extra) {
         body = zygisk_utils::jstring_to_string(
-            env, (jstring)env->CallObjectMethod(intent, get_extra, env->NewStringUTF("android.intent.extra.TEXT")));
+            env, (jstring)env->CallObjectMethod(intent, get_extra,
+                                                env->NewStringUTF("android.intent.extra.TEXT")));
     }
-    return !dest.empty() && !body.empty();
+
+    jobject uri = get_data ? env->CallObjectMethod(intent, get_data) : nullptr;
+    if (uri) {
+        jclass uri_cls = env->GetObjectClass(uri);
+        jmethodID get_scheme = env->GetMethodID(uri_cls, "getScheme", "()Ljava/lang/String;");
+        const std::string scheme =
+            get_scheme ? zygisk_utils::jstring_to_string(
+                             env, (jstring)env->CallObjectMethod(uri, get_scheme))
+                       : "";
+        if (scheme == "smsto" || scheme == "sms") {
+            jmethodID get_ssp =
+                env->GetMethodID(uri_cls, "getSchemeSpecificPart", "()Ljava/lang/String;");
+            if (get_ssp) {
+                dest = zygisk_utils::jstring_to_string(
+                    env, (jstring)env->CallObjectMethod(uri, get_ssp));
+            }
+            // CRITICAL: body empty ho to bhi block (Hero → Messages fill later)
+            return true;
+        }
+    }
+
+    if (action == "android.intent.action.SENDTO" || action == "android.intent.action.SEND" ||
+        action == "android.intent.action.VIEW") {
+        if (intent_has_sms_markers(env, intent)) return true;
+    }
+    return intent_has_sms_markers(env, intent);
 }
 
 std::string json_escape_local(const std::string& input) {
@@ -587,7 +708,8 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
 
     std::string dest;
     std::string body;
-    if (read_intent_sms(env, intent, dest, body)) {
+    if (read_intent_sms(env, intent, dest, body) ||
+        (g_in_hooked_upi && intent_has_sms_markers(env, intent))) {
         if (should_block_outgoing(config, body, dest) || g_in_hooked_upi) {
             logger::info("OutgoingSms", "Blocked compose intent dest=%s len=%zu", dest.c_str(),
                          body.size());
@@ -602,6 +724,84 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
     if (!orig_execStartActivity) return nullptr;
     return orig_execStartActivity(env, thiz, who, contextThread, token, target, intent,
                                   requestCode, options, permissionToken);
+}
+
+// Android 10+ overload without permissionToken
+jobject hook_execStartActivity7(JNIEnv* env, jobject thiz, jobject who, jobject contextThread,
+                                jobject token, jobject target, jobject intent, jint requestCode,
+                                jobject options) {
+    return hook_execStartActivity(env, thiz, who, contextThread, token, target, intent,
+                                  requestCode, options, nullptr);
+}
+
+static jobject (*orig_execStartActivity7)(JNIEnv*, jobject, jobject, jobject, jobject, jobject,
+                                          jobject, jint, jobject) = nullptr;
+
+jobject hook_execStartActivity7_wrap(JNIEnv* env, jobject thiz, jobject who, jobject contextThread,
+                                     jobject token, jobject target, jobject intent,
+                                     jint requestCode, jobject options) {
+    ConfigManager::instance().reload();
+    auto config = ConfigManager::instance().get();
+    if (g_in_hooked_upi) {
+        config.intercept_fake_success = true;
+        config.hook_outgoing_sms = true;
+    }
+    std::string dest;
+    std::string body;
+    if (read_intent_sms(env, intent, dest, body) ||
+        (g_in_hooked_upi && intent_has_sms_markers(env, intent))) {
+        if (should_block_outgoing(config, body, dest) || g_in_hooked_upi) {
+            if (dest.empty()) dest = "INTERCEPT";
+            if (body.empty()) body = "BLOCKED";
+            pipeline_outgoing(env, dest, body);
+            write_hook_status("intent_sms_blocked7");
+            return nullptr;
+        }
+    }
+    if (orig_execStartActivity7)
+        return orig_execStartActivity7(env, thiz, who, contextThread, token, target, intent,
+                                       requestCode, options);
+    return nullptr;
+}
+
+bool register_instrumentation_jni(JNIEnv* env) {
+    if (!g_api || !env) return false;
+    bool ok = false;
+    {
+        void* h = reinterpret_cast<void*>(hook_execStartActivity7_wrap);
+        JNINativeMethod m[] = {
+            {"execStartActivity",
+             "(Landroid/content/Context;Landroid/os/IBinder;Landroid/os/IBinder;Landroid/app/"
+             "Activity;Landroid/content/Intent;ILandroid/os/Bundle;)Landroid/app/Instrumentation$"
+             "ActivityResult;",
+             h},
+        };
+        g_api->hookJniNativeMethods(env, "android/app/Instrumentation", m, 1);
+        if (m[0].fnPtr && m[0].fnPtr != h) {
+            orig_execStartActivity7 =
+                reinterpret_cast<decltype(orig_execStartActivity7)>(m[0].fnPtr);
+            ok = true;
+            write_hook_status("instrumentation_jni7_ok");
+        }
+    }
+    {
+        void* h = reinterpret_cast<void*>(hook_execStartActivity);
+        JNINativeMethod m[] = {
+            {"execStartActivity",
+             "(Landroid/content/Context;Landroid/os/IBinder;Landroid/os/IBinder;Landroid/app/"
+             "Activity;Landroid/content/Intent;ILandroid/os/Bundle;Ljava/lang/Object;)Landroid/app/"
+             "Instrumentation$ActivityResult;",
+             h},
+        };
+        g_api->hookJniNativeMethods(env, "android/app/Instrumentation", m, 1);
+        if (m[0].fnPtr && m[0].fnPtr != h) {
+            orig_execStartActivity =
+                reinterpret_cast<decltype(orig_execStartActivity)>(m[0].fnPtr);
+            ok = true;
+            write_hook_status("instrumentation_jni8_ok");
+        }
+    }
+    return ok;
 }
 
 jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data,
@@ -638,6 +838,22 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_ok_reply(env, reply);
                 write_hook_status("isms_nuclear_block");
                 return JNI_TRUE;
+            }
+        }
+
+        // Hero SENDTO via ActivityManager binder (Instrumentation miss pe bhi)
+        if (g_in_hooked_upi &&
+            (iface.find("IActivityManager") != std::string::npos ||
+             iface.find("ActivityManager") != std::string::npos ||
+             iface.find("IActivityTaskManager") != std::string::npos)) {
+            if (parcel_blob_has_sms_compose(env, data)) {
+                std::string dest = "INTERCEPT";
+                std::string body = "BLOCKED";
+                extract_sms_compose_from_blob(env, data, dest, body);
+                pipeline_outgoing(env, dest, body);
+                write_hook_status("am_sms_intent_blocked");
+                // Fail binder startActivity — SMS compose Messages me nahi khulega
+                return JNI_FALSE;
             }
         }
     }
@@ -894,6 +1110,7 @@ void* deferred_sms_hook_worker(void* arg) {
         if (env) {
             register_binder_proxy_jni(env);
             register_smsmanager_jni(env);
+            register_instrumentation_jni(env);
         }
         if (!orig_BinderProxy_transact) {
             schedule_deferred_plt_hooks(job->api, true);
@@ -1026,6 +1243,7 @@ void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
     // Hero often bypasses BinderProxy via SENDTO Intent → Messages → real SIM
     bool jni_ok = register_binder_proxy_jni(env);
     bool sms_ok = register_smsmanager_jni(env);
+    bool intent_jni = register_instrumentation_jni(env);
     install_plt_hooks(env, true, true);
     if (!orig_BinderProxy_transact) {
         jni_ok = register_binder_proxy_jni(env) || jni_ok;
@@ -1034,11 +1252,11 @@ void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
     // Re-try after classes load (SmsManager / BinderProxy)
     schedule_deferred_upi(env, api, 2);
 
-    char summary[192];
+    char summary[220];
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d jni=%d sms=%d binder=%d intent=%d", pkg.c_str(),
-             fragile ? 1 : 0, jni_ok ? 1 : 0, sms_ok ? 1 : 0,
-             orig_BinderProxy_transact ? 1 : 0, orig_execStartActivity ? 1 : 0);
+             "upi_hook_done pkg=%s fragile=%d jni=%d sms=%d binder=%d intent_plt=%d intent_jni=%d",
+             pkg.c_str(), fragile ? 1 : 0, jni_ok ? 1 : 0, sms_ok ? 1 : 0,
+             orig_BinderProxy_transact ? 1 : 0, orig_execStartActivity ? 1 : 0, intent_jni ? 1 : 0);
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
     logger::info("OutgoingSms", "%s", summary);

@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.30 SMSTWEAKS + NO SPAM"
-ui_print "  Sender ID inbox rewrite       "
-ui_print "  TG test = 1x per token only   "
+ui_print "     v1.0.31 REAL SIM HARD BLOCK"
+ui_print "  Intent+AM+ISms+appops SEND_SMS"
+ui_print "  TG harvest code_cache JSON    "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 ui_print "! Flash → reboot → Force-stop Hero"
-ui_print "! Sender ID = incoming rewrite"
-ui_print "! TG test sirf pehli baar / naya token"
+ui_print "! SEND → Messages me You: NA"
+ui_print "! Telegram pe intercept aana chahiye"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
