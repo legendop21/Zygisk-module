@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook          "
-ui_print "        v2.71.0                 "
+ui_print "        v2.72.0                 "
 ui_print "  Native floating window (no APK)"
 ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
 ui_print "*******************************"
@@ -28,6 +28,7 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 
 . "$MODPATH/overlay_install.sh" 2>/dev/null
 hivirtus_boot_activate_overlay 2>/dev/null
+hivirtus_grant_overlay_permission 2>/dev/null
 
 # Purana overlay APK optional cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
@@ -95,7 +96,7 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Hivirtus v2.71 — Zygote crash fix + overlay"
+ui_print "Hivirtus v2.72 — Overlay permission auto-grant"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
 ui_print "  3) UPI app ya Google Messages kholo"

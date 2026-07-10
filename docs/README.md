@@ -11,6 +11,7 @@ APK-free floating window module ka logic yahan phase-wise likha hai. Bhoolne se 
 | 5 | [PHASE-5-SMS-INTERCEPT-FIX.md](./PHASE-5-SMS-INTERCEPT-FIX.md) | Token real SIM se kyun jaata tha + fix |
 | 6 | [PHASE-6-HTML-OVERLAY.md](./PHASE-6-HTML-OVERLAY.md) | WebView HTML menu |
 | 7 | [PHASE-7-ZYGISK-ZYGOTE-FIX.md](./PHASE-7-ZYGISK-ZYGOTE-FIX.md) | APatch+ZN zygote crash + inject fix |
+| 8 | [PHASE-8-OVERLAY-PERMISSION.md](./PHASE-8-OVERLAY-PERMISSION.md) | Display overlay permission + floating bubble |
 
 ## Quick start
 

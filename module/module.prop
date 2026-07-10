@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.71.0
-versionCode=27100
+version=v2.72.0
+versionCode=27200
 author=@hivirtus
-description=Zygote crash fix APatch+ZN. Whitelist inject, phone SMS hooks, JNI fix. HTML overlay @Hivirtus
+description=Auto overlay permission + floating bubble on display. Zygote fix, SMS intercept, HTML menu @Hivirtus
 zygisk=1

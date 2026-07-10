@@ -84,6 +84,7 @@ if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2
   pm uninstall com.hivirtus.zygiskmode 2>/dev/null || true
 fi
 hivirtus_boot_activate_overlay
+hivirtus_grant_overlay_permission
 
 # Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
 HIDE_ROOT=$(read_bool "hide_root")
