@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Mode
-version=v2.18.0
-versionCode=51
+version=v3.0.0-clean
+versionCode=1
 author=@hivirtus
-description=Zygisk Base Mode By @Hivirtus
+description=Fresh start — awaiting implementation
 zygisk=1
