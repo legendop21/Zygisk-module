@@ -120,7 +120,7 @@
       return;
     }
     if (note === "tg_saved") {
-      el.textContent = "saved · Telegram ready (test 1x if new token)";
+      el.textContent = "saved · global (all apps) · TG test soon";
       el.style.color = "var(--green)";
       return;
     }
