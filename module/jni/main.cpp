@@ -320,10 +320,9 @@ public:
 
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
-            if (!config.virtual_sim_active()) {
-                outgoing_sms_hook::install(env_, api_, false, false, true);
-                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
-            }
+            // Mock SIM ON par bhi UPI me ISms block — virtual_sim binder fail ho to fallback
+            outgoing_sms_hook::install(env_, api_, false, false, true);
+            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
             logger::info("Hivirtus", "Outgoing SMS block in %s", process_name_.c_str());
         }
 

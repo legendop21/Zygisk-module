@@ -81,9 +81,9 @@ void* deferred_binder_worker(void* arg) {
         sleep(1);
     }
     if (!ok && job && job->api) {
-        logger::info("VirtualSim", "Binder PLT failed — fallback outgoing ISms hook in %s",
+        logger::info("VirtualSim", "Binder PLT failed — force outgoing ISms hook in %s",
                      g_process.c_str());
-        outgoing_sms_hook::install(nullptr, job->api, false, false, true);
+        outgoing_sms_hook::install_binder_plt_force(job->api);
     }
     delete job;
     return nullptr;

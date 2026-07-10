@@ -23,6 +23,7 @@ object OutgoingSmsGuard {
         "com.kreditbee.android",
         "com.mobikwik_new",
         "net.one97.paytm",
+        "com.fampay.in",
         "com.phonepe.app",
         "com.google.android.apps.nbu.paisa.user",
         "com.stashfin.android",
@@ -67,20 +68,42 @@ object OutgoingSmsGuard {
     }
 
     private fun blockMessagingSend() {
-        val packages = messagingPackages + listOf(
+        val scopePkgs = readHookedScopePackages()
+        val packages = listOf(
             "com.android.phone",
             "com.android.providers.telephony"
-        ) + upiSmsSenders
+        ) + upiSmsSenders + scopePkgs
         packages.distinct().forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS deny 2>/dev/null")
         }
     }
 
+    private fun readHookedScopePackages(): List<String> {
+        val paths = listOf(
+            "/data/local/tmp/hivirtus_hooked_pkgs.txt",
+            "/data/local/tmp/hivirtus_active_upi_all.txt",
+            "/data/local/tmp/hivirtus_active_hook_pkg.txt"
+        )
+        val out = mutableListOf<String>()
+        paths.forEach { path ->
+            try {
+                val f = File(path)
+                if (!f.canRead()) return@forEach
+                f.readLines().forEach { line ->
+                    val pkg = line.trim()
+                    if (pkg.isNotBlank() && pkg.contains('.')) out.add(pkg)
+                }
+            } catch (_: Exception) {}
+        }
+        return out
+    }
+
     private fun restoreMessagingSend() {
-        val packages = messagingPackages + listOf(
+        val scopePkgs = readHookedScopePackages()
+        val packages = listOf(
             "com.android.phone",
             "com.android.providers.telephony"
-        ) + upiSmsSenders
+        ) + upiSmsSenders + scopePkgs
         packages.distinct().forEach { pkg ->
             ShellHelper.runSu("appops set $pkg SEND_SMS allow 2>/dev/null")
         }

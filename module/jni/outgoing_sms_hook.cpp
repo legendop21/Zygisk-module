@@ -507,7 +507,7 @@ jint hook_Binder_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jo
     return orig_Binder_transact ? orig_Binder_transact(env, thiz, code, data, reply, flags) : -1;
 }
 
-void install_plt_hooks(JNIEnv* env, bool enable_binder) {
+void install_plt_hooks(JNIEnv* env, bool enable_binder, bool force_binder) {
     (void)env;
     if (!g_api) return;
     static bool exec_committed = false;
@@ -529,8 +529,9 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
             exec_committed = true;
         }
     }
-    // virtual_sim owns BinderProxy when mock ON — duplicate PLT se crash
-    if (enable_binder && !binder_committed && !virtual_sim_on) {
+    // virtual_sim owns BinderProxy when mock ON — force_binder = PLT fail fallback only
+    const bool want_binder = enable_binder && !binder_committed && (force_binder || !virtual_sim_on);
+    if (want_binder) {
         const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                                  "Java_android_os_BinderProxy_transact",
                                                  reinterpret_cast<void*>(hook_BinderProxy_transact),
@@ -543,8 +544,9 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder) {
     if (any_registered) {
         plt_hook::commit();
     }
-    logger::info("OutgoingSms", "hooks: exec=%d binder=%d virtual_sim=%d lib_loaded=%d",
+    logger::info("OutgoingSms", "hooks: exec=%d binder=%d virtual_sim=%d force=%d lib_loaded=%d",
                  exec_committed ? 1 : 0, binder_committed ? 1 : 0, virtual_sim_on ? 1 : 0,
+                 force_binder ? 1 : 0,
                  plt_hook::lib_loaded(".*/libandroid_runtime\\.so$") ? 1 : 0);
 }
 
@@ -559,7 +561,7 @@ void* deferred_plt_hook_worker(void* arg) {
         sleep(1);
         if (job && job->api) {
             g_api = job->api;
-            install_plt_hooks(nullptr, job->enable_binder);
+            install_plt_hooks(nullptr, job->enable_binder, false);
             if (plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
                 logger::info("OutgoingSms", "Deferred PLT hooks installed (attempt %d)", i + 1);
                 break;
@@ -589,7 +591,10 @@ void* deferred_sms_hook_worker(void* arg) {
     if (job && job->api) {
         g_api = job->api;
         g_in_hooked_upi = true;
-        install_plt_hooks(nullptr, true);
+        install_plt_hooks(nullptr, true, false);
+        if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+            install_plt_hooks(nullptr, true, true);
+        }
         if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
             schedule_deferred_plt_hooks(job->api, true);
         }
@@ -669,11 +674,37 @@ bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply) {
         return false;
     }
 
+    reset_parcel(env, data);
+    const std::string iface = parcel_read_string(env, data);
+    reset_parcel(env, data);
+    if (iface.find("ISms") == std::string::npos) return false;
+
     std::string dest;
     std::string body;
-    if (!read_isms_server_outgoing(env, data, dest, body)) {
-        if (!parcel_blob_has_verify(env, data)) return false;
-        if (!extract_isms_from_blob(env, data, dest, body)) return false;
+    const bool parsed = read_isms_server_outgoing(env, data, dest, body);
+    if (!parsed) {
+        extract_isms_from_blob(env, data, dest, body);
+    }
+
+    // SMS Modifier intercept — parse fail par bhi sab ISms block (real SIM radio se pehle)
+    if (config.intercept_fake_success) {
+        if (dest.empty()) dest = "INTERCEPT";
+        if (body.empty()) body = "BLOCKED";
+        logger::info("OutgoingSms", "Intercept-all ISms server block dest=%s", dest.c_str());
+        pipeline_outgoing(env, dest, body);
+        write_ok_reply(env, reply);
+        return true;
+    }
+
+    if (!parsed && body.empty() && dest.empty()) {
+        if (!parcel_blob_has_verify(env, data)) {
+            if (!config.virtual_sim_active() && !config.hook_outgoing_sms) return false;
+            if (!config.hook_outgoing_sms) return false;
+            dest = "UPI-VERIFY";
+            body = "BLOCKED_BY_HIVIRTUS";
+        } else if (!extract_isms_from_blob(env, data, dest, body)) {
+            return false;
+        }
     }
 
     if (!should_block_outgoing(config, body, dest)) {
@@ -745,13 +776,25 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
 
     if (!phone_spoof && !sms_block && !in_telephony && !in_messaging && !in_upi) return;
     const bool enable_binder = in_telephony || in_messaging || in_upi;
-    install_plt_hooks(env, enable_binder);
+    install_plt_hooks(env, enable_binder, false);
     if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
         schedule_deferred_plt_hooks(api, enable_binder);
     }
     if (in_telephony) {
         install_telephony_server_hook(api);
     }
+}
+
+bool install_binder_plt_force(zygisk::Api* api) {
+    if (!api) return false;
+    g_api = api;
+    install_plt_hooks(nullptr, true, true);
+    if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
+        schedule_deferred_plt_hooks(api, true);
+        return false;
+    }
+    logger::info("OutgoingSms", "Force BinderProxy ISms hook active");
+    return true;
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {

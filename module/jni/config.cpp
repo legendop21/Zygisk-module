@@ -193,6 +193,27 @@ bool is_active_hook_package(const std::string& package) {
     return !active.empty() && active == package;
 }
 
+bool package_in_scope_list(const std::string& package) {
+    if (package.empty()) return false;
+    static const char* files[] = {
+        "/data/local/tmp/hivirtus_hooked_pkgs.txt",
+        "/data/local/tmp/hivirtus_active_upi_all.txt",
+        nullptr};
+    for (const char** path = files; *path; ++path) {
+        const std::string content = read_file(*path);
+        if (content.empty()) continue;
+        size_t start = 0;
+        while (start < content.size()) {
+            size_t end = content.find('\n', start);
+            if (end == std::string::npos) end = content.size();
+            const std::string line = trim(content.substr(start, end - start));
+            if (line == package) return true;
+            start = end + 1;
+        }
+    }
+    return false;
+}
+
 bool is_explicitly_hooked(const ModuleConfig& config, const std::string& package) {
     if (config.hooked_upi_apps.empty()) return false;
     const auto star = config.hooked_upi_apps.find("*");
@@ -404,11 +425,10 @@ bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     if (upi_registry::is_module_own_app(package)) return false;
     if (!upi_registry::is_sms_hook_target(package)) return false;
 
+    // LSPosed-style scope — sirf selected / active hooked apps
     if (is_explicitly_hooked(*this, package)) return true;
     if (is_active_hook_package(package)) return true;
-
-    const bool sms_features = virtual_sim_active() || hook_outgoing_sms || intercept_fake_success;
-    if (sms_features) return true;
+    if (package_in_scope_list(package)) return true;
 
     return false;
 }

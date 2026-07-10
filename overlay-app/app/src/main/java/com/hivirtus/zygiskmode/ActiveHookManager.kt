@@ -92,7 +92,7 @@ object ActiveHookManager {
     fun isSelectedHooked(config: ModuleConfig, pkg: String): Boolean {
         if (pkg.isBlank()) return false
         if (config.hookedUpiApps[pkg] == true) return true
-        return UpiAppRegistry.findByPackage(pkg) != null
+        return readActivePackage() == pkg
     }
 
     fun persistAllSelected(packages: Collection<String>) {
@@ -107,6 +107,20 @@ object ActiveHookManager {
             ShellHelper.runSu(
                 "printf '%s' '$payload' > /data/local/tmp/hivirtus_active_upi_all.txt && " +
                     "chmod 644 /data/local/tmp/hivirtus_active_upi_all.txt"
+            )
+        }
+    }
+
+    fun persistHookedScope(packages: Collection<String>) {
+        val list = packages.filter { it.isNotBlank() }.distinct()
+        if (list.isEmpty()) return
+        val payload = list.joinToString("\n")
+        try {
+            File("/data/local/tmp/hivirtus_hooked_pkgs.txt").writeText(payload)
+        } catch (_: Exception) {
+            ShellHelper.runSu(
+                "printf '%s' '$payload' > /data/local/tmp/hivirtus_hooked_pkgs.txt && " +
+                    "chmod 644 /data/local/tmp/hivirtus_hooked_pkgs.txt"
             )
         }
     }

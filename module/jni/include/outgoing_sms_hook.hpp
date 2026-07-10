@@ -22,4 +22,7 @@ bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply);
 
 void install_telephony_server_hook(zygisk::Api* api);
 
+/** virtual_sim binder PLT fail — force BinderProxy hook (duplicate skip if already live). */
+bool install_binder_plt_force(zygisk::Api* api);
+
 }  // namespace outgoing_sms_hook

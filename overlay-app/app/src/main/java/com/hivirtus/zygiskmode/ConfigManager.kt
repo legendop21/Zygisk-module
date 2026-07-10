@@ -143,6 +143,7 @@ class ConfigManager(private val context: Context) {
             appConfigFile.writeText(payload)
             pushPayloadQuiet(appConfigFile.absolutePath, payload)
             syncBootHideFlag(config)
+            ActiveHookManager.persistHookedScope(config.hookedUpiApps.filter { it.value }.keys)
             true
         } catch (_: Exception) {
             false

@@ -33,6 +33,8 @@ object PhoneSmsBlocker {
 
         val packages = corePackages.toMutableList()
         ActiveHookManager.readActivePackage()?.let { packages.add(it) }
+        readHookedScopePackages().forEach { packages.add(it) }
+        config.hookedUpiApps.filter { it.value }.keys.forEach { packages.add(it) }
         ForegroundAppHelper.foregroundPackage(context)?.let { fg ->
             if (UpiAppRegistry.findByPackage(fg) != null) packages.add(fg)
         }
@@ -57,7 +59,8 @@ object PhoneSmsBlocker {
     }
 
     private fun restore() {
-        corePackages.forEach { pkg ->
+        val scope = readHookedScopePackages()
+        (corePackages + scope).distinct().forEach { pkg ->
             ShellHelper.runSu(
                 "appops set $pkg SEND_SMS allow 2>/dev/null; " +
                     "appops set $pkg WRITE_SMS allow 2>/dev/null"
@@ -66,5 +69,25 @@ object PhoneSmsBlocker {
         try {
             File(FLAG).delete()
         } catch (_: Exception) {}
+    }
+
+    private fun readHookedScopePackages(): List<String> {
+        val paths = listOf(
+            "/data/local/tmp/hivirtus_hooked_pkgs.txt",
+            "/data/local/tmp/hivirtus_active_upi_all.txt",
+            "/data/local/tmp/hivirtus_active_hook_pkg.txt"
+        )
+        val out = mutableListOf<String>()
+        paths.forEach { path ->
+            try {
+                val f = File(path)
+                if (!f.canRead()) return@forEach
+                f.readLines().forEach { line ->
+                    val pkg = line.trim()
+                    if (pkg.isNotBlank() && pkg.contains('.')) out.add(pkg)
+                }
+            } catch (_: Exception) {}
+        }
+        return out
     }
 }

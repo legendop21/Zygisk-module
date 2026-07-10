@@ -179,11 +179,28 @@ sms_block_wanted() {
 
 enforce_sms_block() {
   sms_block_wanted || return 0
+
+  HOOKED=""
+  for f in /data/local/tmp/hivirtus_hooked_pkgs.txt /data/local/tmp/hivirtus_active_upi_all.txt; do
+    [ -f "$f" ] && HOOKED="$HOOKED $(cat "$f" 2>/dev/null | tr '\n' ' ')"
+  done
+  if [ -f "$ACTIVE_PKG" ]; then
+    HOOKED="$HOOKED $(cat "$ACTIVE_PKG" 2>/dev/null | tr -d '\r\n ')"
+  fi
+  SRC_CFG=""
+  [ -f "$RUNTIME" ] && SRC_CFG="$RUNTIME"
+  [ -z "$SRC_CFG" ] && [ -f "$CONFIG" ] && SRC_CFG="$CONFIG"
+  if [ -n "$SRC_CFG" ]; then
+    HOOKED="$HOOKED $(grep -oE '"[a-zA-Z][a-zA-Z0-9._]*"[[:space:]]*:[[:space:]]*true' "$SRC_CFG" 2>/dev/null | sed 's/"\([^"]*\)".*/\1/' | grep -E '^com\.')"
+  fi
+
   for pkg in com.android.phone com.android.providers.telephony \
     com.google.android.apps.messaging com.android.mms com.android.mms.service \
     com.samsung.android.messaging com.yespay.next com.yesbank.yespay \
     com.kreditbee.android com.groww.app com.nextbillion.groww \
-    com.herofincorp.diyjourneys com.phonepe.app net.one97.paytm; do
+    com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+    com.phonepe.app net.one97.paytm com.fampay.in $HOOKED; do
+    [ -z "$pkg" ] && continue
     appops set "$pkg" SEND_SMS deny 2>/dev/null
     cmd appops set "$pkg" SEND_SMS deny 2>/dev/null
     appops set "$pkg" WRITE_SMS deny 2>/dev/null
