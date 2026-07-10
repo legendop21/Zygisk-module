@@ -54,9 +54,9 @@ Verify SMS block → outgoing_sms_hook.cpp
 /data/local/tmp/hivirtus_outgoing_blocked.json
         ↓
 service.sh (har 2 sec) → curl → Telegram
-        ↓
-Firebase (agar enabled) → sender phone auto SMS
 ```
+
+**Firebase auto-relay removed (v2.69+)** — sirf local Telegram + manual SMS.
 
 ## Banking apps (YesPay etc.)
 

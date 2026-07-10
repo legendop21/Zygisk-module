@@ -115,7 +115,6 @@ class OverlayService : Service() {
         if (showBubble) {
             bubbleManager.show()
         }
-        AutoTokenSenderService.sync(this)
     }
 
     private fun registerReceivers() {

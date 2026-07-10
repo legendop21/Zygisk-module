@@ -44,14 +44,6 @@ To: +91...
 Message: YESAMAZONUPI token...
 ```
 
-## Firebase auto-token
-
-Sender phone pe bhi **APK optional** tha — ab config se:
-
-`/data/local/tmp/hivirtus_firebase_autotoken.json`
-
-Native overlay menu future me expand hoga; abhi shell + manual JSON.
-
 ## Useful commands
 
 ```bash

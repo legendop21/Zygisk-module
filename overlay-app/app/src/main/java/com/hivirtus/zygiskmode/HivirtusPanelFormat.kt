@@ -1,28 +1,10 @@
 package com.hivirtus.zygiskmode
 
-import java.security.SecureRandom
-
-/** Hivirtus panel / Telegram message format. */
+/** Hivirtus Telegram message format. */
 object HivirtusPanelFormat {
 
     const val BRANDING = "Hivirtus Zygisk Mode By @hivirtus @liqdy 🔥"
     const val HANDLE = "@hivirtus @liqdy"
-
-    private const val DEVICE_ID_LEN = 7
-    private val ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
-    private val random = SecureRandom()
-
-    /** 7-char ID — hivxxxx format */
-    fun generateDeviceId(): String {
-        val suffix = (1..4).map { ID_CHARS[random.nextInt(ID_CHARS.length)] }.joinToString("")
-        return "hiv$suffix"
-    }
-
-    fun isValidDeviceId(id: String): Boolean {
-        val trimmed = id.trim().lowercase()
-        return trimmed.length in 6..8 &&
-            (trimmed.startsWith("hiv") || trimmed.all { it.isLowerCase() || it.isDigit() })
-    }
 
     fun formatDest(dest: String): String {
         val raw = dest.trim()

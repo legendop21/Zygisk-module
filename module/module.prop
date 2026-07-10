@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.68.0
-versionCode=26800
+version=v2.69.0
+versionCode=26900
 author=@hivirtus
-description=Native floating overlay (no APK), SMS block, mock SIM, local shell Telegram. APatch + Zygisk Next @Hivirtus @Liqdy
+description=Native floating overlay, SMS block, mock SIM, local Telegram only. No Firebase relay. APatch + Zygisk Next @Hivirtus @Liqdy
 zygisk=1

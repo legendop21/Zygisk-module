@@ -39,7 +39,6 @@ Default: **ON** (v2.68+)
 | Feature | APK (purana) | Native (ab) |
 |---------|--------------|---------------|
 | Bubble | WindowManager global | UPI Activity ke andar |
-| Firebase panel | Full UI | Config file se |
 | Mock SIM field | Text field | config.json edit |
 | Telegram verify | Button | config.json + shell |
 

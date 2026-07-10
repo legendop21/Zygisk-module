@@ -20,7 +20,6 @@ class HivirtusApp : Application() {
                 cm.captureRealPhoneIfMissing()
             }
             HookScopeBootstrap.applyAllUpiHooks(this, cm)
-            AutoTokenSenderService.sync(this)
         } catch (_: Exception) {
         }
     }

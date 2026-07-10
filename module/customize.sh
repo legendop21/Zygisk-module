@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook          "
-ui_print "        v2.68.0                 "
+ui_print "        v2.69.0                 "
 ui_print "  Native floating window (no APK)"
 ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
 ui_print "*******************************"
