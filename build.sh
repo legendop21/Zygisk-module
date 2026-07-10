@@ -107,7 +107,7 @@ build_bridge_dex() {
 
   mkdir -p "$out"
   javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" \
-    "$src_dir/HivirtusJsBridge.java" "$src_dir/HivirtusUiHelper.java" || return 0
+    "$src_dir/HivirtusJsBridge.java" "$src_dir/LogoAsset.java" "$src_dir/HivirtusUiHelper.java" || return 0
 
   local classes=()
   while IFS= read -r -d '' f; do classes+=("$f"); done < <(find "$out" -name '*.class' -print0)

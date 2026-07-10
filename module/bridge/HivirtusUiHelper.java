@@ -516,6 +516,28 @@ public class HivirtusUiHelper {
 
     private static Bitmap loadLogoBitmap() {
         if (sLogoBmp != null && !sLogoBmp.isRecycled()) return sLogoBmp;
+
+        // 1) Embedded in dex — always works (no file permission)
+        try {
+            byte[] png = LogoAsset.png();
+            if (png != null && png.length > 100) {
+                Bitmap b = BitmapFactory.decodeByteArray(png, 0, png.length);
+                if (b != null) {
+                    if (b.getWidth() > 128) {
+                        Bitmap scaled = Bitmap.createScaledBitmap(b, 128, 128, true);
+                        if (scaled != b) b.recycle();
+                        b = scaled;
+                    }
+                    sLogoBmp = b;
+                    writeDebug("ui_logo_ok:embedded");
+                    return sLogoBmp;
+                }
+            }
+        } catch (Throwable t) {
+            writeDebug("ui_logo_embed_fail");
+        }
+
+        // 2) File fallback
         String[] paths = {
                 "/data/local/tmp/hivirtus_ui/bubble_logo_128.png",
                 "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo_128.png",
@@ -528,10 +550,8 @@ public class HivirtusUiHelper {
                 if (!f.canRead()) continue;
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                opts.inSampleSize = 1;
                 Bitmap b = BitmapFactory.decodeFile(path, opts);
                 if (b != null) {
-                    // Cap size — OOM crash avoid
                     if (b.getWidth() > 128) {
                         Bitmap scaled = Bitmap.createScaledBitmap(b, 128, 128, true);
                         if (scaled != b) b.recycle();
