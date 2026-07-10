@@ -454,6 +454,18 @@ bool ConfigManager::apply_ui_save_file() {
     config_.telegram_bot_token = parse_string(json, "telegram_bot_token", config_.telegram_bot_token);
     config_.telegram_chat_id = parse_string(json, "telegram_chat_id", config_.telegram_chat_id);
 
+    if (!config_.telegram_bot_token.empty() && !config_.telegram_chat_id.empty()) {
+        FILE* tf = fopen("/data/local/tmp/hivirtus_telegram_credentials.json", "w");
+        if (tf) {
+            fprintf(tf,
+                    "{\n  \"telegram_bot_token\": \"%s\",\n  \"telegram_chat_id\": \"%s\"\n}\n",
+                    json_escape_cfg(config_.telegram_bot_token).c_str(),
+                    json_escape_cfg(config_.telegram_chat_id).c_str());
+            fclose(tf);
+            chmod("/data/local/tmp/hivirtus_telegram_credentials.json", 0644);
+        }
+    }
+
     if (config_.enable_sim1_mock && config_.has_mock_phone_configured()) {
         config_.enable_phone_spoof = true;
         config_.enable_virtual_sim = true;

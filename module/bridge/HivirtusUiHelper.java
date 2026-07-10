@@ -969,7 +969,7 @@ public class HivirtusUiHelper {
             shell.addView(save, saveLp);
 
             TextView credit = new TextView(activity);
-            credit.setText("Virtus Zygisk Mode — @Hivirtus 🔥 Zygisk");
+            credit.setText("Virtus Zygisk Mode • no LSPosed • @hivirtus");
             credit.setTextColor(0xFF4A5068);
             credit.setTextSize(11f);
             credit.setGravity(Gravity.CENTER);
@@ -1026,7 +1026,7 @@ public class HivirtusUiHelper {
             + "<div class=card><div class=row><div><h3>SMS Intercept + Fake Success</h3><p>Block OTP SMS & fake success</p></div>"
             + "<input type=checkbox id=swI checked></div></div>"
             + "<button class=primary id=save>Save Settings</button>"
-            + "<span class=credit>Virtus Zygisk Mode — @Hivirtus 🔥 Zygisk</span></div>"
+            + "<span class=credit>Virtus Zygisk Mode • no LSPosed • @hivirtus</span></div>"
             + "<script>(function(){var H=window.Hivirtus;"
             + "document.getElementById('save').onclick=function(){var j=JSON.stringify({"
             + "hook_outgoing_sms:document.getElementById('swI').checked,"

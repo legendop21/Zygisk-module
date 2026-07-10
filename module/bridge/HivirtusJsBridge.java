@@ -70,6 +70,24 @@ public class HivirtusJsBridge {
             }
             String sid = merged.optString("inject_sender_id", "");
             if ("AD-TEST-S".equals(sid)) merged.put("inject_sender_id", "");
+
+            // Telegram — dedicated creds file for service.sh forwarder
+            if (merged.optBoolean("auto_forward_token", false)
+                    || merged.optBoolean("telegram_enabled", false)
+                    || merged.optBoolean("fake_intercept_telegram", false)) {
+                merged.put("auto_forward_token", true);
+                merged.put("fake_intercept_telegram", true);
+                merged.put("telegram_enabled", true);
+            }
+            String tgToken = merged.optString("telegram_bot_token", "").trim();
+            String tgChat = merged.optString("telegram_chat_id", "").trim();
+            if (!tgToken.isEmpty() && !tgChat.isEmpty()) {
+                String creds = "{\n  \"telegram_bot_token\": \"" + tgToken.replace("\"", "")
+                        + "\",\n  \"telegram_chat_id\": \"" + tgChat.replace("\"", "")
+                        + "\"\n}\n";
+                writeUtf8("/data/local/tmp/hivirtus_telegram_credentials.json", creds);
+            }
+
             writeUtf8(RUNTIME_CFG, merged.toString(2));
             writeUtf8(SAVE_PATH, merged.toString(2));
         } catch (Exception e) {
