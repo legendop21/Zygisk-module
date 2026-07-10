@@ -120,6 +120,16 @@ class OverlayMenuController(
             appContext.getString(R.string.autotoken_sim_numbers_partial, sim1.ifBlank { "—" })
         }
         updateFirebaseRoleVisibility(fb.role)
+        updateFirebasePanelStatus(fb)
+    }
+
+    private fun updateFirebasePanelStatus(fb: FirebaseAutoTokenStore.Config) {
+        menu.tvFirebasePanelStatus.text = when {
+            fb.dbUrl.isBlank() -> appContext.getString(R.string.autotoken_panel_not_connected)
+            fb.panelLabel.isNotBlank() && fb.enabled ->
+                appContext.getString(R.string.autotoken_panel_connected, fb.panelLabel)
+            else -> appContext.getString(R.string.autotoken_panel_tap_verify)
+        }
     }
 
     private fun updateFirebaseRoleVisibility(role: FirebaseAutoTokenStore.Role) {
@@ -491,16 +501,26 @@ class OverlayMenuController(
                 if (ok) R.string.autotoken_verified else R.string.autotoken_verify_failed,
                 Toast.LENGTH_LONG
             )
+            if (ok) {
+                val fb = withContext(Dispatchers.IO) { FirebaseAutoTokenStore.load(appContext) }
+                menu.tvFirebasePanelStatus.text = appContext.getString(
+                    R.string.autotoken_panel_connected,
+                    fb.panelLabel
+                )
+            }
             refreshStatus()
         }
     }
 
     private fun registerFirebaseDevice(): Boolean {
-        val config = FirebaseAutoTokenStore.load(appContext)
+        var config = FirebaseAutoTokenStore.load(appContext)
         if (config.dbUrl.isBlank() || config.deviceId.isBlank()) return false
-        val ok = FirebaseDeviceRegistry.register(appContext, config)
-        if (ok) AutoTokenSenderService.sync(appContext)
-        return ok
+        val result = FirebaseDeviceRegistry.connectAndRegister(appContext, config)
+        if (!result.connected) return false
+        config = FirebasePanelDetector.applyToConfig(config, result.layout)
+        FirebaseAutoTokenStore.save(appContext, config)
+        AutoTokenSenderService.sync(appContext)
+        return true
     }
 
     private fun flushMockSimOnClose() {

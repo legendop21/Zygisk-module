@@ -593,10 +593,19 @@
                     </LinearLayout>
 
                     <TextView
+                        android:id="@+id/tvFirebasePanelStatus"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/autotoken_gian_hint"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/autotoken_panel_tap_verify"
+                        android:textColor="@color/status_connecting"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/autotoken_panel_hint"
                         android:textColor="@color/text_hint"
                         android:textSize="10sp" />
 

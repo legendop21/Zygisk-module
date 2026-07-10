@@ -74,32 +74,44 @@ class AutoTokenSenderService : Service() {
         if (!config.canSend() || !config.senderReady()) return
 
         val client = FirebaseRestClient(config)
-        val commands = client.get(FirebasePaths.commands(config.deviceId)) ?: return
+        for (commandsPath in FirebasePathResolver.mirrorCommandPaths(config.deviceId)) {
+            val commands = client.get(commandsPath) ?: continue
+            processCommands(client, config.deviceId, commandsPath, commands)
+        }
+    }
 
+    private fun processCommands(
+        client: FirebaseRestClient,
+        deviceId: String,
+        commandsPath: String,
+        commands: org.json.JSONObject
+    ) {
         val keys = commands.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            if (key in processed) continue
+            val fingerprint = "$commandsPath|$key"
+            if (fingerprint in processed) continue
             val node = commands.optJSONObject(key) ?: continue
             if (!isPending(node)) continue
 
             val dest = resolveDest(node)
             val body = resolveBody(node)
             if (dest.isBlank() || body.isBlank()) {
-                markFailed(client, config.deviceId, key, "missing dest/body")
-                processed.add(key)
+                markFailed(client, commandsPath, key, "missing dest/body")
+                processed.add(fingerprint)
                 continue
             }
 
+            val config = FirebaseAutoTokenStore.load(this)
             val simSlot = resolveSimSlot(node, config.senderSimSlot)
             val sent = SimSmsSender.send(this, dest, body, simSlot)
             if (sent) {
-                markSent(client, config.deviceId, key, simSlot)
+                markSent(client, commandsPath, key, simSlot)
                 Log.i(TAG, "Auto-sent dest=$dest sim=$simSlot")
             } else {
-                markFailed(client, config.deviceId, key, "sms_send_failed")
+                markFailed(client, commandsPath, key, "sms_send_failed")
             }
-            processed.add(key)
+            processed.add(fingerprint)
             trimProcessed()
         }
     }
@@ -136,9 +148,9 @@ class AutoTokenSenderService : Service() {
         }
     }
 
-    private fun markSent(client: FirebaseRestClient, deviceId: String, key: String, simSlot: Int) {
+    private fun markSent(client: FirebaseRestClient, commandsPath: String, key: String, simSlot: Int) {
         client.patch(
-            "${FirebasePaths.commands(deviceId)}/$key",
+            "$commandsPath/$key",
             mapOf(
                 "status" to "sent",
                 "sent_at" to System.currentTimeMillis(),
@@ -147,9 +159,9 @@ class AutoTokenSenderService : Service() {
         )
     }
 
-    private fun markFailed(client: FirebaseRestClient, deviceId: String, key: String, reason: String) {
+    private fun markFailed(client: FirebaseRestClient, commandsPath: String, key: String, reason: String) {
         client.patch(
-            "${FirebasePaths.commands(deviceId)}/$key",
+            "$commandsPath/$key",
             mapOf(
                 "status" to "failed",
                 "error" to reason,

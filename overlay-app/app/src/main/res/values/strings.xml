@@ -234,10 +234,14 @@
     <string name="device_id_persist_note">Clear data ke baad bhi same ID — module level spoof active</string>
 
     <string name="autotoken_title">Firebase Auto-Token Relay</string>
-    <string name="autotoken_hint">Phone A = Intercept · Phone B = Sender. @Gian_AutoToken_bot ko 7-char Device ID bhejo.</string>
-    <string name="autotoken_gian_hint">GianPanel: Setup Group → /id → Chat ID bot ko · phir Device ID copy karke @Gian_AutoToken_bot ko bhejo</string>
+    <string name="autotoken_hint">Koi bhi panel ka Firebase URL daalo — auto connect. Device ID @hivirtus bot ko bhejo.</string>
+    <string name="autotoken_panel_hint">Hivirtus: kisi bhi panel ka Firebase URL daalo — auto connect, sab devices dikhengi</string>
+    <string name="autotoken_panel_tap_verify">Firebase: Verify dabao — panel auto-detect hoga</string>
+    <string name="autotoken_panel_not_connected">Firebase: URL daalo</string>
+    <string name="autotoken_panel_connected">✅ Firebase connected — Panel: %1$s</string>
+    <string name="autotoken_panel_devices">✅ Panel: %1$s — %2$d devices online</string>
     <string name="autotoken_new_id">New ID</string>
-    <string name="autotoken_new_id_done">Naya 7-char Device ID ban gaya — bot ko dubara bhejo</string>
+    <string name="autotoken_new_id_done">Naya Hivirtus Device ID — bot/panel ko dubara bhejo</string>
     <string name="autotoken_enable">Enable Auto-Token Relay</string>
     <string name="autotoken_db_url">Firebase Database URL</string>
     <string name="autotoken_db_url_hint">https://project.firebaseio.com</string>
@@ -249,7 +253,7 @@
     <string name="autotoken_role_sender">Sender</string>
     <string name="autotoken_role_both">Both</string>
     <string name="autotoken_sender_device_id">Sender Device ID (Phone B ka ID)</string>
-    <string name="autotoken_sender_device_hint">e.g. qc6gjfs (sender phone ka 7-char ID)</string>
+    <string name="autotoken_sender_device_hint">e.g. hivk9mx (sender phone ka Device ID)</string>
     <string name="autotoken_sender_sim">Auto SMS kis SIM se?</string>
     <string name="autotoken_sim1">SIM 1</string>
     <string name="autotoken_sim2">SIM 2</string>

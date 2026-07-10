@@ -73,6 +73,36 @@ class FirebaseRestClient(private val config: FirebaseAutoTokenStore.Config) {
         }
     }
 
+    fun getShallow(path: String): JSONObject? {
+        val url = shallowEndpoint(path)
+        val request = Request.Builder().url(url).get().build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val text = response.body?.string().orEmpty()
+                if (text == "null" || text.isBlank()) return JSONObject()
+                JSONObject(text)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getShallow error: ${e.message}")
+            null
+        }
+    }
+
+    fun testConnection(): Boolean = getShallow("") != null || getShallow("devices") != null
+
+    private fun shallowEndpoint(path: String): String {
+        val base = normalizeDbUrl(config.dbUrl)
+        val cleanPath = path.trim().trim('/')
+        val pathPart = if (cleanPath.isBlank()) "" else "/$cleanPath"
+        val auth = if (config.dbAuthSecret.isNotBlank()) {
+            "&auth=${config.dbAuthSecret.trim()}"
+        } else {
+            ""
+        }
+        return "$base$pathPart.json?shallow=true$auth"
+    }
+
     fun get(path: String): JSONObject? {
         val url = endpoint(path)
         val request = Request.Builder().url(url).get().build()
