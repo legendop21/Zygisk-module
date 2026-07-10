@@ -69,10 +69,14 @@ object HookEngine {
         PhoneSmsBlocker.enforce(context.applicationContext)
         HookStatusBarManager(context.applicationContext).refresh()
 
+        val enforceList = ZygiskEnforceRegistry.enforceListForPackage(targetPkg)
+        Log.i(TAG, "Zygisk Enforce (copy to Zygisk Next):\n${ZygiskEnforceRegistry.formatForCopy(enforceList)}")
+
         Log.i(TAG, "Hooked $display ($targetPkg) phone=$phone")
         return ActiveHookManager.HookResult(
             true, targetPkg, display,
-            "$display hooked — app dubara kholo (SIM mock active)"
+            "$display hooked — Zygisk Next Enforce me ye packages add karo:\n" +
+                ZygiskEnforceRegistry.formatForCopy(enforceList)
         )
     }
 

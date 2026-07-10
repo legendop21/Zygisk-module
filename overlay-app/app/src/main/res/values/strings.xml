@@ -38,7 +38,9 @@
     <string name="permission_overlay_ok">✅ Overlay: Allowed — bubble active</string>
     <string name="bubble_always_on">Bubble active — tap logo to open menu</string>
     <string name="intercept_sender_hint">Sender ID</string>
-    <string name="set_verify_number_first">SYSTEM me Verify Number daalo — app registered (+919520752078)</string>
+    <string name="set_verify_number_first">SYSTEM me Verify Number daalo — app login wala number (e.g. 8279999125)</string>
+    <string name="mock_sim_single_sim_hint">1 SIM phone: Mock number = app login number. Real SIM phone me rahegi — app ko mock dikhega. Verify SMS block → token Telegram → Messages se manually bhejo.</string>
+    <string name="zygisk_enforce_hint">Zygisk Next → Enforce: com.android.phone + Messages + jo UPI app use karo (START HOOK ke baad list dikhegi)</string>
     <string name="set_sender_id_first">Pehle Sender ID daalo MESSAGE tab me</string>
     <string name="sender_id_saved">Sender ID saved — intercept pe bilkul wahi dikhega</string>
     <string name="permission_overlay_missing">❌ Overlay: NOT allowed — bubble ke liye zaroori</string>
