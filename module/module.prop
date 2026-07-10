@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.74.0
-versionCode=27400
+version=v0.0.0-clean
+versionCode=1
 author=@hivirtus
-description=Left floating bubble + full HTML menu on OTP/UPI screen. Reference UI style @Hivirtus
+description=Clean slate — nayi zip user instructions ke baad build hogi. @Hivirtus
 zygisk=1

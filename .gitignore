@@ -4,18 +4,7 @@
 /.ndk/
 /.android/
 *.zip
-!releases/*.zip
-*.so
-*.o
-
-# Android
-/overlay-app/.gradle/
-/overlay-app/build/
-/overlay-app/app/build/
-/overlay-app/local.properties
-/overlay-app/.idea/
 *.apk
-!releases/*.apk
 *.aab
 
 # IDE
