@@ -6,7 +6,6 @@
 #include "upi_registry.hpp"
 #include "sender_spoof.hpp"
 #include "phone_number_hook.hpp"
-#include "root_hide.hpp"
 
 #include <ctime>
 #include <cstdio>
@@ -18,10 +17,11 @@
 
 namespace {
 
-// v1.0.1 SAFE MODE:
-// - NEVER inject into com.android.phone / telephony / launcher / systemui
-//   (ye SIM gayab + screen flicker + phone apps crash karte the)
-// - Sirf known UPI/banking apps: ISms client block + number spoof + floating bubble
+// v1.0.18 CRASH-SAFE:
+// - No root_hide in postSpecialize (KernelSU+HMA pe crash)
+// - No immediate BinderProxy/PLT (YesPay/GPay instant crash)
+// - Only deferred SMS + soft overlay
+// - Phone/sender hooks only when enabled, deferred
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
@@ -57,7 +57,6 @@ bool is_dangerous_process(const std::string& process) {
     for (const char** p = kNever; *p; ++p) {
         if (process == *p) return true;
     }
-    // Process name with suffix: com.android.phone:ui
     if (process.rfind("com.android.phone:", 0) == 0) return true;
     if (process.rfind("com.android.settings:", 0) == 0) return true;
     if (process.rfind("com.android.providers.telephony:", 0) == 0) return true;
@@ -96,6 +95,10 @@ bool sender_spoof_wanted(const ModuleConfig& config) {
     return !id.empty() && id != "AD-TEST-S";
 }
 
+bool is_yespay(const std::string& pkg) {
+    return pkg.find("yespay") != std::string::npos || pkg.find("yesbank") != std::string::npos;
+}
+
 struct DeferredOverlayJob {
     JavaVM* vm = nullptr;
     zygisk::Api* api = nullptr;
@@ -132,6 +135,41 @@ void schedule_overlay_ui(JNIEnv* env, zygisk::Api* api, const std::string& pkg, 
     pthread_detach(t);
 }
 
+struct DeferredSenderJob {
+    JavaVM* vm = nullptr;
+    zygisk::Api* api = nullptr;
+    std::string pkg;
+    int delay_sec = 5;
+};
+
+void* deferred_sender_worker(void* arg) {
+    auto* job = static_cast<DeferredSenderJob*>(arg);
+    if (job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
+    if (job->vm && job->api) {
+        JNIEnv* env = nullptr;
+        if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
+            sender_spoof::install(env, job->api, job->pkg.c_str());
+            job->vm->DetachCurrentThread();
+        }
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_sender(JNIEnv* env, zygisk::Api* api, const std::string& pkg, int delay_sec) {
+    if (!env || !api) return;
+    JavaVM* vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK || !vm) return;
+    auto* job = new DeferredSenderJob();
+    job->vm = vm;
+    job->api = api;
+    job->pkg = pkg;
+    job->delay_sec = delay_sec;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_sender_worker, job);
+    pthread_detach(t);
+}
+
 class VirtusModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api* api, JNIEnv* env) override {
@@ -144,7 +182,6 @@ public:
         process_name_ = process ? process : "";
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
-        // Fast unload — phone/SIM/launcher/system kabhi load mat karo
         if (is_dangerous_process(process_name_) ||
             upi_registry::is_module_own_app(process_name_) ||
             !upi_registry::is_sms_hook_target(process_name_)) {
@@ -170,63 +207,53 @@ public:
             return;
         }
 
+        // Minimal work first — crash se pehle log
         logger::init(config.log_file);
         mark_active();
         append_diag("/data/local/tmp/hivirtus_inject.log",
                     ("safe_inject:" + process_name_).c_str());
 
-        // Promote HTML Save → runtime config before installing hooks
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
         const auto& live = ConfigManager::instance().get();
 
-        // Anti-detect — KernelSU/Magisk/su path hide (UPI apps only)
-        if (live.hide_root || live.hide_kernelsu || live.hide_magisk || live.hide_all_root_apps) {
-            root_hide::install(env_, live, api_);
-            logger::info("Virtus", "root_hide armed in %s", process_name_.c_str());
-        }
+        // root_hide DISABLED in v1.0.18 — KernelSU+HMA+banking pe crash
+        // (hide via Zygisk Next Unmount Only + HMA-OSS instead)
 
         const bool sms_block = live.hook_outgoing_sms || live.intercept_fake_success;
         const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
                                  live.enable_sim1_mock;
         const bool want_sender = sender_spoof_wanted(live);
-        const int delay = upi_registry::hook_startup_delay_sec(process_name_);
         const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
+        const bool yespay = is_yespay(process_name_);
 
-        // SMS intercept — immediate + short deferred (5–8s pehle late tha, SMS nikal jati thi)
+        // SMS — ONLY deferred (immediate PLT = YesPay/GPay crash)
         if (sms_block) {
-            outgoing_sms_hook::install(env_, api_, false, false, true);
-            const int sms_delay = fragile ? 2 : 1;
+            int sms_delay = 4;
+            if (fragile) sms_delay = 8;
+            if (yespay) sms_delay = 12;
             outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            logger::info("Virtus", "ISms intercept armed in %s delay=%d",
-                         process_name_.c_str(), sms_delay);
-            FILE* hf = fopen("/data/local/tmp/hivirtus_inject.log", "a");
-            if (hf) {
-                fprintf(hf, "isms_arm:%s delay=%d\n", process_name_.c_str(), sms_delay);
-                fclose(hf);
-            }
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("isms_deferred:" + process_name_ + " d=" + std::to_string(sms_delay)).c_str());
         }
 
-        // Fake phone number — UPI-process TelephonyManager JNI only (NO phone/radio)
-        // Hooks always installed; spoof_active() gates return value after Save
-        phone_number_hook::install(env_, api_, process_name_.c_str());
-        phone_number_hook::schedule_deferred_install(
-            env_, api_, process_name_.c_str(), fragile ? 6 : (delay > 0 ? delay : 2));
+        // Phone spoof — only if user enabled, deferred
         if (phone_spoof) {
-            logger::info("Virtus", "Phone spoof armed in %s", process_name_.c_str());
+            const int ph_delay = yespay ? 14 : (fragile ? 10 : 6);
+            phone_number_hook::schedule_deferred_install(
+                env_, api_, process_name_.c_str(), ph_delay);
         }
 
-        // Incoming sender ID spoof — SmsMessage JNI in UPI process only
-        sender_spoof::install(env_, api_, process_name_.c_str());
+        // Sender ID — only if enabled, deferred
         if (want_sender) {
-            logger::info("Virtus", "Sender spoof armed in %s -> %s",
-                         process_name_.c_str(), live.inject_sender_id.c_str());
+            const int sd = yespay ? 14 : (fragile ? 10 : 5);
+            schedule_sender(env_, api_, process_name_, sd);
         }
 
-        // Bubble after app UI settle — sab apps pe 2s
+        // Bubble — after UI settle
         if (native_overlay_wanted()) {
-            schedule_overlay_ui(env_, api_, process_name_, 2);
-            logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
+            const int ov = yespay ? 5 : (fragile ? 3 : 2);
+            schedule_overlay_ui(env_, api_, process_name_, ov);
         }
 
         touch_heartbeat();
@@ -234,7 +261,6 @@ public:
 
     void postServerSpecialize(const zygisk::ServerSpecializeArgs* args) override {
         (void)args;
-        // system_server — kabhi hook mat karo
         api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
     }
 

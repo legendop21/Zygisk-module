@@ -571,12 +571,9 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
             ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
             : JNI_FALSE;
 
-    // UPI-only: spoof getLine1Number / subscriber replies (NOT phone process)
-    if (result == JNI_TRUE && reply && !iface.empty() &&
-        (config.virtual_sim_active() || config.enable_phone_spoof || config.enable_sim1_mock) &&
-        telephony_spoof::should_spoof_binder_iface(iface)) {
-        telephony_spoof::handle_binder_reply(env, data, reply, iface);
-    }
+    // Telephony reply scrub OFF — parcel corrupt → UPI app crash (v1.0.18)
+    (void)config;
+    (void)iface;
 
     return result;
 }
@@ -615,12 +612,13 @@ bool register_binder_proxy_plt() {
 
 bool register_binder_proxy_jni(JNIEnv* env) {
     if (!g_api || !env) return false;
+    void* our_hook = reinterpret_cast<void*>(hook_BinderProxy_transact);
     JNINativeMethod methods[] = {
-        {"transactNative", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
-         reinterpret_cast<void*>(hook_BinderProxy_transact)},
+        {"transactNative", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", our_hook},
     };
     g_api->hookJniNativeMethods(env, "android/os/BinderProxy", methods, 1);
-    if (methods[0].fnPtr) {
+    // CRITICAL: agar method na mile to fnPtr == our_hook reh sakta hai → infinite recurse → crash
+    if (methods[0].fnPtr && methods[0].fnPtr != our_hook) {
         orig_BinderProxy_transact =
             reinterpret_cast<decltype(orig_BinderProxy_transact)>(methods[0].fnPtr);
         logger::info("OutgoingSms", "JNI BinderProxy.transactNative hooked");
