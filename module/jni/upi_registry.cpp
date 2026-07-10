@@ -250,10 +250,32 @@ bool is_launcher_package(const std::string& package) {
     return false;
 }
 
+bool is_default_sms_app(const std::string& package) {
+    if (package.empty()) return false;
+    static const char* kSms[] = {
+        "com.google.android.apps.messaging",
+        "com.samsung.android.messaging",
+        "com.android.messaging",
+        "com.google.android.apps.messaging.auto",
+        "com.motorola.messaging",
+        "com.oneplus.mms",
+        "com.coloros.mms",
+        nullptr,
+    };
+    for (const char** p = kSms; *p; ++p) {
+        if (package == *p) return true;
+    }
+    return false;
+}
+
 bool is_denied_hook_package(const std::string& package) {
     if (package.empty()) return true;
 
-    // NEVER allow phone/telephony/settings/messaging — SIM + Settings crash
+    // EXCEPTION: default SMS apps — Hero/UPI SENDTO → Messages → real SIM.
+    // Must hook ISms here or intercept never works.
+    if (is_default_sms_app(package)) return false;
+
+    // NEVER phone/telephony/settings — SIM + Settings crash
     static const char* kDenyExact[] = {
         "com.android.phone",
         "com.android.providers.telephony",
@@ -263,8 +285,6 @@ bool is_denied_hook_package(const std::string& package) {
         "com.android.keychain",
         "com.android.mms",
         "com.android.mms.service",
-        "com.google.android.apps.messaging",
-        "com.samsung.android.messaging",
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",
         "com.samsung.android.dialer",
@@ -276,7 +296,7 @@ bool is_denied_hook_package(const std::string& package) {
     for (const char** name = kDenyExact; *name; ++name) {
         if (package == *name) return true;
     }
-    if (is_launcher_package(package)) return true;  // launcher bhi mat hook
+    if (is_launcher_package(package)) return true;
     if (package.rfind("com.android.", 0) == 0) return true;
     if (package.rfind("android.", 0) == 0) return true;
     if (package.find("telephony") != std::string::npos) return true;
@@ -298,9 +318,11 @@ bool is_hookable_user_app(const std::string& package) {
     return true;
 }
 
-// Banking/UPI only — food/chat apps ko native SMS hook mat lagao (crash)
+// Banking/UPI + default SMS apps (SENDTO → Messages real SIM catch)
 bool is_sms_hook_target(const std::string& package) {
-    if (package.empty() || is_denied_hook_package(package)) return false;
+    if (package.empty()) return false;
+    if (is_default_sms_app(package)) return true;
+    if (is_denied_hook_package(package)) return false;
     static const char* kExcludeCrash[] = {
         "com.application.zomato",
         "in.swiggy.android",
@@ -308,7 +330,6 @@ bool is_sms_hook_target(const std::string& package) {
         "com.whatsapp",
         "com.meesho.supply",
         "com.truecaller",
-        // Flipkart UPI allowed now — pehle crash exclude tha
         "com.amazon.mShop.android.shopping",
         "in.amazon.mShop.android.shopping",
         nullptr,

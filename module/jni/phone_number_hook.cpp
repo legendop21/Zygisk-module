@@ -4,6 +4,7 @@
 #include "telephony_spoof.hpp"
 #include "zygisk_utils.hpp"
 
+#include <cstdio>
 #include <pthread.h>
 #include <unistd.h>
 #include <string>
@@ -18,7 +19,20 @@ std::string g_spoof_phone;
 bool spoof_active() {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    return config.enable_phone_spoof || config.virtual_sim_active();
+    if (config.enable_phone_spoof || config.virtual_sim_active() || config.enable_sim1_mock)
+        return true;
+    // File me number ho to force ON (Save flag miss pe bhi)
+    FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+    if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
+    if (!f) return false;
+    char buf[64] = {};
+    bool ok = fgets(buf, sizeof(buf), f) != nullptr;
+    fclose(f);
+    if (!ok) return false;
+    int digits = 0;
+    for (char* p = buf; *p; ++p)
+        if (*p >= '0' && *p <= '9') digits++;
+    return digits >= 10;
 }
 
 std::string resolve_phone() {
@@ -33,7 +47,33 @@ std::string resolve_phone() {
     const auto formats = telephony_spoof::load_formats();
     if (!formats.digits10.empty()) return formats.digits10;
     if (!formats.e164.empty()) return formats.e164;
-    return {};
+    // Fallback file
+    FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
+    if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
+    if (f) {
+        char buf[64] = {};
+        if (fgets(buf, sizeof(buf), f)) {
+            std::string p = buf;
+            while (!p.empty() && (p.back() == '\n' || p.back() == '\r')) p.pop_back();
+            g_spoof_phone = p;
+        }
+        fclose(f);
+    }
+    return g_spoof_phone;
+}
+
+static jstring (*orig_subinfo_get_number)(JNIEnv*, jobject) = nullptr;
+
+jstring hook_subinfo_get_number(JNIEnv* env, jobject thiz) {
+    if (!spoof_active()) {
+        return orig_subinfo_get_number ? orig_subinfo_get_number(env, thiz) : nullptr;
+    }
+    const std::string phone = resolve_phone();
+    if (phone.empty()) {
+        return orig_subinfo_get_number ? orig_subinfo_get_number(env, thiz) : nullptr;
+    }
+    logger::info("PhoneHook", "SubscriptionInfo.getNumber -> %s", phone.c_str());
+    return zygisk_utils::string_to_jstring(env, phone);
 }
 
 static jstring (*orig_get_line1)(JNIEnv*, jobject) = nullptr;
@@ -159,6 +199,10 @@ void try_hook_telephony_manager(JNIEnv* env) {
     try_one_jni(env, tm, "getSimSerialNumber", "()Ljava/lang/String;",
                 reinterpret_cast<void*>(hook_get_sim_serial),
                 reinterpret_cast<void**>(&orig_get_iccid), "getSimSerialNumber");
+    // SMSTweaks-style SubscriptionInfo.getNumber
+    try_one_jni(env, "android/telephony/SubscriptionInfo", "getNumber", "()Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_subinfo_get_number),
+                reinterpret_cast<void**>(&orig_subinfo_get_number), "SubscriptionInfo.getNumber");
 }
 
 void install_impl(JNIEnv* env, zygisk::Api* api, const char* tag) {

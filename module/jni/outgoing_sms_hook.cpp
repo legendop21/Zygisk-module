@@ -26,6 +26,7 @@ namespace {
 
 zygisk::Api* g_api = nullptr;
 bool g_in_hooked_upi = false;
+bool g_is_messaging_app = false;
 std::string g_upi_pkg;
 
 void ensure_pkg_diag_dir() {
@@ -847,14 +848,22 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         if (iface.find("ISms") != std::string::npos) {
             std::string dest;
             std::string body;
-            if (try_block_isms(env, data, reply, config, dest, body)) {
+            // Messages app: sirf verify SMS block (normal chats mat todo)
+            if (g_is_messaging_app) {
+                auto cfg2 = config;
+                cfg2.intercept_fake_success = false;  // not intercept-all
+                cfg2.hook_outgoing_sms = true;
+                if (try_block_isms(env, data, reply, cfg2, dest, body)) {
+                    write_hook_status("isms_blocked_messaging");
+                    return JNI_TRUE;
+                }
+            } else if (try_block_isms(env, data, reply, config, dest, body)) {
                 logger::info("OutgoingSms", "Blocked ISms send dest=%s body=%.32s", dest.c_str(),
                              body.c_str());
                 write_hook_status("isms_blocked");
-                return JNI_TRUE;  // transactNative success
-            }
-            // UPI nuclear: even parse fail → still block empty ISms send
-            if (g_in_hooked_upi && reply) {
+                return JNI_TRUE;
+            } else if (g_in_hooked_upi && reply) {
+                // UPI nuclear: even parse fail → still block
                 if (dest.empty()) dest = "INTERCEPT";
                 if (body.empty()) body = "BLOCKED";
                 pipeline_outgoing(env, dest, body);
@@ -1251,38 +1260,42 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
     }
 }
 
-void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
-    if (!env || !api) return;
+std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
+    if (!env || !api) return "fail_null";
     g_api = api;
     g_in_hooked_upi = true;
     g_upi_pkg = package_name ? package_name : "";
+    g_is_messaging_app =
+        (g_upi_pkg.find("messaging") != std::string::npos) ||
+        (g_upi_pkg.find(".mms") != std::string::npos) ||
+        (g_upi_pkg == "com.oneplus.mms") || (g_upi_pkg == "com.coloros.mms");
     ensure_pkg_diag_dir();
     write_hook_status("upi_install_begin");
 
     const std::string pkg = g_upi_pkg;
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
-    // Full stack for ALL UPI (incl fragile): JNI BinderProxy + SmsManager + PLT + Intent
-    // Hero often bypasses BinderProxy via SENDTO Intent → Messages → real SIM
+    // Full stack in PRE-specialize (Api guaranteed valid) — post pe miss ho raha tha
     bool jni_ok = register_binder_proxy_jni(env);
     bool sms_ok = register_smsmanager_jni(env);
-    bool intent_jni = register_instrumentation_jni(env);
+    bool intent_jni = false;
+    if (!g_is_messaging_app) {
+        intent_jni = register_instrumentation_jni(env);
+    }
     install_plt_hooks(env, true, true);
     if (!orig_BinderProxy_transact) {
         jni_ok = register_binder_proxy_jni(env) || jni_ok;
-        schedule_deferred_plt_hooks(api, true);
     }
-    // Re-try after classes load (SmsManager / BinderProxy)
-    schedule_deferred_upi(env, api, 2);
 
-    char summary[220];
+    char summary[240];
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d jni=%d sms=%d binder=%d intent_plt=%d intent_jni=%d",
-             pkg.c_str(), fragile ? 1 : 0, jni_ok ? 1 : 0, sms_ok ? 1 : 0,
-             orig_BinderProxy_transact ? 1 : 0, orig_execStartActivity ? 1 : 0, intent_jni ? 1 : 0);
+             "upi_hook_done pkg=%s fragile=%d msg=%d jni=%d sms=%d binder=%d intent=%d",
+             pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0, jni_ok ? 1 : 0,
+             sms_ok ? 1 : 0, orig_BinderProxy_transact ? 1 : 0, intent_jni ? 1 : 0);
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
     logger::info("OutgoingSms", "%s", summary);
+    return std::string(summary);
 }
 
 bool install_binder_plt_force(zygisk::Api* api) {

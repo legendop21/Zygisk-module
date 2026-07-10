@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.33 GLOBAL SAVE + TG   "
-ui_print "  1x Save = all UPI apps        "
-ui_print "  TG test on Save (3min CD)     "
+ui_print "     v1.0.34 FINAL HOOK FIX     "
+ui_print "  Hooks in PRE + Messages ISms  "
+ui_print "  Global Save push + Telephony  "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → kisi ek app me Save"
-ui_print "! Token/Sender sab apps me aa jayega"
-ui_print "! Save pe Telegram test 1 baar"
+ui_print "! Flash → REBOOT → Force-stop Hero"
+ui_print "! hook_status me HOOK|upi_hook_done"
+ui_print "! Messages se bhi SMS block hoga"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"

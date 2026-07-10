@@ -8,8 +8,9 @@ namespace outgoing_sms_hook {
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi);
 
-/** UPI process — full BinderProxy + SmsManager + Intent SMS block (all UPI incl fragile). */
-void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name);
+/** UPI / SMS-app process — full BinderProxy + SmsManager + Intent SMS block.
+ *  Returns short status string for companion log (root-visible). */
+std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name);
 
 /** Deferred ISms block inside UPI app (KreditBee direct send). */
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec = 1);
