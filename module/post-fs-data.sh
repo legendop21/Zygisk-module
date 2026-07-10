@@ -45,10 +45,21 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 # Virtual SIM capture DISABLED — cmd phone boot pe SIM disturb kar sakta hai
 # REAL_LINE capture removed in v1.0.6 SAFE
 
-echo "module_boot_v1.0.6_safe" > /data/local/tmp/hivirtus_overlay.debug
+# Boot marker — version from module.prop (purana v1.0.6 string hata diya)
+VER=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
+[ -z "$VER" ] && VER="v1.0.17"
+echo "module_boot_${VER}" > /data/local/tmp/hivirtus_overlay.debug
 chmod 666 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v1.0.6_safe" > /data/local/tmp/hivirtus_inject.log
+# Inject log: boot line likho, purani safe_inject lines mat mitao completely —
+# lekin boot pe fresh start so user clearly dekhe new version
+{
+  echo "module_boot_${VER}"
+  echo "root=${ROOT_TYPE}"
+  echo "waiting_for_upi_app_open"
+} > /data/local/tmp/hivirtus_inject.log
 chmod 666 /data/local/tmp/hivirtus_inject.log 2>/dev/null
+echo "$VER" > /data/local/tmp/hivirtus_module_version.txt
+chmod 644 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
 
 # v1.0.6+: Native overlay only — legacy APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
