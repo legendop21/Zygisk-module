@@ -1,10 +1,11 @@
 #!/system/bin/sh
-# Manual overlay start — agar bubble nahi dikhe to ye run karo:
+# Manual overlay start (ZIP dex only — no APK):
 #   su -c hivirtus-overlay
 
 MODDIR="/data/adb/modules/hivirtus_zygisk_mode"
 [ -f "$MODDIR/start_overlay.sh" ] || exit 1
 . "$MODDIR/start_overlay.sh"
 date +%s > /data/local/tmp/hivirtus_boot_ready.flag 2>/dev/null
+sync_overlay_assets
 start_overlay_daemon
-echo "Overlay daemon start requested — check /data/local/tmp/hivirtus_overlay.log"
+echo "Overlay started (ZIP dex) — log: /data/local/tmp/hivirtus_overlay.log"

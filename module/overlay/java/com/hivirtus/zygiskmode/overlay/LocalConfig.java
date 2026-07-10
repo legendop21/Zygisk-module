@@ -14,8 +14,13 @@ public final class LocalConfig {
             "/data/adb/modules/hivirtus_zygisk_mode/config.json";
     public static final String RUNTIME_CONFIG =
             "/data/local/tmp/hivirtus_zygisk_mode_config.json";
-    public static final String MODULE_UI =
-            "/data/adb/modules/hivirtus_zygisk_mode/overlay/ui";
+    public static final String MODULE_UI = resolveUiPath();
+
+    private static String resolveUiPath() {
+        final String tmp = "/data/local/tmp/hivirtus_overlay/ui";
+        if (new File(tmp, "index.html").canRead()) return tmp;
+        return "/data/adb/modules/hivirtus_zygisk_mode/overlay/ui";
+    }
 
     private LocalConfig() {}
 

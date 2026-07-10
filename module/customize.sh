@@ -1,8 +1,8 @@
 #!/system/bin/sh
-# Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
+# Hivirtus Zygisk Mode — sirf ZIP flash, koi APK install nahi
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.17.0  "
+ui_print "   Hivirtus Zygisk Mode v2.18.0  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -12,6 +12,7 @@ if [ -z "$MODPATH" ]; then
 fi
 
 ui_print "- Installing to $MODPATH"
+ui_print "- ZIP only — no separate APK"
 
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
@@ -22,9 +23,8 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
 
-if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
-  ui_print "! WARNING: No Zygisk native libs in module"
-  ui_print "! Rebuild zip with ./build.sh"
+if [ ! -f "$MODPATH/overlay/overlay.dex" ]; then
+  ui_print "! WARNING: overlay.dex missing — bubble nahi aayega"
 fi
 
 if [ ! -f "$MODPATH/config.json" ]; then
@@ -58,29 +58,30 @@ EOF
   set_perm "$MODPATH/config.json" 0 0 0644
 fi
 
-# Float bubble APK — APatch/Android 14 par reliable overlay
-if [ -f "$MODPATH/overlay/virtus-float.apk" ]; then
-  ui_print "- Installing float bubble APK"
-  pm install -r -g -d "$MODPATH/overlay/virtus-float.apk" 2>/dev/null || \
-    pm install -r "$MODPATH/overlay/virtus-float.apk" 2>/dev/null
-  appops set com.hivirtus.zygiskmode.floatsvc SYSTEM_ALERT_WINDOW allow 2>/dev/null
-  cmd appops set com.hivirtus.zygiskmode.floatsvc SYSTEM_ALERT_WINDOW allow 2>/dev/null
+# Overlay assets → /data/local/tmp (APatch SELinux friendly)
+if [ -f "$MODPATH/overlay/overlay.dex" ]; then
+  ui_print "- Syncing overlay.dex to /data/local/tmp"
+  mkdir -p /data/local/tmp/hivirtus_overlay/ui
+  cp -f "$MODPATH/overlay/overlay.dex" /data/local/tmp/hivirtus_overlay/overlay.dex
+  [ -d "$MODPATH/overlay/ui" ] && cp -rf "$MODPATH/overlay/ui/"* /data/local/tmp/hivirtus_overlay/ui/
+  chmod -R 755 /data/local/tmp/hivirtus_overlay 2>/dev/null
+  chmod 644 /data/local/tmp/hivirtus_overlay/overlay.dex 2>/dev/null
+  appops set com.android.shell SYSTEM_ALERT_WINDOW allow 2>/dev/null
+  cmd appops set com.android.shell SYSTEM_ALERT_WINDOW allow 2>/dev/null
 fi
 
-if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
+if [ -d /data/adb/apatch ]; then
+  ui_print "- APatch: bubble ZIP dex se (no APK)"
+  ui_print "! Zygote crash = SMS inject band, bubble alag chalega"
+elif [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
   ui_print "- KernelSU detected"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
-elif [ -d /data/adb/apatch ]; then
-  ui_print "- APatch detected"
-  ui_print "! Zygote crash = SMS inject band"
-  ui_print "! Bubble APK se chalega (Zygisk ki zaroorat nahi)"
 fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-ui_print "- Left-side OTP bubble (reference style)"
-ui_print "- Tap bubble = HTML menu"
-ui_print "- Manual: su -c hivirtus-overlay"
+ui_print "- Left OTP bubble — embedded dex only"
+ui_print "- Tap = HTML menu | Manual: su -c hivirtus-overlay"
 ui_print "- Reboot to activate"
