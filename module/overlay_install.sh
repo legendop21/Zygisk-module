@@ -112,6 +112,12 @@ com.angelbroking.angelone
 com.samsung.android.spay
 com.popclub.android
 com.tataneu
+com.herofincorp.diyjourneys
+com.herofincorp.simplycash
+com.customer.herofincorp
+com.herofincorp.android
+com.herofincorp.lending
+com.herofincorp.upi
 PKGS
 }
 

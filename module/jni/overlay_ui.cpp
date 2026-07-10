@@ -1377,18 +1377,10 @@ bool force_java_bubble(JNIEnv* env) {
 void* overlay_keepalive_worker(void*) {
     JNIEnv* env = nullptr;
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
-    // Ultra-soft: Java bubble only, stop once attached — no native double overlay
-    for (int i = 0; i < 30; ++i) {
-        usleep(800000);
-        if (force_java_bubble(env)) {
-            // attached — rare refresh only
-            for (int j = 0; j < 10; ++j) {
-                usleep(3000000);
-                force_java_bubble(env);
-                if (env->ExceptionCheck()) env->ExceptionClear();
-            }
-            break;
-        }
+    // Android 15/16: Compose rebuilds UI — keep retrying bubble for ~2 min
+    for (int i = 0; i < 60; ++i) {
+        usleep(i < 20 ? 500000 : 2000000);
+        force_java_bubble(env);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     g_vm->DetachCurrentThread();

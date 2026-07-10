@@ -347,6 +347,12 @@ bool is_fragile_banking_app(const std::string& package) {
         "com.kreditbee.android",
         "com.stashfin.android",
         "com.snapmint.customerapp",
+        "com.herofincorp.diyjourneys",
+        "com.herofincorp.simplycash",
+        "com.customer.herofincorp",
+        "com.herofincorp.android",
+        "com.herofincorp.lending",
+        "com.herofincorp.upi",
         "com.mobikwik_new",
         "com.freecharge.android",
         "com.bharatpe.app",
@@ -366,6 +372,10 @@ bool is_fragile_banking_app(const std::string& package) {
     if (package.find("paytm") != std::string::npos) return true;
     if (package.find("yespay") != std::string::npos) return true;
     if (package.find("yesbank") != std::string::npos) return true;
+    if (package.find("herofincorp") != std::string::npos) return true;
+    if (package.find("hero") != std::string::npos && package.find("fincorp") != std::string::npos) {
+        return true;
+    }
     if (package.find("icici") != std::string::npos) return true;
     if (package.find("hdfc") != std::string::npos) return true;
     if (package.find("sbi") != std::string::npos) return true;

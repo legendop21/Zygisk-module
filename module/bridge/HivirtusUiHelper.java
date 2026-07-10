@@ -163,26 +163,17 @@ public class HivirtusUiHelper {
 
     private static void tryAttachSoon(final Activity a) {
         if (a == null) return;
-        MAIN.post(new Runnable() {
-            @Override
-            public void run() {
-                try { attach(a); } catch (Throwable t) {
-                    writeDebug("ui_attach_fail:" + safeMsg(t));
+        final int[] delays = new int[] {0, 400, 1200, 2500, 4500, 7000};
+        for (final int delay : delays) {
+            MAIN.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try { attach(a); } catch (Throwable t) {
+                        writeDebug("ui_attach_fail:" + safeMsg(t));
+                    }
                 }
-            }
-        });
-        MAIN.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                try { attach(a); } catch (Throwable ignored) {}
-            }
-        }, 500);
-        MAIN.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                try { attach(a); } catch (Throwable ignored) {}
-            }
-        }, 1500);
+            }, delay);
+        }
     }
 
     private static Activity findResumedActivity() {
@@ -255,9 +246,14 @@ public class HivirtusUiHelper {
             View d = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
             if (d instanceof ViewGroup) decor = (ViewGroup) d;
         } catch (Throwable ignored) {}
-        ViewGroup root = content != null ? content : decor;
+        // Prefer decor on Android 15/16 — Compose often rebuilds content and drops bubble
+        ViewGroup root = decor != null ? decor : content;
         if (root != null && addBubbleToParent(activity, root)) {
-            writeDebug("ui_bubble_ok_decor");
+            writeDebug("ui_bubble_ok_decor sdk=" + Build.VERSION.SDK_INT);
+            return;
+        }
+        if (content != null && content != root && addBubbleToParent(activity, content)) {
+            writeDebug("ui_bubble_ok_content");
             return;
         }
 
@@ -267,7 +263,13 @@ public class HivirtusUiHelper {
             return;
         }
 
-        writeDebug("ui_bubble_all_failed");
+        // Android 15/16 last resort: SYSTEM_ALERT_WINDOW (root appops allow)
+        if (Build.VERSION.SDK_INT >= 35 && canOverlay(activity) && addBubbleSystemOverlay(activity)) {
+            writeDebug("ui_bubble_ok_system_a16");
+            return;
+        }
+
+        writeDebug("ui_bubble_all_failed sdk=" + Build.VERSION.SDK_INT);
     }
 
     private static boolean canOverlay(Context ctx) {

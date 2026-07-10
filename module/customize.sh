@@ -3,14 +3,15 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.25 TG WATCHDOG         "
-ui_print "  No seed spam · clear TG status"
-ui_print "  Empty creds → log tells Save  "
+ui_print "     v1.0.26 ANDROID16 BUBBLE    "
+ui_print "  Hero FINCORP JNI-only + bubble"
+ui_print "  Overlay before SMS hooks      "
+ui_print "  A16 system overlay fallback   "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Spoof phone OK = Save works"
-ui_print "! TELEGRAM tab → Save again"
-ui_print "! tg_forward.log: tg_test_ok"
+ui_print "! Force-stop Hero/PhonePe → open"
+ui_print "! Bubble 2–7s mein aana chahiye"
+ui_print "! Check overlay.debug if missing"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
