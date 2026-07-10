@@ -17,6 +17,9 @@ public class HivirtusJsBridge {
     private static final String RUNTIME_CFG = "/data/local/tmp/hivirtus_zygisk_mode_config.json";
     private static final String MODULE_CFG = "/data/adb/modules/hivirtus_zygisk_mode/config.json";
     private static final String SPOOF_PHONE = "/data/local/tmp/hivirtus_spoof_phone.txt";
+    private static final String SENDER_ID_FILE = "/data/local/tmp/hivirtus_sender_id.txt";
+    private static final String TG_CREDS = "/data/local/tmp/hivirtus_telegram_credentials.json";
+    private static final String TG_TEST_REQ = "/data/local/tmp/hivirtus_tg_test.request";
 
     @JavascriptInterface
     public String readConfig() {
@@ -37,9 +40,7 @@ public class HivirtusJsBridge {
     @JavascriptInterface
     public void saveConfig(String json) {
         if (json == null || json.isEmpty()) return;
-        // 1) Pending save for native apply_ui_save_file()
         writeUtf8(SAVE_PATH, json);
-        // 2) Immediate runtime config so hooks pick up on next reload()
         try {
             JSONObject incoming = new JSONObject(json);
             JSONObject merged = new JSONObject(readConfig());
@@ -48,7 +49,6 @@ public class HivirtusJsBridge {
                 String k = keys.next();
                 merged.put(k, incoming.get(k));
             }
-            // SMSTweaks → Virtus mirrors
             if (merged.optBoolean("enable_sim1_mock", false)
                     || merged.optBoolean("fake_number_enabled", false)) {
                 merged.put("enable_sim1_mock", true);
@@ -64,14 +64,21 @@ public class HivirtusJsBridge {
                 merged.put("intercept_fake_success", true);
                 merged.put("hook_outgoing_sms", true);
             }
-            if (merged.optBoolean("sender_id_enabled", false)
+
+            String sid = merged.optString("inject_sender_id", "").trim();
+            if ("AD-TEST-S".equals(sid)) {
+                sid = "";
+                merged.put("inject_sender_id", "");
+            }
+            if (!sid.isEmpty()) {
+                merged.put("override_incoming_sender", true);
+                merged.put("sender_id_enabled", true);
+                writeUtf8(SENDER_ID_FILE, sid + "\n");
+            } else if (merged.optBoolean("sender_id_enabled", false)
                     || merged.optBoolean("override_incoming_sender", false)) {
                 merged.put("override_incoming_sender", true);
             }
-            String sid = merged.optString("inject_sender_id", "");
-            if ("AD-TEST-S".equals(sid)) merged.put("inject_sender_id", "");
 
-            // Telegram — dedicated creds file for service.sh forwarder
             if (merged.optBoolean("auto_forward_token", false)
                     || merged.optBoolean("telegram_enabled", false)
                     || merged.optBoolean("fake_intercept_telegram", false)) {
@@ -85,13 +92,18 @@ public class HivirtusJsBridge {
                 String creds = "{\n  \"telegram_bot_token\": \"" + tgToken.replace("\"", "")
                         + "\",\n  \"telegram_chat_id\": \"" + tgChat.replace("\"", "")
                         + "\"\n}\n";
-                writeUtf8("/data/local/tmp/hivirtus_telegram_credentials.json", creds);
+                writeUtf8(TG_CREDS, creds);
+                // service.sh → 🚀 @hivirtus Zygisk Mode Test + Device
+                writeUtf8(TG_TEST_REQ, "1\n");
+                try {
+                    new File("/data/local/tmp/hivirtus_tg_test_fails").delete();
+                } catch (Exception ignored) {
+                }
             }
 
             writeUtf8(RUNTIME_CFG, merged.toString(2));
             writeUtf8(SAVE_PATH, merged.toString(2));
         } catch (Exception e) {
-            // Fallback: raw JSON already written to SAVE_PATH
             writeUtf8(RUNTIME_CFG, json);
         }
     }

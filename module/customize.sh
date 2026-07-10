@@ -3,9 +3,9 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.13                    "
-ui_print "  Telegram intercept forward    "
-ui_print "  To + Message → @Hivirtus fmt  "
+ui_print "     v1.0.14                    "
+ui_print "  TG test on Save + Sender ID   "
+ui_print "  Successful Active! / Device   "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"

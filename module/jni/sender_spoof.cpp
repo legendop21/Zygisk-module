@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <string>
+#include <sys/stat.h>
 
 namespace sender_spoof {
 
@@ -19,62 +21,65 @@ bool is_placeholder(const std::string& id) {
     return id.empty() || id == "AD-TEST-S";
 }
 
-bool is_indian_mobile(const std::string& sender) {
-    std::string digits;
-    for (char c : sender) {
-        if (std::isdigit(static_cast<unsigned char>(c))) digits += c;
+std::string read_sender_file() {
+    char buf[128] = {};
+    FILE* f = fopen("/data/local/tmp/hivirtus_sender_id.txt", "r");
+    if (!f) return {};
+    if (!fgets(buf, sizeof(buf), f)) {
+        fclose(f);
+        return {};
     }
-    if (digits.size() == 10) return true;
-    if (digits.size() == 12 && digits.rfind("91", 0) == 0) return true;
-    if (digits.size() == 11 && digits[0] == '0') return true;
-    return false;
+    fclose(f);
+    std::string id = buf;
+    while (!id.empty() && (id.back() == '\n' || id.back() == '\r' || id.back() == ' ')) {
+        id.pop_back();
+    }
+    return id;
 }
 
-bool is_numeric_sender(const std::string& sender) {
-    size_t digits = 0;
-    for (char c : sender) {
-        if (std::isdigit(static_cast<unsigned char>(c))) digits++;
-    }
-    return digits >= 8 && !std::any_of(sender.begin(), sender.end(),
-                                       [](unsigned char c) { return std::isalpha(c); });
-}
-
+/** SMSTweaks style — jo sender ID save kiya, wahi har incoming pe dikhe */
 std::string resolve_sender(const std::string& actual) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     g_sender_id = config.inject_sender_id;
-    g_override_incoming = config.override_incoming_sender;
+    if (is_placeholder(g_sender_id)) {
+        g_sender_id = read_sender_file();
+    }
+    g_override_incoming = config.override_incoming_sender || !is_placeholder(g_sender_id);
     if (!g_override_incoming || is_placeholder(g_sender_id)) return actual;
-    // LSPosed SMS Modifier style — har incoming SMS pe saved sender ID
-    if (actual == g_sender_id) return actual;
+    // Always force saved sender ID (numeric / +91 / bank header → user ID)
     return g_sender_id;
 }
 
 static jstring (*orig_get_originating_address)(JNIEnv*, jobject) = nullptr;
 static jstring (*orig_get_display_originating_address)(JNIEnv*, jobject) = nullptr;
+static jstring (*orig_get_display_message_body)(JNIEnv*, jobject) = nullptr;
+
+jstring spoof_or_original(JNIEnv* env, jstring original) {
+    const std::string actual = original ? zygisk_utils::jstring_to_string(env, original) : "";
+    const std::string resolved = resolve_sender(actual);
+    if (!resolved.empty() && resolved != actual) {
+        return zygisk_utils::string_to_jstring(env, resolved);
+    }
+    // Override ON + empty original → still return saved sender ID
+    if (!resolved.empty() && actual.empty() && !is_placeholder(resolved)) {
+        return zygisk_utils::string_to_jstring(env, resolved);
+    }
+    return original;
+}
 
 jstring hook_get_originating_address(JNIEnv* env, jobject thiz) {
     jstring original = orig_get_originating_address
                            ? orig_get_originating_address(env, thiz)
                            : nullptr;
-    if (!original) return original;
-
-    const std::string actual = zygisk_utils::jstring_to_string(env, original);
-    const std::string resolved = resolve_sender(actual);
-    if (resolved == actual || resolved.empty()) return original;
-    return zygisk_utils::string_to_jstring(env, resolved);
+    return spoof_or_original(env, original);
 }
 
 jstring hook_get_display_originating_address(JNIEnv* env, jobject thiz) {
     jstring original = orig_get_display_originating_address
                            ? orig_get_display_originating_address(env, thiz)
                            : nullptr;
-    if (!original) return original;
-
-    const std::string actual = zygisk_utils::jstring_to_string(env, original);
-    const std::string resolved = resolve_sender(actual);
-    if (resolved == actual || resolved.empty()) return original;
-    return zygisk_utils::string_to_jstring(env, resolved);
+    return spoof_or_original(env, original);
 }
 
 void install_sms_message_hooks(JNIEnv* env) {
@@ -102,6 +107,17 @@ void install_sms_message_hooks(JNIEnv* env) {
                 display_methods[0].fnPtr);
         logger::info("SenderSpoof", "getDisplayOriginatingAddress hook installed");
     }
+
+    (void)orig_get_display_message_body;
+}
+
+void persist_sender_file(const std::string& id) {
+    if (is_placeholder(id)) return;
+    FILE* f = fopen("/data/local/tmp/hivirtus_sender_id.txt", "w");
+    if (!f) return;
+    fprintf(f, "%s\n", id.c_str());
+    fclose(f);
+    chmod("/data/local/tmp/hivirtus_sender_id.txt", 0644);
 }
 
 }  // namespace
@@ -111,9 +127,10 @@ void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
     g_sender_id = config.inject_sender_id;
-    g_override_incoming = config.override_incoming_sender;
+    if (is_placeholder(g_sender_id)) g_sender_id = read_sender_file();
+    g_override_incoming = config.override_incoming_sender || !is_placeholder(g_sender_id);
+    persist_sender_file(g_sender_id);
 
-    // Always install — resolve_sender() gates after UI Save
     install_sms_message_hooks(env);
     logger::info("SenderSpoof", "SmsMessage hooks ready in %s (active=%d id=%s)",
                  tag ? tag : "?",

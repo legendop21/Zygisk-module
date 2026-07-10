@@ -441,6 +441,16 @@ bool ConfigManager::apply_ui_save_file() {
     }
     config_.inject_sender_id = parse_string(json, "inject_sender_id", config_.inject_sender_id);
     if (config_.inject_sender_id == "AD-TEST-S") config_.inject_sender_id.clear();
+    if (!config_.inject_sender_id.empty()) {
+        config_.override_incoming_sender = true;
+        FILE* sf = fopen("/data/local/tmp/hivirtus_sender_id.txt", "w");
+        if (sf) {
+            fprintf(sf, "%s\n", config_.inject_sender_id.c_str());
+            fclose(sf);
+            chmod("/data/local/tmp/hivirtus_sender_id.txt", 0644);
+        }
+    }
+
     config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
     config_.hook_all_upi_apps = parse_bool(json, "hook_all_upi_apps", true);
     config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);

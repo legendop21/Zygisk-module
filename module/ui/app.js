@@ -77,6 +77,11 @@
     out.sender_id_enabled = !!out.override_incoming_sender;
 
     if (out.inject_sender_id === "AD-TEST-S") out.inject_sender_id = "";
+    // Sender ID filled → force override ON (SMSTweaks style)
+    if (out.inject_sender_id && String(out.inject_sender_id).trim().length > 0) {
+      out.override_incoming_sender = true;
+      out.sender_id_enabled = true;
+    }
 
     // Token+chat filled → auto enable Telegram forward
     if (out.telegram_bot_token && out.telegram_chat_id) {
