@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.2
-versionCode=10002
+version=v1.0.4
+versionCode=10004
 author=@hivirtus
-description=Force bubble via Java helper (Android 14). Safe UPI-only. No phone/SIM crash. 32+64.
+description=Bubble fix: TOP-LEFT + lifecycle + SYSTEM overlay. Keyboard pe hide nahi. Safe UPI-only.
 zygisk=1

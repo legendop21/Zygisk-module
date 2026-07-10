@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "        v1.0.2                  "
+ui_print "        v1.0.4                  "
 ui_print "  Floating menu · SMS intercept "
 ui_print "  No LSPosed · 32+64 Zygisk     "
 ui_print "  @Hivirtus                     "
@@ -85,11 +85,11 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Virtus Zygisk Mode v1.0.0"
+ui_print "Virtus Zygisk Mode v1.0.4"
 ui_print "  1) Zygisk ON (Magisk/APatch/KSU)"
 ui_print "  2) Flash this zip → reboot"
-ui_print "  3) Home / UPI app → floating V bubble"
-ui_print "  4) Tap bubble → HTML menu (SMSTweaks features)"
+ui_print "  3) Open UPI/finance app → gold V (TOP-LEFT)"
+ui_print "  4) Tap bubble → HTML menu"
 ui_print "  5) Intercept ON + fake number → Save"
 ui_print ""
 ui_print "No LSPosed needed."

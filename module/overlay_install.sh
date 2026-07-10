@@ -65,6 +65,10 @@ com.yesbank.yespay
 com.yesbank.yespaynext
 com.snapmint.customerapp
 com.kreditbee.android
+com.whizdm.moneyview.loans
+com.whiz.credit
+com.stashfin.android
+com.snapmint.customerapp
 com.csam.icici.bank.imobile
 com.hdfcbank.payzapp
 com.axis.mobile
@@ -81,6 +85,13 @@ com.bharatpe.app
 com.amazon.mShop.android.shopping
 com.myairtelapp
 com.jio.myjio
+com.mpokket.app
+com.kissht.android
+com.nira.finance
+com.lazypay.app
+com.earlysalary.android
+com.naviapp
+com.navi.moneymanager
 PKGS
 }
 
@@ -124,7 +135,19 @@ hivirtus_grant_overlay_permission() {
 hivirtus_install_overlay_apk() { return 0; }
 hivirtus_start_overlay_service() { hivirtus_native_overlay_ready; }
 hivirtus_boot_activate_overlay() {
-  echo "native_overlay_boot" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
   hivirtus_native_overlay_ready
+  : > /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  echo "boot_overlay:$(date +%s)" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  # bridge.dex copy — app uid se readable (prefer /data/local/tmp)
+  MOD="${MODDIR:-${MODPATH:-/data/adb/modules/hivirtus_zygisk_mode}}"
+  if [ -f "$MOD/bridge.dex" ]; then
+    cp -f "$MOD/bridge.dex" /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+    chmod 644 /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+    chown root:root /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+    echo "bridge_dex_copied" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  else
+    echo "bridge_dex_missing:$MOD" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  fi
   hivirtus_grant_overlay_permission
 }

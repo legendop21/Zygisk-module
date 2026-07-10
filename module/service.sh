@@ -142,9 +142,20 @@ sync_config
 seed_apatch_config
 seed_hooked_pkgs
 
-# Reboot pe native overlay flag + display overlay permission
-hivirtus_boot_activate_overlay &
+# Reboot pe bridge.dex + overlay flag + display overlay permission
+MODDIR="$MODDIR" hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission &
+
+# Keep bridge.dex readable for app uid (SELinux-safe path)
+(
+  while true; do
+    if [ -f "$MODDIR/bridge.dex" ]; then
+      cp -f "$MODDIR/bridge.dex" /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+      chmod 644 /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+    fi
+    sleep 60
+  done
+) &
 
 (
   LAST=""

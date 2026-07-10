@@ -867,9 +867,11 @@ jobject get_top_resumed_activity(JNIEnv* env) {
         return nullptr;
     }
 
+    // Prefer declared field — type signature OEMs pe vary kar sakta hai
     jfieldID acts_field = env->GetFieldID(at_cls, "mActivities", "Landroid/util/ArrayMap;");
     if (!acts_field || env->ExceptionCheck()) {
         env->ExceptionClear();
+        // Fallback: any Object-typed lookup via reflection helper below fails → null
         env->DeleteLocalRef(at);
         return nullptr;
     }
@@ -877,30 +879,61 @@ jobject get_top_resumed_activity(JNIEnv* env) {
     env->DeleteLocalRef(at);
     if (!acts) return nullptr;
 
-    jclass array_map = env->FindClass("android/util/ArrayMap");
-    const jint size = env->CallIntMethod(acts, env->GetMethodID(array_map, "size", "()I"));
-    jclass record_cls = env->FindClass("android/app/ActivityThread$ActivityClientRecord");
-    jfieldID activity_field = env->GetFieldID(record_cls, "activity", "Landroid/app/Activity;");
-    jfieldID paused_field = env->GetFieldID(record_cls, "paused", "Z");
+    jclass map_cls = env->GetObjectClass(acts);
+    jmethodID size_m = env->GetMethodID(map_cls, "size", "()I");
+    jmethodID value_at = env->GetMethodID(map_cls, "valueAt", "(I)Ljava/lang/Object;");
+    if (!size_m || !value_at || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(acts);
+        return nullptr;
+    }
+    const jint size = env->CallIntMethod(acts, size_m);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(acts);
+        return nullptr;
+    }
 
     jobject result = nullptr;
+    jobject fallback = nullptr;
     for (jint i = size - 1; i >= 0; --i) {
-        jobject record = env->CallObjectMethod(acts, env->GetMethodID(array_map, "valueAt", "(I)Ljava/lang/Object;"), i);
-        if (!record) continue;
-        const jboolean paused = env->GetBooleanField(record, paused_field);
-        if (!paused) {
-            jobject activity = env->GetObjectField(record, activity_field);
-            if (activity && activity_alive(env, activity)) {
-                result = activity;
-            } else if (activity) {
-                env->DeleteLocalRef(activity);
-            }
+        jobject record = env->CallObjectMethod(acts, value_at, i);
+        if (!record || env->ExceptionCheck()) {
+            env->ExceptionClear();
+            continue;
         }
+        jclass record_cls = env->GetObjectClass(record);
+        jfieldID activity_field = env->GetFieldID(record_cls, "activity", "Landroid/app/Activity;");
+        if (!activity_field || env->ExceptionCheck()) {
+            env->ExceptionClear();
+            env->DeleteLocalRef(record);
+            continue;
+        }
+        jobject activity = env->GetObjectField(record, activity_field);
+        if (!activity || !activity_alive(env, activity)) {
+            if (activity) env->DeleteLocalRef(activity);
+            env->DeleteLocalRef(record);
+            continue;
+        }
+        jboolean paused = JNI_TRUE;
+        jfieldID paused_field = env->GetFieldID(record_cls, "paused", "Z");
+        if (paused_field && !env->ExceptionCheck()) {
+            paused = env->GetBooleanField(record, paused_field);
+        } else {
+            env->ExceptionClear();
+            paused = JNI_FALSE;
+        }
+        if (!paused) {
+            result = activity;
+            env->DeleteLocalRef(record);
+            break;
+        }
+        if (!fallback) fallback = activity;
+        else env->DeleteLocalRef(activity);
         env->DeleteLocalRef(record);
-        if (result) break;
     }
     env->DeleteLocalRef(acts);
-    return result;
+    return result ? result : fallback;
 }
 
 void ensure_overlay_on_top(JNIEnv* env, jobject activity) {
@@ -991,31 +1024,23 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     build_html_menu_panel(env, activity, ui_config);
 
     jobject app_ctx = get_application_context(env, activity);
-    jint sw = 1080, sh = 1920;
-    get_screen_size(env, app_ctx, sw, sh);
-    // Left side — OTP screen ke paas (reference image jaisa)
-    const jint bubble_x = px(env, activity, 10.0f);
-    const jint bubble_y = static_cast<jint>(sh * 0.28f);
-    const jint bubble_w = px(env, activity, 52.0f);
-    const jint bubble_h = px(env, activity, 52.0f);
+    (void)app_ctx;
 
-    // Prefer decor attach first (stable, no SIM/permission issues).
-    // System overlay only as fallback if decor fails.
+    // TOP-LEFT — landscape + OTP keyboard right pe bubble hide na ho
+    const jint bubble_x = px(env, activity, 14.0f);
+    const jint bubble_y = px(env, activity, 96.0f);
+    const jint bubble_w = px(env, activity, 58.0f);
+    const jint bubble_h = px(env, activity, 58.0f);
+    constexpr jint kGravityTopStart = 0x33;  // TOP | START
+
     bool attached = false;
     g_system_overlay_mode = false;
-    add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800033, 12, 0, 0, 0));
-    add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
-    set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-    if (!env->ExceptionCheck()) {
-        attached = true;
-        debug_marker("overlay_decor_mode");
-    } else {
-        env->ExceptionClear();
-    }
 
-    if (!attached && can_draw_overlays(env, activity)) {
+    // Prefer SYSTEM overlay when granted — keyboard ke upar rehta hai
+    if (can_draw_overlays(env, activity)) {
         g_system_overlay_mode = true;
-        attached = add_via_system_overlay(env, activity, bubble, 0x33, bubble_x, bubble_y, bubble_w, bubble_h);
+        attached = add_via_system_overlay(env, activity, bubble, kGravityTopStart, bubble_x, bubble_y,
+                                         bubble_w, bubble_h);
         if (attached) {
             add_via_system_overlay(env, activity, g_menu_panel, 0x11, 0, 0, static_cast<jint>(-1),
                                    static_cast<jint>(-1));
@@ -1024,9 +1049,22 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         } else {
             g_system_overlay_mode = false;
         }
-    } else if (!attached) {
+    } else {
         request_overlay_grant(g_package);
         debug_marker("overlay_permission_pending");
+    }
+
+    if (!attached) {
+        // TOP|START margins: left=14 top=96
+        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, kGravityTopStart, 14, 96, 0, 0));
+        add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
+        set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+        if (!env->ExceptionCheck()) {
+            attached = true;
+            debug_marker("overlay_decor_mode");
+        } else {
+            env->ExceptionClear();
+        }
     }
 
     g_overlay_attached = true;
@@ -1136,9 +1174,45 @@ void schedule_plt_hooks() {
     pthread_detach(t);
 }
 
-jobject load_bridge_class(JNIEnv* env, jobject activity, const char* class_name) {
-    const char* dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
-    if (access(dex_path, R_OK) != 0 || !activity) return nullptr;
+jobject g_helper_class = nullptr;  // cached global ref — same ClassLoader/statics
+
+jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
+    if (g_helper_class && class_name &&
+        std::string(class_name) == "com.hivirtus.zygisk.HivirtusUiHelper") {
+        return g_helper_class;
+    }
+
+    const char* dex_path = "/data/local/tmp/hivirtus_bridge.dex";
+    if (access(dex_path, R_OK) != 0) {
+        dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+    }
+    if (access(dex_path, R_OK) != 0 || !ctx) {
+        debug_marker("dex_missing");
+        return nullptr;
+    }
+
+    // Writable opt dir — app code_cache preferred
+    std::string opt = "/data/local/tmp";
+    jclass ctx_cls = env->GetObjectClass(ctx);
+    jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
+    if (get_cache) {
+        jobject file = env->CallObjectMethod(ctx, get_cache);
+        if (file && !env->ExceptionCheck()) {
+            jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
+                                                   "()Ljava/lang/String;");
+            jstring path_j = (jstring)env->CallObjectMethod(file, get_path);
+            if (path_j) {
+                const char* p = env->GetStringUTFChars(path_j, nullptr);
+                if (p) {
+                    opt = p;
+                    env->ReleaseStringUTFChars(path_j, p);
+                }
+            }
+        } else if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
+    }
+
     jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
     if (!dex_cls || env->ExceptionCheck()) {
         env->ExceptionClear();
@@ -1148,12 +1222,13 @@ jobject load_bridge_class(JNIEnv* env, jobject activity, const char* class_name)
                                           "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
                                           "Ljava/lang/ClassLoader;)V");
     jstring dex_j = env->NewStringUTF(dex_path);
-    jstring opt_j = env->NewStringUTF("/data/local/tmp");
+    jstring opt_j = env->NewStringUTF(opt.c_str());
     jobject parent_loader = env->CallObjectMethod(
-        activity, env->GetMethodID(env->GetObjectClass(activity), "getClassLoader", "()Ljava/lang/ClassLoader;"));
+        ctx, env->GetMethodID(ctx_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
     jobject dex_loader = env->NewObject(dex_cls, dex_ctor, dex_j, opt_j, nullptr, parent_loader);
     if (!dex_loader || env->ExceptionCheck()) {
         env->ExceptionClear();
+        debug_marker("dex_loader_fail");
         return nullptr;
     }
     jclass loader_cls = env->FindClass("java/lang/ClassLoader");
@@ -1162,65 +1237,91 @@ jobject load_bridge_class(JNIEnv* env, jobject activity, const char* class_name)
         dex_loader, env->GetMethodID(loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"), name);
     if (!cls || env->ExceptionCheck()) {
         env->ExceptionClear();
+        debug_marker("dex_loadclass_fail");
         return nullptr;
+    }
+    if (class_name && std::string(class_name) == "com.hivirtus.zygisk.HivirtusUiHelper") {
+        g_helper_class = env->NewGlobalRef(cls);
+        debug_marker("dex_helper_cached");
+        return g_helper_class;
     }
     return cls;
 }
 
-bool force_java_bubble(JNIEnv* env) {
+bool force_native_bubble(JNIEnv* env) {
     jobject activity = get_top_resumed_activity(env);
     if (!activity) {
-        // Fallback: Application context poll
+        debug_marker("native_no_activity");
+        return false;
+    }
+    ConfigManager::instance().reload();
+    attach_virtus_overlay(env, activity, ConfigManager::instance().get());
+    ensure_overlay_on_top(env, activity);
+    debug_marker("native_bubble_try");
+    env->DeleteLocalRef(activity);
+    return g_overlay_attached;
+}
+
+bool force_java_bubble(JNIEnv* env) {
+    jobject activity = get_top_resumed_activity(env);
+    jobject ctx = activity;
+    if (!ctx) {
         jclass at = env->FindClass("android/app/ActivityThread");
         if (!at) return false;
         jmethodID cur = env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;");
-        jobject app = cur ? env->CallStaticObjectMethod(at, cur) : nullptr;
-        if (!app || env->ExceptionCheck()) {
+        ctx = cur ? env->CallStaticObjectMethod(at, cur) : nullptr;
+        if (!ctx || env->ExceptionCheck()) {
             env->ExceptionClear();
             return false;
         }
-        jclass helper = (jclass)load_bridge_class(env, app, "com.hivirtus.zygisk.HivirtusUiHelper");
-        if (!helper) return false;
-        jmethodID poll = env->GetStaticMethodID(helper, "poll", "(Landroid/content/Context;)V");
-        if (!poll) return false;
-        env->CallStaticVoidMethod(helper, poll, app);
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-            return false;
-        }
-        debug_marker("ui_helper_poll_called");
-        return true;
     }
 
-    jclass helper = (jclass)load_bridge_class(env, activity, "com.hivirtus.zygisk.HivirtusUiHelper");
+    jclass helper = (jclass)load_bridge_class(env, ctx, "com.hivirtus.zygisk.HivirtusUiHelper");
     if (!helper) {
-        env->DeleteLocalRef(activity);
+        if (activity) env->DeleteLocalRef(activity);
         return false;
     }
-    jmethodID schedule = env->GetStaticMethodID(helper, "schedule", "(Landroid/app/Activity;)V");
-    if (!schedule) {
-        env->DeleteLocalRef(activity);
-        return false;
+
+    // Register lifecycle once via poll/schedule, then tick
+    jmethodID tick = env->GetStaticMethodID(helper, "tick", "()V");
+    if (tick) {
+        env->CallStaticVoidMethod(helper, tick);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        else debug_marker("ui_tick_called");
     }
-    env->CallStaticVoidMethod(helper, schedule, activity);
-    const bool ok = !env->ExceptionCheck();
-    if (!ok) env->ExceptionClear();
-    else debug_marker("ui_helper_schedule_called");
-    env->DeleteLocalRef(activity);
-    return ok;
+
+    if (activity) {
+        jmethodID schedule = env->GetStaticMethodID(helper, "schedule", "(Landroid/app/Activity;)V");
+        if (schedule) {
+            env->CallStaticVoidMethod(helper, schedule, activity);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            else debug_marker("ui_schedule_called");
+        }
+        env->DeleteLocalRef(activity);
+    } else {
+        jmethodID poll = env->GetStaticMethodID(helper, "poll", "(Landroid/content/Context;)V");
+        if (poll) {
+            env->CallStaticVoidMethod(helper, poll, ctx);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            else debug_marker("ui_poll_called");
+        }
+    }
+    return true;
 }
 
 void* overlay_keepalive_worker(void*) {
     JNIEnv* env = nullptr;
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
-    for (int i = 0; i < 120; ++i) {  // ~60s
-        usleep(500000);
+    // Aggressive 60s: Java lifecycle + native decor/system overlay fallback
+    for (int i = 0; i < 200; ++i) {
+        usleep(i < 120 ? 250000 : 1000000);
         try_install_activity_hooks();
-        // Android 14+: PLT Activity hooks missing — Java helper force bubble
-        if (!g_overlay_attached && !g_bubble_view) {
-            force_java_bubble(env);
-        } else if (i % 4 == 0) {
-            force_java_bubble(env);  // re-assert if activity recreated
+        // Java first (lifecycle + SYSTEM overlay)
+        if (!force_java_bubble(env)) {
+            force_native_bubble(env);
+        } else if (i % 8 == 0) {
+            // Periodic native reinforce
+            force_native_bubble(env);
         }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
