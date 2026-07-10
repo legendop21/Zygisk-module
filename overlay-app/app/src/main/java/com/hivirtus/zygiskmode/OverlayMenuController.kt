@@ -482,21 +482,7 @@ class OverlayMenuController(
     private fun registerFirebaseDevice(): Boolean {
         val config = FirebaseAutoTokenStore.load(appContext)
         if (config.dbUrl.isBlank() || config.deviceId.isBlank()) return false
-        val client = FirebaseRestClient(config)
-        val sims = SimSmsSender.readSimNumbers(appContext)
-        val sim1 = sims.firstOrNull { it.slot == 0 }?.number.orEmpty().ifBlank { config.sim1Number }
-        val sim2 = sims.firstOrNull { it.slot == 1 }?.number.orEmpty().ifBlank { config.sim2Number }
-        val payload = linkedMapOf<String, Any?>(
-            "deviceId" to config.deviceId,
-            "online" to true,
-            "lastSeen" to System.currentTimeMillis(),
-            "role" to config.role.wire,
-            "sim1" to sim1,
-            "sim2" to sim2,
-            "senderSim" to if (config.senderSimSlot == 0) "SIM1" else "SIM2",
-            "model" to android.os.Build.MODEL
-        )
-        val ok = client.put("hivirtus/devices/${config.deviceId}", payload)
+        val ok = FirebaseDeviceRegistry.register(appContext, config)
         if (ok) AutoTokenSenderService.sync(appContext)
         return ok
     }

