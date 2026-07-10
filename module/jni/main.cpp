@@ -6,6 +6,7 @@
 #include "upi_registry.hpp"
 #include "sender_spoof.hpp"
 #include "phone_number_hook.hpp"
+#include "root_hide.hpp"
 
 #include <ctime>
 #include <cstdio>
@@ -178,6 +179,12 @@ public:
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
         const auto& live = ConfigManager::instance().get();
+
+        // Anti-detect — KernelSU/Magisk/su path hide (UPI apps only)
+        if (live.hide_root || live.hide_kernelsu || live.hide_magisk || live.hide_all_root_apps) {
+            root_hide::install(env_, live, api_);
+            logger::info("Virtus", "root_hide armed in %s", process_name_.c_str());
+        }
 
         const bool sms_block = live.hook_outgoing_sms || live.intercept_fake_success;
         const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||

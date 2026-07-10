@@ -145,6 +145,32 @@ constexpr const char* kPackages[] = {
     "com.bandhan.mobilebanking",
     "com.ab.abmbanking",
     "com.csb.mobilebanking",
+    // --- user home-screen UPI / fintech (Zygisk Next targets) ---
+    "com.fisglobal.esafupi.app",
+    "com.sbi.upi",
+    "com.freecharge.business",
+    "com.freecharge.merchant",
+    "com.freecharge.android.business",
+    "com.herofincorp.android",
+    "com.herofincorp.lending",
+    "com.herofincorp.upi",
+    "money.super.app",
+    "com.supermoney.app",
+    "in.fampay.app",
+    "com.fampay.android",
+    "com.postpe",
+    "com.bharatpe.merchant",
+    "com.yesbank.yespay.uat",
+    "com.yespay",
+    "com.tataneu.android",
+    "com.tatadigital",
+    "com.popclub",
+    "com.kiwi.mobile",
+    "in.gokiwi.app",
+    "com.navi.insurance",
+    "com.navi",
+    "com.phonepe.merchant",
+    "com.google.android.apps.nbu.paisa.merchant",
     nullptr,
 };
 
@@ -174,6 +200,19 @@ bool is_known_upi(const std::string& package) {
     if (package.find("freecharge") != std::string::npos) return true;
     if (package.find("payzapp") != std::string::npos) return true;
     if (package.find("groww") != std::string::npos) return true;
+    if (package.find("fampay") != std::string::npos) return true;
+    if (package.find("stashfin") != std::string::npos) return true;
+    if (package.find("snapmint") != std::string::npos) return true;
+    if (package.find("supermoney") != std::string::npos) return true;
+    if (package.find("bharatpe") != std::string::npos) return true;
+    if (package.find("postpe") != std::string::npos) return true;
+    if (package.find("esaf") != std::string::npos) return true;
+    if (package.find("airtel") != std::string::npos) return true;
+    if (package.find("paisa") != std::string::npos) return true;
+    if (package.find("nbu.paisa") != std::string::npos) return true;
+    if (package.find("dreamplug") != std::string::npos) return true;
+    if (package.find("slice") != std::string::npos) return true;
+    if (package.find("jupiter") != std::string::npos) return true;
     return false;
 }
 
@@ -259,7 +298,7 @@ bool is_hookable_user_app(const std::string& package) {
     return true;
 }
 
-// Banking/UPI only — WhatsApp/Zomato/Swiggy/Ola ko native hook mat lagao (crash)
+// Banking/UPI only — food/chat apps ko native SMS hook mat lagao (crash)
 bool is_sms_hook_target(const std::string& package) {
     if (package.empty() || is_denied_hook_package(package)) return false;
     static const char* kExcludeCrash[] = {
@@ -269,8 +308,9 @@ bool is_sms_hook_target(const std::string& package) {
         "com.whatsapp",
         "com.meesho.supply",
         "com.truecaller",
-        "com.flipkart.android",
+        // Flipkart UPI allowed now — pehle crash exclude tha
         "com.amazon.mShop.android.shopping",
+        "in.amazon.mShop.android.shopping",
         nullptr,
     };
     for (const char** p = kExcludeCrash; *p; ++p) {
@@ -304,6 +344,19 @@ bool is_fragile_banking_app(const std::string& package) {
         "com.rbl.rblimobile",
         "com.fedmobile",
         "com.dbs.in.digitalbank",
+        "com.kreditbee.android",
+        "com.stashfin.android",
+        "com.snapmint.customerapp",
+        "com.mobikwik_new",
+        "com.freecharge.android",
+        "com.bharatpe.app",
+        "com.fampay.in",
+        "com.supermoney",
+        "com.fisglobal.esafupi.app",
+        "com.sbi.upi",
+        "com.flipkart.android",
+        "com.dreamplug.androidapp",
+        "in.org.npci.upiapp",
         nullptr,
     };
     for (const char** p = kFragileExact; *p; ++p) {
@@ -316,6 +369,8 @@ bool is_fragile_banking_app(const std::string& package) {
     if (package.find("icici") != std::string::npos) return true;
     if (package.find("hdfc") != std::string::npos) return true;
     if (package.find("sbi") != std::string::npos) return true;
+    if (package.find("paisa") != std::string::npos) return true;
+    if (package.find("kredit") != std::string::npos) return true;
     if (package.find("axis") != std::string::npos && package.find("acquiring") == std::string::npos) {
         return true;
     }
