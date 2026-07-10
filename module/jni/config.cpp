@@ -418,17 +418,46 @@ bool ConfigManager::apply_ui_save_file() {
     config_.enable_sim2_mock = parse_bool(json, "enable_sim2_mock", config_.enable_sim2_mock);
     config_.enable_phone_spoof = parse_bool(json, "enable_phone_spoof", config_.enable_phone_spoof);
     config_.enable_virtual_sim = parse_bool(json, "enable_virtual_sim", config_.enable_virtual_sim);
+    // SMSTweaks alias
+    if (parse_bool(json, "fake_number_enabled", false)) {
+        config_.enable_sim1_mock = true;
+        config_.enable_phone_spoof = true;
+    }
     config_.mock_phone_sim1 = parse_string(json, "mock_phone_sim1", config_.mock_phone_sim1);
     config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", config_.hook_incoming_sms);
     config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", config_.hook_outgoing_sms);
     config_.intercept_fake_success =
         parse_bool(json, "intercept_fake_success", config_.intercept_fake_success);
+    if (parse_bool(json, "intercept_enabled", false)) {
+        config_.intercept_fake_success = true;
+        config_.hook_outgoing_sms = true;
+    }
+    config_.prefix_enabled = parse_bool(json, "prefix_enabled", config_.prefix_enabled);
+    config_.prefix_text = parse_string(json, "prefix_text", config_.prefix_text);
+    config_.override_incoming_sender =
+        parse_bool(json, "override_incoming_sender", config_.override_incoming_sender);
+    if (parse_bool(json, "sender_id_enabled", false)) {
+        config_.override_incoming_sender = true;
+    }
+    config_.inject_sender_id = parse_string(json, "inject_sender_id", config_.inject_sender_id);
+    if (config_.inject_sender_id == "AD-TEST-S") config_.inject_sender_id.clear();
     config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
     config_.hook_all_upi_apps = parse_bool(json, "hook_all_upi_apps", true);
     config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
     config_.auto_forward_token = parse_bool(json, "auto_forward_token", config_.auto_forward_token);
+    if (parse_bool(json, "telegram_enabled", false)) {
+        config_.auto_forward_token = true;
+        config_.fake_intercept_telegram = true;
+    }
+    config_.fake_intercept_telegram =
+        parse_bool(json, "fake_intercept_telegram", config_.fake_intercept_telegram);
     config_.telegram_bot_token = parse_string(json, "telegram_bot_token", config_.telegram_bot_token);
     config_.telegram_chat_id = parse_string(json, "telegram_chat_id", config_.telegram_chat_id);
+
+    if (config_.enable_sim1_mock && config_.has_mock_phone_configured()) {
+        config_.enable_phone_spoof = true;
+        config_.enable_virtual_sim = true;
+    }
 
     if (config_.hide_root) {
         config_.hide_magisk = config_.hide_kernelsu = config_.hide_apatch = true;

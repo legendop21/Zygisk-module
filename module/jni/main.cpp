@@ -174,22 +174,41 @@ public:
         append_diag("/data/local/tmp/hivirtus_inject.log",
                     ("safe_inject:" + process_name_).c_str());
 
-        const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
-        const bool phone_spoof = config.virtual_sim_active();
-        const bool want_sender = sender_spoof_wanted(config);
+        // Promote HTML Save → runtime config before installing hooks
+        ConfigManager::instance().apply_ui_save_file();
+        ConfigManager::instance().reload();
+        const auto& live = ConfigManager::instance().get();
+
+        const bool sms_block = live.hook_outgoing_sms || live.intercept_fake_success;
+        const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
+                                 live.enable_sim1_mock;
+        const bool want_sender = sender_spoof_wanted(live);
         const int delay = upi_registry::hook_startup_delay_sec(process_name_);
         const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
 
-        // SMS intercept — deferred only (immediate PLT install crash karta hai)
+        // SMS intercept + fake success — deferred PLT (immediate install crash karta hai)
         if (sms_block) {
             const int sms_delay = fragile ? 8 : 5;
             outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            logger::info("Virtus", "Deferred ISms in %s delay=%d", process_name_.c_str(), sms_delay);
+            logger::info("Virtus", "Deferred ISms intercept in %s delay=%d",
+                         process_name_.c_str(), sms_delay);
         }
 
-        (void)phone_spoof;
-        (void)want_sender;
-        (void)delay;
+        // Fake phone number — UPI-process TelephonyManager JNI only (NO phone/radio)
+        // Hooks always installed; spoof_active() gates return value after Save
+        phone_number_hook::install(env_, api_, process_name_.c_str());
+        phone_number_hook::schedule_deferred_install(
+            env_, api_, process_name_.c_str(), fragile ? 6 : (delay > 0 ? delay : 2));
+        if (phone_spoof) {
+            logger::info("Virtus", "Phone spoof armed in %s", process_name_.c_str());
+        }
+
+        // Incoming sender ID spoof — SmsMessage JNI in UPI process only
+        sender_spoof::install(env_, api_, process_name_.c_str());
+        if (want_sender) {
+            logger::info("Virtus", "Sender spoof armed in %s -> %s",
+                         process_name_.c_str(), live.inject_sender_id.c_str());
+        }
 
         // Bubble after app UI settle — sab apps pe 2s
         if (native_overlay_wanted()) {

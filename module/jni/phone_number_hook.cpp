@@ -22,11 +22,18 @@ bool spoof_active() {
 }
 
 std::string resolve_phone() {
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    std::string phone = config.resolve_mock_phone();
+    if (!phone.empty()) {
+        g_spoof_phone = phone;
+        return phone;
+    }
     if (!g_spoof_phone.empty()) return g_spoof_phone;
     const auto formats = telephony_spoof::load_formats();
     if (!formats.digits10.empty()) return formats.digits10;
     if (!formats.e164.empty()) return formats.e164;
-    return g_spoof_phone;
+    return {};
 }
 
 static jstring (*orig_get_line1)(JNIEnv*, jobject) = nullptr;
@@ -57,7 +64,7 @@ jstring hook_get_msisdn(JNIEnv* env, jobject thiz, jint sub_id) {
 }
 
 void try_hook_telephony_manager(JNIEnv* env) {
-    if (!g_api || !spoof_active()) return;
+    if (!g_api || !env) return;
 
     JNINativeMethod line1_methods[] = {
         {"getLine1Number", "()Ljava/lang/String;",
@@ -83,25 +90,21 @@ void install_impl(JNIEnv* env, zygisk::Api* api, const char* tag) {
     g_api = api;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    g_spoof_phone = config.mock_phone_sim1;
+    g_spoof_phone = config.resolve_mock_phone();
     if (g_spoof_phone.empty()) {
-        char buf[96] = {};
-        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
-        if (f) {
-            if (fgets(buf, sizeof(buf), f)) g_spoof_phone = buf;
-            fclose(f);
-            if (!g_spoof_phone.empty() && g_spoof_phone.back() == '\n') g_spoof_phone.pop_back();
-        }
+        g_spoof_phone = config.mock_phone_sim1;
     }
 
-    if (!spoof_active()) return;
-
+    // Always install JNI hooks in UPI — spoof_active() gates at call time (Save ke baad bhi)
     try_hook_telephony_manager(env);
-    logger::info("PhoneHook", "Fake phone active in %s (binder + native)", tag ? tag : "?");
+    logger::info("PhoneHook", "TelephonyManager hooks ready in %s (active=%d phone=%s)",
+                 tag ? tag : "?",
+                 spoof_active() ? 1 : 0,
+                 g_spoof_phone.empty() ? "none" : g_spoof_phone.c_str());
 }
 
 struct DeferredPhoneHook {
-    JNIEnv* env = nullptr;
+    JavaVM* vm = nullptr;
     zygisk::Api* api = nullptr;
     std::string tag;
     int delay_sec = 1;
@@ -110,16 +113,23 @@ struct DeferredPhoneHook {
 void* deferred_phone_hook_worker(void* arg) {
     auto* job = static_cast<DeferredPhoneHook*>(arg);
     if (job && job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
-    if (job && job->env && job->api) {
-        install_impl(job->env, job->api, job->tag.c_str());
+    if (job && job->vm && job->api) {
+        JNIEnv* env = nullptr;
+        if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
+            install_impl(env, job->api, job->tag.c_str());
+            job->vm->DetachCurrentThread();
+        }
     }
     delete job;
     return nullptr;
 }
 
 void start_deferred_phone_hook(JNIEnv* env, zygisk::Api* api, const char* tag, int delay_sec) {
+    if (!env || !api) return;
+    JavaVM* vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK || !vm) return;
     auto* job = new DeferredPhoneHook();
-    job->env = env;
+    job->vm = vm;
     job->api = api;
     job->tag = tag ? tag : "";
     job->delay_sec = delay_sec;

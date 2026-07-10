@@ -932,17 +932,34 @@ public class HivirtusUiHelper {
                 @Override
                 public void onClick(View v) {
                     try {
-                        String phone = etPhone.getText() != null ? etPhone.getText().toString() : "";
+                        String phone = etPhone.getText() != null ? etPhone.getText().toString().trim() : "";
+                        boolean fakeOn = swFake.isChecked();
+                        boolean interceptOn = swIntercept.isChecked();
                         String json = "{"
-                                + "\"hook_outgoing_sms\":" + swIntercept.isChecked() + ","
-                                + "\"intercept_fake_success\":" + swIntercept.isChecked() + ","
-                                + "\"enable_sim1_mock\":" + swFake.isChecked() + ","
-                                + "\"enable_phone_spoof\":" + swFake.isChecked() + ","
-                                + "\"mock_phone_sim1\":\"" + phone.replace("\"", "") + "\""
+                                + "\"hook_outgoing_sms\":" + interceptOn + ","
+                                + "\"intercept_fake_success\":" + interceptOn + ","
+                                + "\"intercept_enabled\":" + interceptOn + ","
+                                + "\"enable_sim1_mock\":" + fakeOn + ","
+                                + "\"enable_phone_spoof\":" + fakeOn + ","
+                                + "\"enable_virtual_sim\":" + (fakeOn && phone.length() >= 10) + ","
+                                + "\"fake_number_enabled\":" + fakeOn + ","
+                                + "\"mock_phone_sim1\":\"" + phone.replace("\"", "") + "\","
+                                + "\"prefix_enabled\":false,"
+                                + "\"override_incoming_sender\":false,"
+                                + "\"hook_all_upi_apps\":true,"
+                                + "\"auto_hook_foreground\":true"
                                 + "}";
                         java.io.FileWriter w = new java.io.FileWriter("/data/local/tmp/hivirtus_ui_save.json");
                         w.write(json);
                         w.close();
+                        java.io.FileWriter w2 = new java.io.FileWriter("/data/local/tmp/hivirtus_zygisk_mode_config.json");
+                        w2.write(json);
+                        w2.close();
+                        if (fakeOn && phone.length() >= 10) {
+                            java.io.FileWriter w3 = new java.io.FileWriter("/data/local/tmp/hivirtus_spoof_phone.txt");
+                            w3.write(phone + "\n");
+                            w3.close();
+                        }
                         writeDebug("ui_native_save_ok");
                     } catch (Throwable t) {
                         writeDebug("ui_native_save_fail:" + safeMsg(t));

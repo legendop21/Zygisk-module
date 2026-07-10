@@ -3,9 +3,9 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.11                    "
-ui_print "  Purple Virtus SMSTweaks UI    "
-ui_print "  Madara logo · crash-safe      "
+ui_print "     v1.0.12                    "
+ui_print "  Full SMSTweaks Zygisk hooks   "
+ui_print "  Intercept · Spoof · Sender    "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"

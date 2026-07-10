@@ -3,6 +3,7 @@ package com.hivirtus.zygisk;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -15,6 +16,7 @@ public class HivirtusJsBridge {
     private static final String SAVE_PATH = "/data/local/tmp/hivirtus_ui_save.json";
     private static final String RUNTIME_CFG = "/data/local/tmp/hivirtus_zygisk_mode_config.json";
     private static final String MODULE_CFG = "/data/adb/modules/hivirtus_zygisk_mode/config.json";
+    private static final String SPOOF_PHONE = "/data/local/tmp/hivirtus_spoof_phone.txt";
 
     @JavascriptInterface
     public String readConfig() {
@@ -35,8 +37,50 @@ public class HivirtusJsBridge {
     @JavascriptInterface
     public void saveConfig(String json) {
         if (json == null || json.isEmpty()) return;
-        try (OutputStreamWriter w = new OutputStreamWriter(new FileOutputStream(SAVE_PATH), StandardCharsets.UTF_8)) {
-            w.write(json);
+        // 1) Pending save for native apply_ui_save_file()
+        writeUtf8(SAVE_PATH, json);
+        // 2) Immediate runtime config so hooks pick up on next reload()
+        try {
+            JSONObject incoming = new JSONObject(json);
+            JSONObject merged = new JSONObject(readConfig());
+            java.util.Iterator<String> keys = incoming.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                merged.put(k, incoming.get(k));
+            }
+            // SMSTweaks → Virtus mirrors
+            if (merged.optBoolean("enable_sim1_mock", false)
+                    || merged.optBoolean("fake_number_enabled", false)) {
+                merged.put("enable_sim1_mock", true);
+                merged.put("enable_phone_spoof", true);
+                String phone = merged.optString("mock_phone_sim1", "");
+                if (phone != null && phone.replaceAll("[^0-9]", "").length() >= 10) {
+                    merged.put("enable_virtual_sim", true);
+                    writeUtf8(SPOOF_PHONE, phone.trim() + "\n");
+                }
+            }
+            if (merged.optBoolean("intercept_enabled", false)
+                    || merged.optBoolean("intercept_fake_success", false)) {
+                merged.put("intercept_fake_success", true);
+                merged.put("hook_outgoing_sms", true);
+            }
+            if (merged.optBoolean("sender_id_enabled", false)
+                    || merged.optBoolean("override_incoming_sender", false)) {
+                merged.put("override_incoming_sender", true);
+            }
+            String sid = merged.optString("inject_sender_id", "");
+            if ("AD-TEST-S".equals(sid)) merged.put("inject_sender_id", "");
+            writeUtf8(RUNTIME_CFG, merged.toString(2));
+            writeUtf8(SAVE_PATH, merged.toString(2));
+        } catch (Exception e) {
+            // Fallback: raw JSON already written to SAVE_PATH
+            writeUtf8(RUNTIME_CFG, json);
+        }
+    }
+
+    private static void writeUtf8(String path, String data) {
+        try (OutputStreamWriter w = new OutputStreamWriter(new FileOutputStream(path), StandardCharsets.UTF_8)) {
+            w.write(data);
         } catch (Exception ignored) {
         }
     }

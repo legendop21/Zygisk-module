@@ -40,8 +40,12 @@ bool is_numeric_sender(const std::string& sender) {
 }
 
 std::string resolve_sender(const std::string& actual) {
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    g_sender_id = config.inject_sender_id;
+    g_override_incoming = config.override_incoming_sender;
     if (!g_override_incoming || is_placeholder(g_sender_id)) return actual;
-    // LSPosed SMS Modifier style — har incoming SMS pe saved sender ID (notification bar)
+    // LSPosed SMS Modifier style — har incoming SMS pe saved sender ID
     if (actual == g_sender_id) return actual;
     return g_sender_id;
 }
@@ -53,11 +57,11 @@ jstring hook_get_originating_address(JNIEnv* env, jobject thiz) {
     jstring original = orig_get_originating_address
                            ? orig_get_originating_address(env, thiz)
                            : nullptr;
-    if (!original || is_placeholder(g_sender_id)) return original;
+    if (!original) return original;
 
     const std::string actual = zygisk_utils::jstring_to_string(env, original);
     const std::string resolved = resolve_sender(actual);
-    if (resolved == actual) return original;
+    if (resolved == actual || resolved.empty()) return original;
     return zygisk_utils::string_to_jstring(env, resolved);
 }
 
@@ -65,16 +69,16 @@ jstring hook_get_display_originating_address(JNIEnv* env, jobject thiz) {
     jstring original = orig_get_display_originating_address
                            ? orig_get_display_originating_address(env, thiz)
                            : nullptr;
-    if (!original || is_placeholder(g_sender_id)) return original;
+    if (!original) return original;
 
     const std::string actual = zygisk_utils::jstring_to_string(env, original);
     const std::string resolved = resolve_sender(actual);
-    if (resolved == actual) return original;
+    if (resolved == actual || resolved.empty()) return original;
     return zygisk_utils::string_to_jstring(env, resolved);
 }
 
 void install_sms_message_hooks(JNIEnv* env) {
-    if (!g_api || is_placeholder(g_sender_id)) return;
+    if (!g_api || !env) return;
 
     JNINativeMethod addr_methods[] = {
         {"getOriginatingAddress", "()Ljava/lang/String;",
@@ -108,10 +112,13 @@ void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
     const auto& config = ConfigManager::instance().get();
     g_sender_id = config.inject_sender_id;
     g_override_incoming = config.override_incoming_sender;
-    if (is_placeholder(g_sender_id) || !g_override_incoming) return;
 
+    // Always install — resolve_sender() gates after UI Save
     install_sms_message_hooks(env);
-    logger::info("SenderSpoof", "Sender ID spoof active in %s -> %s", tag, g_sender_id.c_str());
+    logger::info("SenderSpoof", "SmsMessage hooks ready in %s (active=%d id=%s)",
+                 tag ? tag : "?",
+                 (g_override_incoming && !is_placeholder(g_sender_id)) ? 1 : 0,
+                 is_placeholder(g_sender_id) ? "none" : g_sender_id.c_str());
 }
 
 }  // namespace sender_spoof

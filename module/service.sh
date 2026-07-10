@@ -98,6 +98,35 @@ is_upi_pkg() {
 
 sync_config() {
   # Runtime JSON overwrite mat karo (telegram wipe) — sirf spoof phone + first-boot seed
+  # Promote HTML Save → runtime so Zygisk hooks pick up without app restart
+  if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
+    SAVE=/data/local/tmp/hivirtus_ui_save.json
+    if [ -f "$RUNTIME" ]; then
+      # Keep runtime; overlay key fields from save via simple replace of known keys
+      for key in enable_sim1_mock enable_phone_spoof enable_virtual_sim intercept_fake_success \
+                 hook_outgoing_sms prefix_enabled override_incoming_sender auto_forward_token \
+                 fake_intercept_telegram; do
+        val=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}]*" "$SAVE" 2>/dev/null | head -n1 | sed 's/.*:[[:space:]]*//')
+        if [ -n "$val" ]; then
+          if grep -q "\"$key\"" "$RUNTIME" 2>/dev/null; then
+            sed -i "s/\"$key\"[[:space:]]*:[[:space:]]*[^,}]*/\"$key\": $val/" "$RUNTIME" 2>/dev/null
+          fi
+        fi
+      done
+      for key in mock_phone_sim1 prefix_text inject_sender_id telegram_bot_token telegram_chat_id; do
+        val=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$SAVE" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        if [ -n "$val" ] || grep -q "\"$key\"" "$SAVE" 2>/dev/null; then
+          if grep -q "\"$key\"" "$RUNTIME" 2>/dev/null; then
+            sed -i "s/\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"$key\": \"$val\"/" "$RUNTIME" 2>/dev/null
+          fi
+        fi
+      done
+    else
+      cp -f "$SAVE" "$RUNTIME" 2>/dev/null
+    fi
+    chmod 644 "$RUNTIME" 2>/dev/null
+  fi
+
   SRC=""
   if [ -f "$RUNTIME" ]; then
     SRC="$RUNTIME"
