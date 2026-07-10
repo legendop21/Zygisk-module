@@ -26,7 +26,8 @@
       var raw = bridge.getConfig();
       state = raw ? JSON.parse(raw) : {};
       applyToForm();
-      $("#statusText").textContent = "config loaded · local";
+      var zyg = bridge.getZygiskStatus ? bridge.getZygiskStatus() : "";
+      $("#statusText").textContent = zyg || "config loaded · local";
     } catch (e) {
       toast("load fail");
     }

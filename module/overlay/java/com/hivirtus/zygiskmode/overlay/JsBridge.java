@@ -4,6 +4,8 @@ import android.webkit.JavascriptInterface;
 
 import org.json.JSONObject;
 
+import java.io.File;
+
 /** HTML UI ↔ local config.json bridge */
 public final class JsBridge {
 
@@ -36,6 +38,20 @@ public final class JsBridge {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    @JavascriptInterface
+    public String getZygiskStatus() {
+        if (new File("/data/local/tmp/hivirtus_zygisk_stopped.flag").exists()) {
+            return "zygisk offline · bubble always-on";
+        }
+        if (new File("/data/local/tmp/hivirtus_zygisk_active.flag").exists()) {
+            return "zygisk active · hooks OK";
+        }
+        if (new File("/data/local/tmp/hivirtus_overlay_alive.flag").exists()) {
+            return "overlay alive · zygisk unknown";
+        }
+        return "module ready · local";
     }
 
     @JavascriptInterface

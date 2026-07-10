@@ -40,13 +40,13 @@ chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-# Bubble fallback — Zygisk stopped ho tab bhi (early start)
+# Always-on overlay — post-fs-data early supervisor
 if [ -f "$MODDIR/start_overlay.sh" ]; then
   . "$MODDIR/start_overlay.sh"
-  (
-    sleep 15
-    start_overlay_daemon
-  ) &
+  if [ ! -f /data/local/tmp/hivirtus_overlay_supervisor.pid ] || \
+     ! kill -0 "$(cat /data/local/tmp/hivirtus_overlay_supervisor.pid 2>/dev/null)" 2>/dev/null; then
+    overlay_supervisor &
+  fi
 fi
 
 HIDE_ROOT=$(read_bool "hide_root")

