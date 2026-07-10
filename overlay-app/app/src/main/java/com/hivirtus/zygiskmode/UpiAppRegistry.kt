@@ -18,6 +18,7 @@ object UpiAppRegistry {
         UpiApp("com.google.android.apps.nbu.paisa.user", "Google Pay", listOf("GPAY", "GOOGLEPAY"), 25),
         UpiApp("com.yespay.next", "YesPay Next", listOf("YESPRO", "YESPROUPI", "YESPAY", "YESBANK", "YESBNK"), 35, needs2faBonus = true),
         UpiApp("com.yesbank.yespay", "YesPay", listOf("YESPRO", "YESPROUPI", "YESPAY", "YESBNK"), 35, needs2faBonus = true),
+        UpiApp("com.yesbank.yespaynext", "YesPay Next", listOf("YESPRO", "YESPROUPI", "YESPAY", "YESBNK"), 35, needs2faBonus = true),
         UpiApp("com.snapmint.customerapp", "Snapmint", listOf("SNAPMINT", "SNAP", "SMINT", "AD-SNAPMINT", "SNAPMT"), 30),
         UpiApp("com.tataneu", "Tata Neu", listOf("TATANEU", "TATA"), 25),
         UpiApp("com.stashfin.android", "Stashfin", listOf("STASHFIN", "STASH"), 40, needs2faBonus = true),

@@ -12,6 +12,7 @@ constexpr const char* kPackages[] = {
     "com.google.android.apps.nbu.paisa.user",
     "com.yespay.next",
     "com.yesbank.yespay",
+    "com.yesbank.yespaynext",
     "com.snapmint.customerapp",
     "com.tataneu",
     "com.stashfin.android",
