@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.4
-versionCode=10004
+version=v1.0.5
+versionCode=10005
 author=@hivirtus
-description=Bubble fix: TOP-LEFT + lifecycle + SYSTEM overlay. Keyboard pe hide nahi. Safe UPI-only.
+description=Android 11-16 bubble+menu. Decor-first, InMemoryDex, embedded menu. TOP-LEFT gold V.
 zygisk=1

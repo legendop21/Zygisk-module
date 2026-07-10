@@ -5,10 +5,12 @@
 #include "zygisk.hpp"
 
 #include <atomic>
+#include <cstdio>
 #include <pthread.h>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
 
 namespace overlay_ui {
 
@@ -1036,8 +1038,19 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     bool attached = false;
     g_system_overlay_mode = false;
 
-    // Prefer SYSTEM overlay when granted — keyboard ke upar rehta hai
-    if (can_draw_overlays(env, activity)) {
+    // 1) DECOR first — no permission, Android 11–16 safe
+    add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, kGravityTopStart, 14, 96, 0, 0));
+    add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
+    set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+    if (!env->ExceptionCheck()) {
+        attached = true;
+        debug_marker("overlay_decor_mode");
+    } else {
+        env->ExceptionClear();
+    }
+
+    // 2) SYSTEM overlay fallback if decor failed + permission granted
+    if (!attached && can_draw_overlays(env, activity)) {
         g_system_overlay_mode = true;
         attached = add_via_system_overlay(env, activity, bubble, kGravityTopStart, bubble_x, bubble_y,
                                          bubble_w, bubble_h);
@@ -1049,22 +1062,9 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         } else {
             g_system_overlay_mode = false;
         }
-    } else {
+    } else if (!attached) {
         request_overlay_grant(g_package);
         debug_marker("overlay_permission_pending");
-    }
-
-    if (!attached) {
-        // TOP|START margins: left=14 top=96
-        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, kGravityTopStart, 14, 96, 0, 0));
-        add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
-        set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-        if (!env->ExceptionCheck()) {
-            attached = true;
-            debug_marker("overlay_decor_mode");
-        } else {
-            env->ExceptionClear();
-        }
     }
 
     g_overlay_attached = true;
@@ -1176,6 +1176,66 @@ void schedule_plt_hooks() {
 
 jobject g_helper_class = nullptr;  // cached global ref — same ClassLoader/statics
 
+jobject load_class_from_loader(JNIEnv* env, jobject dex_loader, const char* class_name) {
+    if (!dex_loader || !class_name) return nullptr;
+    jclass loader_cls = env->FindClass("java/lang/ClassLoader");
+    jstring name = env->NewStringUTF(class_name);
+    jobject cls = env->CallObjectMethod(
+        dex_loader, env->GetMethodID(loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"), name);
+    if (!cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    return cls;
+}
+
+jobject try_inmemory_dex(JNIEnv* env, jobject parent_loader, const char* dex_path) {
+    // Android 8+ — no oat/opt dir, works better on 14–16 SELinux
+    jclass im_cls = env->FindClass("dalvik/system/InMemoryDexClassLoader");
+    if (!im_cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    FILE* f = fopen(dex_path, "rb");
+    if (!f) return nullptr;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || sz > 8 * 1024 * 1024) {
+        fclose(f);
+        return nullptr;
+    }
+    std::vector<char> buf(static_cast<size_t>(sz));
+    if (fread(buf.data(), 1, static_cast<size_t>(sz), f) != static_cast<size_t>(sz)) {
+        fclose(f);
+        return nullptr;
+    }
+    fclose(f);
+
+    jbyteArray arr = env->NewByteArray(static_cast<jsize>(sz));
+    if (!arr) return nullptr;
+    env->SetByteArrayRegion(arr, 0, static_cast<jsize>(sz), reinterpret_cast<const jbyte*>(buf.data()));
+
+    jclass bb_cls = env->FindClass("java/nio/ByteBuffer");
+    jmethodID wrap = env->GetStaticMethodID(bb_cls, "wrap", "([B)Ljava/nio/ByteBuffer;");
+    jobject bb = env->CallStaticObjectMethod(bb_cls, wrap, arr);
+    if (!bb || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+
+    jmethodID ctor = env->GetMethodID(im_cls, "<init>", "(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V");
+    if (!ctor) return nullptr;
+    jobject loader = env->NewObject(im_cls, ctor, bb, parent_loader);
+    if (!loader || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        debug_marker("inmemory_dex_fail");
+        return nullptr;
+    }
+    debug_marker("inmemory_dex_ok");
+    return loader;
+}
+
 jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
     if (g_helper_class && class_name &&
         std::string(class_name) == "com.hivirtus.zygisk.HivirtusUiHelper") {
@@ -1191,52 +1251,57 @@ jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
         return nullptr;
     }
 
-    // Writable opt dir — app code_cache preferred
-    std::string opt = "/data/local/tmp";
     jclass ctx_cls = env->GetObjectClass(ctx);
-    jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
-    if (get_cache) {
-        jobject file = env->CallObjectMethod(ctx, get_cache);
-        if (file && !env->ExceptionCheck()) {
-            jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
-                                                   "()Ljava/lang/String;");
-            jstring path_j = (jstring)env->CallObjectMethod(file, get_path);
-            if (path_j) {
-                const char* p = env->GetStringUTFChars(path_j, nullptr);
-                if (p) {
-                    opt = p;
-                    env->ReleaseStringUTFChars(path_j, p);
+    jobject parent_loader = env->CallObjectMethod(
+        ctx, env->GetMethodID(ctx_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
+
+    jobject dex_loader = try_inmemory_dex(env, parent_loader, dex_path);
+
+    // Fallback DexClassLoader (older / if InMemory fails)
+    if (!dex_loader) {
+        std::string opt = "/data/local/tmp";
+        jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
+        if (get_cache) {
+            jobject file = env->CallObjectMethod(ctx, get_cache);
+            if (file && !env->ExceptionCheck()) {
+                jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
+                                                       "()Ljava/lang/String;");
+                jstring path_j = (jstring)env->CallObjectMethod(file, get_path);
+                if (path_j) {
+                    const char* p = env->GetStringUTFChars(path_j, nullptr);
+                    if (p) {
+                        opt = p;
+                        env->ReleaseStringUTFChars(path_j, p);
+                    }
                 }
+            } else if (env->ExceptionCheck()) {
+                env->ExceptionClear();
             }
-        } else if (env->ExceptionCheck()) {
+        }
+        jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
+        if (dex_cls && !env->ExceptionCheck()) {
+            jmethodID dex_ctor = env->GetMethodID(dex_cls, "<init>",
+                                                  "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+                                                  "Ljava/lang/ClassLoader;)V");
+            jstring dex_j = env->NewStringUTF(dex_path);
+            jstring opt_j = env->NewStringUTF(opt.c_str());
+            dex_loader = env->NewObject(dex_cls, dex_ctor, dex_j, opt_j, nullptr, parent_loader);
+            if (!dex_loader || env->ExceptionCheck()) {
+                env->ExceptionClear();
+                debug_marker("dex_loader_fail");
+                dex_loader = nullptr;
+            } else {
+                debug_marker("dex_loader_ok");
+            }
+        } else {
             env->ExceptionClear();
         }
     }
 
-    jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
-    if (!dex_cls || env->ExceptionCheck()) {
-        env->ExceptionClear();
-        return nullptr;
-    }
-    jmethodID dex_ctor = env->GetMethodID(dex_cls, "<init>",
-                                          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-                                          "Ljava/lang/ClassLoader;)V");
-    jstring dex_j = env->NewStringUTF(dex_path);
-    jstring opt_j = env->NewStringUTF(opt.c_str());
-    jobject parent_loader = env->CallObjectMethod(
-        ctx, env->GetMethodID(ctx_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
-    jobject dex_loader = env->NewObject(dex_cls, dex_ctor, dex_j, opt_j, nullptr, parent_loader);
-    if (!dex_loader || env->ExceptionCheck()) {
-        env->ExceptionClear();
-        debug_marker("dex_loader_fail");
-        return nullptr;
-    }
-    jclass loader_cls = env->FindClass("java/lang/ClassLoader");
-    jstring name = env->NewStringUTF(class_name);
-    jobject cls = env->CallObjectMethod(
-        dex_loader, env->GetMethodID(loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"), name);
-    if (!cls || env->ExceptionCheck()) {
-        env->ExceptionClear();
+    if (!dex_loader) return nullptr;
+
+    jobject cls = load_class_from_loader(env, dex_loader, class_name);
+    if (!cls) {
         debug_marker("dex_loadclass_fail");
         return nullptr;
     }

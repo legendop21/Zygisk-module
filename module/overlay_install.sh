@@ -149,5 +149,13 @@ hivirtus_boot_activate_overlay() {
   else
     echo "bridge_dex_missing:$MOD" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
   fi
+  # UI HTML copy — WebView Android 11+ /data/adb se block kar sakta hai
+  if [ -d "$MOD/ui" ]; then
+    mkdir -p /data/local/tmp/hivirtus_ui 2>/dev/null
+    cp -f "$MOD/ui/"* /data/local/tmp/hivirtus_ui/ 2>/dev/null
+    chmod 755 /data/local/tmp/hivirtus_ui 2>/dev/null
+    chmod 644 /data/local/tmp/hivirtus_ui/* 2>/dev/null
+    echo "ui_copied" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  fi
   hivirtus_grant_overlay_permission
 }

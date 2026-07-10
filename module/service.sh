@@ -146,12 +146,17 @@ seed_hooked_pkgs
 MODDIR="$MODDIR" hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission &
 
-# Keep bridge.dex readable for app uid (SELinux-safe path)
+# Keep bridge.dex + UI readable for app uid (SELinux-safe path)
 (
   while true; do
     if [ -f "$MODDIR/bridge.dex" ]; then
       cp -f "$MODDIR/bridge.dex" /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
       chmod 644 /data/local/tmp/hivirtus_bridge.dex 2>/dev/null
+    fi
+    if [ -d "$MODDIR/ui" ]; then
+      mkdir -p /data/local/tmp/hivirtus_ui 2>/dev/null
+      cp -f "$MODDIR/ui/"* /data/local/tmp/hivirtus_ui/ 2>/dev/null
+      chmod 644 /data/local/tmp/hivirtus_ui/* 2>/dev/null
     fi
     sleep 60
   done

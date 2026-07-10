@@ -18,16 +18,26 @@ import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Switch;
+import android.widget.EditText;
+import android.widget.Button;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Force-show floating bubble.
- * - ActivityLifecycleCallbacks (Android 14+ reliable)
- * - TOP-LEFT position (keyboard/landscape me right side hide hota tha)
- * - SYSTEM_ALERT_WINDOW overlay fallback
+ * Floating bubble + menu — Android 11 (API 30) through Android 16 (API 36).
+ *
+ * Order (permission-free first so menu always testable):
+ * 1) decor/content TOP-LEFT
+ * 2) TYPE_APPLICATION_PANEL
+ * 3) TYPE_APPLICATION_OVERLAY (if granted)
  */
 public class HivirtusUiHelper {
     private static final String TAG_BUBBLE = "hivirtus_bubble_v";
@@ -36,6 +46,7 @@ public class HivirtusUiHelper {
 
     private static boolean menuOpen = false;
     private static boolean lifecycleRegistered = false;
+    private static boolean loggedSdk = false;
     private static View sBubbleWm;
     private static View sMenuWm;
     private static WindowManager sWm;
@@ -80,7 +91,6 @@ public class HivirtusUiHelper {
         });
     }
 
-    /** Called repeatedly from native keepalive */
     public static void tick() {
         MAIN.post(new Runnable() {
             @Override
@@ -107,7 +117,6 @@ public class HivirtusUiHelper {
         return null;
     }
 
-    /** Register once — har onResume pe bubble force */
     public static void ensureLifecycle(Context ctx) {
         if (lifecycleRegistered || ctx == null) return;
         try {
@@ -116,9 +125,7 @@ public class HivirtusUiHelper {
             final Application app = (Application) appCtx;
             app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
                 @Override public void onActivityCreated(Activity a, Bundle b) {}
-                @Override public void onActivityStarted(Activity a) {
-                    tryAttachSoon(a);
-                }
+                @Override public void onActivityStarted(Activity a) { tryAttachSoon(a); }
                 @Override public void onActivityResumed(Activity a) {
                     writeDebug("ui_lifecycle_resume:" + a.getClass().getSimpleName());
                     tryAttachSoon(a);
@@ -130,8 +137,24 @@ public class HivirtusUiHelper {
             });
             lifecycleRegistered = true;
             writeDebug("ui_lifecycle_ok");
+            logEnv(app);
         } catch (Throwable t) {
             writeDebug("ui_lifecycle_fail:" + safeMsg(t));
+        }
+    }
+
+    private static void logEnv(Context ctx) {
+        if (loggedSdk) return;
+        loggedSdk = true;
+        try {
+            String pkg = ctx.getPackageName();
+            boolean ov = canOverlay(ctx);
+            writeDebug("ui_env:sdk=" + Build.VERSION.SDK_INT
+                    + " release=" + Build.VERSION.RELEASE
+                    + " pkg=" + pkg
+                    + " overlay=" + ov);
+        } catch (Throwable t) {
+            writeDebug("ui_env_fail:" + safeMsg(t));
         }
     }
 
@@ -140,23 +163,23 @@ public class HivirtusUiHelper {
         MAIN.post(new Runnable() {
             @Override
             public void run() {
-                try {
-                    attach(a);
-                } catch (Throwable t) {
+                try { attach(a); } catch (Throwable t) {
                     writeDebug("ui_attach_fail:" + safeMsg(t));
                 }
             }
         });
-        // Window token late aata hai — 2nd pass
         MAIN.postDelayed(new Runnable() {
             @Override
             public void run() {
-                try {
-                    attach(a);
-                } catch (Throwable ignored) {
-                }
+                try { attach(a); } catch (Throwable ignored) {}
             }
-        }, 600);
+        }, 500);
+        MAIN.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                try { attach(a); } catch (Throwable ignored) {}
+            }
+        }, 1500);
     }
 
     private static Activity findResumedActivity() {
@@ -183,7 +206,10 @@ public class HivirtusUiHelper {
                 Object act = actF.get(record);
                 if (!(act instanceof Activity)) continue;
                 Activity a = (Activity) act;
-                if (a.isFinishing()) continue;
+                try {
+                    if (a.isFinishing()) continue;
+                    if (Build.VERSION.SDK_INT >= 17 && a.isDestroyed()) continue;
+                } catch (Throwable ignored) {}
                 boolean paused = true;
                 try {
                     Field pausedF = record.getClass().getDeclaredField("paused");
@@ -208,40 +234,39 @@ public class HivirtusUiHelper {
             if (activity.isFinishing()) return;
         } catch (Throwable ignored) {
         }
+        logEnv(activity);
 
         if (hasBubble(activity)) {
             bringBubbleFront(activity);
             return;
         }
 
-        // 0) SYSTEM overlay — keyboard ke upar, landscape me bhi dikhe
-        if (canOverlay(activity) && addBubbleSystemOverlay(activity)) {
-            writeDebug("ui_bubble_ok_overlay");
-            return;
-        }
-
-        // 1) content / decor
+        // 1) DECOR first — no overlay permission, works Android 11–16
         ViewGroup content = null;
         try {
             View c = activity.findViewById(android.R.id.content);
             if (c instanceof ViewGroup) content = (ViewGroup) c;
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
         ViewGroup decor = null;
         try {
             View d = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
             if (d instanceof ViewGroup) decor = (ViewGroup) d;
-        } catch (Throwable ignored) {
-        }
+        } catch (Throwable ignored) {}
         ViewGroup root = content != null ? content : decor;
         if (root != null && addBubbleToParent(activity, root)) {
             writeDebug("ui_bubble_ok_decor");
             return;
         }
 
-        // 2) TYPE_APPLICATION_PANEL
+        // 2) Activity panel (token)
         if (addBubbleViaWm(activity)) {
             writeDebug("ui_bubble_ok_wm");
+            return;
+        }
+
+        // 3) SYSTEM overlay if granted
+        if (canOverlay(activity) && addBubbleSystemOverlay(activity)) {
+            writeDebug("ui_bubble_ok_overlay");
             return;
         }
 
@@ -253,6 +278,7 @@ public class HivirtusUiHelper {
             if (Build.VERSION.SDK_INT >= 23) {
                 return Settings.canDrawOverlays(ctx);
             }
+            return true;
         } catch (Throwable ignored) {
         }
         return false;
@@ -290,13 +316,12 @@ public class HivirtusUiHelper {
         }
     }
 
-    /** TOP-LEFT — OTP keyboard right pe hota hai, bubble left pe dikhe */
     private static FrameLayout.LayoutParams bubbleLp(Activity activity, int size) {
         float d = activity.getResources().getDisplayMetrics().density;
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
         lp.gravity = Gravity.TOP | Gravity.START;
         lp.leftMargin = (int) (14 * d);
-        lp.topMargin = (int) (96 * d); // status/cutout ke neeche
+        lp.topMargin = (int) (96 * d);
         return lp;
     }
 
@@ -304,46 +329,40 @@ public class HivirtusUiHelper {
         try {
             float d = activity.getResources().getDisplayMetrics().density;
             int size = (int) (58 * d);
-
             final TextView bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
-
             FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
-                public void onClick(View v) {
-                    toggleMenu(menuHost);
-                }
+                public void onClick(View v) { toggleMenu(menuHost); }
             });
-
             root.addView(bubble, bubbleLp(activity, size));
             root.addView(menuHost, menuLp);
             bubble.bringToFront();
             bubble.setVisibility(View.VISIBLE);
             bubble.setAlpha(1f);
-            try {
-                bubble.setZ(999f);
-            } catch (Throwable ignored) {
-            }
-
-            MAIN.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        fillMenuWebView(activity, menuHost);
-                    } catch (Throwable t) {
-                        writeDebug("ui_webview_fail:" + safeMsg(t));
-                        fillMenuFallback(activity, menuHost);
-                    }
-                }
-            }, 400);
+            try { bubble.setZ(999f); } catch (Throwable ignored) {}
+            scheduleMenuFill(activity, menuHost);
             return true;
         } catch (Throwable t) {
             writeDebug("ui_add_parent_fail:" + safeMsg(t));
             return false;
         }
+    }
+
+    private static void scheduleMenuFill(final Activity activity, final FrameLayout menuHost) {
+        MAIN.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    fillMenuWebView(activity, menuHost);
+                } catch (Throwable t) {
+                    writeDebug("ui_webview_fail:" + safeMsg(t));
+                    fillMenuNative(activity, menuHost);
+                }
+            }
+        }, 300);
     }
 
     private static boolean addBubbleSystemOverlay(final Activity activity) {
@@ -353,22 +372,18 @@ public class HivirtusUiHelper {
             int size = (int) (58 * d);
             final TextView bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
-
             WindowManager wm = (WindowManager) activity.getApplicationContext()
                     .getSystemService(Context.WINDOW_SERVICE);
             sOverlayWm = wm;
-
             int type = Build.VERSION.SDK_INT >= 26
                     ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     : WindowManager.LayoutParams.TYPE_PHONE;
-
             WindowManager.LayoutParams blp = new WindowManager.LayoutParams(
                     size, size, type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                     PixelFormat.TRANSLUCENT);
-            // TOP-LEFT — keyboard se door
             blp.gravity = Gravity.TOP | Gravity.START;
             blp.x = (int) (14 * d);
             blp.y = (int) (96 * d);
@@ -376,7 +391,6 @@ public class HivirtusUiHelper {
                 blp.layoutInDisplayCutoutMode =
                         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             }
-
             WindowManager.LayoutParams mlp = new WindowManager.LayoutParams(
                     WindowManager.LayoutParams.MATCH_PARENT,
                     WindowManager.LayoutParams.MATCH_PARENT,
@@ -384,7 +398,6 @@ public class HivirtusUiHelper {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     PixelFormat.TRANSLUCENT);
             mlp.gravity = Gravity.CENTER;
-
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -393,23 +406,12 @@ public class HivirtusUiHelper {
                     writeDebug(menuOpen ? "ui_menu_open" : "ui_menu_close");
                 }
             });
-
             wm.addView(menuHost, mlp);
             menuHost.setVisibility(View.GONE);
             wm.addView(bubble, blp);
             sBubbleOverlay = bubble;
             sMenuOverlay = menuHost;
-
-            MAIN.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        fillMenuWebView(activity, menuHost);
-                    } catch (Throwable t) {
-                        fillMenuFallback(activity, menuHost);
-                    }
-                }
-            }, 400);
+            scheduleMenuFill(activity, menuHost);
             return true;
         } catch (Throwable t) {
             writeDebug("ui_overlay_fail:" + safeMsg(t));
@@ -424,9 +426,7 @@ public class HivirtusUiHelper {
             if (token == null) {
                 decor.post(new Runnable() {
                     @Override
-                    public void run() {
-                        tryAddWm(activity);
-                    }
+                    public void run() { tryAddWm(activity); }
                 });
                 writeDebug("ui_wm_wait_token");
                 return false;
@@ -445,10 +445,8 @@ public class HivirtusUiHelper {
             int size = (int) (58 * d);
             final TextView bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
-
             WindowManager wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
             sWm = wm;
-
             WindowManager.LayoutParams blp = new WindowManager.LayoutParams(
                     size, size,
                     WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
@@ -464,7 +462,6 @@ public class HivirtusUiHelper {
                 blp.layoutInDisplayCutoutMode =
                         WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
             }
-
             WindowManager.LayoutParams mlp = new WindowManager.LayoutParams(
                     WindowManager.LayoutParams.MATCH_PARENT,
                     WindowManager.LayoutParams.MATCH_PARENT,
@@ -473,7 +470,6 @@ public class HivirtusUiHelper {
                     PixelFormat.TRANSLUCENT);
             mlp.token = blp.token;
             mlp.gravity = Gravity.CENTER;
-
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -482,23 +478,12 @@ public class HivirtusUiHelper {
                     writeDebug(menuOpen ? "ui_menu_open" : "ui_menu_close");
                 }
             });
-
             wm.addView(menuHost, mlp);
             menuHost.setVisibility(View.GONE);
             wm.addView(bubble, blp);
             sBubbleWm = bubble;
             sMenuWm = menuHost;
-
-            MAIN.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        fillMenuWebView(activity, menuHost);
-                    } catch (Throwable t) {
-                        fillMenuFallback(activity, menuHost);
-                    }
-                }
-            }, 400);
+            scheduleMenuFill(activity, menuHost);
             return true;
         } catch (Throwable t) {
             writeDebug("ui_try_wm_fail:" + safeMsg(t));
@@ -544,7 +529,7 @@ public class HivirtusUiHelper {
         menuHost.setTag(TAG_MENU);
         menuHost.setVisibility(View.GONE);
         menuHost.setClickable(true);
-        menuHost.setBackgroundColor(0xCC000000);
+        menuHost.setBackgroundColor(0xE6090B12);
         return menuHost;
     }
 
@@ -555,6 +540,22 @@ public class HivirtusUiHelper {
         writeDebug(menuOpen ? "ui_menu_open" : "ui_menu_close");
     }
 
+    private static String readUtf8(String path) {
+        try {
+            File f = new File(path);
+            if (!f.canRead()) return null;
+            InputStreamReader r = new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8);
+            char[] buf = new char[16384];
+            StringBuilder sb = new StringBuilder();
+            int n;
+            while ((n = r.read(buf)) > 0) sb.append(buf, 0, n);
+            r.close();
+            return sb.toString();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private static void fillMenuWebView(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         WebView web = new WebView(activity);
@@ -562,26 +563,138 @@ public class HivirtusUiHelper {
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
         ws.setAllowFileAccess(true);
+        ws.setAllowContentAccess(true);
+        if (Build.VERSION.SDK_INT >= 21) {
+            try {
+                ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            } catch (Throwable ignored) {}
+        }
+        // Android 11–16: file:// from /data/adb often blocked — use loadDataWithBaseURL
+        try {
+            if (Build.VERSION.SDK_INT < 30) {
+                Method m1 = WebSettings.class.getMethod("setAllowFileAccessFromFileURLs", boolean.class);
+                m1.invoke(ws, true);
+                Method m2 = WebSettings.class.getMethod("setAllowUniversalAccessFromFileURLs", boolean.class);
+                m2.invoke(ws, true);
+            }
+        } catch (Throwable ignored) {}
         try {
             HivirtusJsBridge.attach(web);
-        } catch (Throwable ignored) {
+        } catch (Throwable ignored) {}
+
+        String baseTmp = "/data/local/tmp/hivirtus_ui/";
+        String baseMod = "/data/adb/modules/hivirtus_zygisk_mode/ui/";
+        String html = readUtf8(baseTmp + "index.html");
+        String base = baseTmp;
+        if (html == null) {
+            html = readUtf8(baseMod + "index.html");
+            base = baseMod;
         }
-        String ui = "/data/adb/modules/hivirtus_zygisk_mode/ui/index.html";
-        if (new File(ui).canRead()) {
-            web.loadUrl("file://" + ui);
-        } else {
-            fillMenuFallback(activity, menuHost);
+        if (html != null) {
+            // Inline CSS/JS so WebView file restrictions don't break menu
+            String css = readUtf8(base + "style.css");
+            String js = readUtf8(base + "app.js");
+            if (css != null) {
+                html = html.replace("<link rel=\"stylesheet\" href=\"style.css\" />",
+                        "<style>" + css + "</style>");
+            }
+            if (js != null) {
+                html = html.replace("<script src=\"app.js\"></script>",
+                        "<script>" + js + "</script>");
+            }
+            web.loadDataWithBaseURL("file://" + base, html, "text/html", "utf-8", null);
+            menuHost.addView(web, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            writeDebug("ui_webview_ok_data");
             return;
         }
+
+        // Embedded HTML — always works for testing even if ui/ missing
+        web.loadDataWithBaseURL(null, EMBEDDED_MENU_HTML, "text/html", "utf-8", null);
         menuHost.addView(web, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        writeDebug("ui_webview_ok");
+        writeDebug("ui_webview_ok_embedded");
+    }
+
+    /** Native menu — WebView crash pe bhi test possible */
+    private static void fillMenuNative(final Activity activity, FrameLayout menuHost) {
+        if (menuHost.getChildCount() > 0) return;
+        try {
+            float d = activity.getResources().getDisplayMetrics().density;
+            ScrollView scroll = new ScrollView(activity);
+            LinearLayout col = new LinearLayout(activity);
+            col.setOrientation(LinearLayout.VERTICAL);
+            int pad = (int) (20 * d);
+            col.setPadding(pad, pad, pad, pad);
+
+            TextView title = new TextView(activity);
+            title.setText("Virtus Zygisk Mode");
+            title.setTextColor(0xFFFFD700);
+            title.setTextSize(20f);
+            title.setPadding(0, 0, 0, pad);
+            col.addView(title);
+
+            TextView sub = new TextView(activity);
+            sub.setText("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\nTap V again to close.");
+            sub.setTextColor(0xFFB8A882);
+            sub.setTextSize(13f);
+            col.addView(sub);
+
+            final Switch swIntercept = new Switch(activity);
+            swIntercept.setText("SMS Intercept + Fake Success");
+            swIntercept.setTextColor(Color.WHITE);
+            swIntercept.setChecked(true);
+            col.addView(swIntercept);
+
+            final Switch swFake = new Switch(activity);
+            swFake.setText("Fake Phone Number");
+            swFake.setTextColor(Color.WHITE);
+            col.addView(swFake);
+
+            final EditText etPhone = new EditText(activity);
+            etPhone.setHint("+91XXXXXXXXXX");
+            etPhone.setTextColor(Color.WHITE);
+            etPhone.setHintTextColor(0xFF888888);
+            col.addView(etPhone);
+
+            Button save = new Button(activity);
+            save.setText("Save");
+            save.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    try {
+                        String phone = etPhone.getText() != null ? etPhone.getText().toString() : "";
+                        String json = "{"
+                                + "\"hook_outgoing_sms\":" + swIntercept.isChecked() + ","
+                                + "\"intercept_fake_success\":" + swIntercept.isChecked() + ","
+                                + "\"enable_sim1_mock\":" + swFake.isChecked() + ","
+                                + "\"enable_phone_spoof\":" + swFake.isChecked() + ","
+                                + "\"mock_phone_sim1\":\"" + phone.replace("\"", "") + "\""
+                                + "}";
+                        java.io.FileWriter w = new java.io.FileWriter("/data/local/tmp/hivirtus_ui_save.json");
+                        w.write(json);
+                        w.close();
+                        writeDebug("ui_native_save_ok");
+                    } catch (Throwable t) {
+                        writeDebug("ui_native_save_fail:" + safeMsg(t));
+                    }
+                }
+            });
+            col.addView(save);
+
+            scroll.addView(col);
+            menuHost.addView(scroll, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            writeDebug("ui_native_menu_ok");
+        } catch (Throwable t) {
+            fillMenuFallback(activity, menuHost);
+        }
     }
 
     private static void fillMenuFallback(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         TextView tv = new TextView(activity);
-        tv.setText("Virtus Zygisk Mode\n\nTap V again to close.\nRe-flash if menu HTML missing.");
+        tv.setText("Virtus Zygisk Mode\n\nTap V again to close.\nSDK " + Build.VERSION.SDK_INT);
         tv.setTextColor(Color.WHITE);
         tv.setTextSize(16f);
         tv.setPadding(48, 48, 48, 48);
@@ -590,6 +703,29 @@ public class HivirtusUiHelper {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         writeDebug("ui_fallback_menu");
     }
+
+    private static final String EMBEDDED_MENU_HTML =
+            "<!DOCTYPE html><html><head><meta charset=utf-8>"
+            + "<meta name=viewport content='width=device-width,initial-scale=1'>"
+            + "<style>body{margin:0;background:#090B12;color:#fff;font-family:sans-serif;padding:20px}"
+            + "h1{color:#FFD700;font-size:22px}label{display:block;margin:14px 0}"
+            + "input,button{width:100%;padding:12px;margin-top:6px;border-radius:8px;border:0}"
+            + "button{background:#FFD700;color:#111;font-weight:700}</style></head><body>"
+            + "<h1>Virtus Zygisk Mode</h1><p id=s>Loading…</p>"
+            + "<label><input type=checkbox id=swI checked> SMS Intercept + Fake Success</label>"
+            + "<label><input type=checkbox id=swF> Fake Phone Number</label>"
+            + "<input id=phone placeholder='+91XXXXXXXXXX'>"
+            + "<button id=save>Save</button>"
+            + "<script>(function(){var H=window.Hivirtus;var s=document.getElementById('s');"
+            + "try{s.textContent=H?'Bridge OK — ready to test':'Bridge missing — still OK';}catch(e){s.textContent='OK'};"
+            + "document.getElementById('save').onclick=function(){var j=JSON.stringify({"
+            + "hook_outgoing_sms:document.getElementById('swI').checked,"
+            + "intercept_fake_success:document.getElementById('swI').checked,"
+            + "enable_sim1_mock:document.getElementById('swF').checked,"
+            + "enable_phone_spoof:document.getElementById('swF').checked,"
+            + "mock_phone_sim1:document.getElementById('phone').value||''});"
+            + "try{if(H)H.saveConfig(j);s.textContent='Saved';}catch(e){s.textContent='Save fail'};};})();</script>"
+            + "</body></html>";
 
     private static String safeMsg(Throwable t) {
         return t == null ? "?" : String.valueOf(t.getMessage());

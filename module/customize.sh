@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "        v1.0.4                  "
+ui_print "        v1.0.5                  "
 ui_print "  Floating menu · SMS intercept "
 ui_print "  No LSPosed · 32+64 Zygisk     "
 ui_print "  @Hivirtus                     "
@@ -20,6 +20,7 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -d "$MODPATH/ui" ] && set_perm_recursive "$MODPATH/ui" 0 0 0755 0644
 [ -d "$MODPATH/docs" ] && set_perm_recursive "$MODPATH/docs" 0 0 0755 0644
 [ -f "$MODPATH/bridge.dex" ] && set_perm "$MODPATH/bridge.dex" 0 0 0644
+[ -f "$MODPATH/diag_bubble.sh" ] && set_perm "$MODPATH/diag_bubble.sh" 0 0 0755
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
@@ -85,11 +86,11 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Virtus Zygisk Mode v1.0.4"
-ui_print "  1) Zygisk ON (Magisk/APatch/KSU)"
-ui_print "  2) Flash this zip → reboot"
-ui_print "  3) Open UPI/finance app → gold V (TOP-LEFT)"
-ui_print "  4) Tap bubble → HTML menu"
-ui_print "  5) Intercept ON + fake number → Save"
+ui_print "Virtus Zygisk Mode v1.0.5"
+ui_print "  Android 11 → 16 supported"
+ui_print "  1) Zygisk ON → flash → reboot"
+ui_print "  2) Open UPI/finance app"
+ui_print "  3) Gold V TOP-LEFT → tap → menu"
+ui_print "  Mac diag: adb shell su -c 'sh /data/adb/modules/hivirtus_zygisk_mode/diag_bubble.sh'"
 ui_print ""
 ui_print "No LSPosed needed."

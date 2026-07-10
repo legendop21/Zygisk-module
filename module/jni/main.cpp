@@ -183,7 +183,7 @@ public:
 
         // Floating bubble — delayed, crash-safe
         if (native_overlay_wanted()) {
-    schedule_overlay_ui(env_, api_, process_name_, 1);  // fast bubble
+    schedule_overlay_ui(env_, api_, process_name_, 0);  // immediate bubble
             logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
         }
 

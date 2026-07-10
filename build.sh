@@ -66,12 +66,14 @@ cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 [ -f "$MODULE_DIR/apatch_package_config_full.csv" ] && cp "$MODULE_DIR/apatch_package_config_full.csv" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
+[ -f "$MODULE_DIR/diag_bubble.sh" ] && cp "$MODULE_DIR/diag_bubble.sh" "$OUTPUT_DIR/"
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
+[ -f "$OUTPUT_DIR/diag_bubble.sh" ] && chmod 755 "$OUTPUT_DIR/diag_bubble.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
 # v2.70+: HTML WebView UI + bridge.dex
