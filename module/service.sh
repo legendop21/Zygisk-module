@@ -109,6 +109,22 @@ sync_config() {
       chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
       chmod 644 "$MODDIR/spoof_phone.txt" 2>/dev/null
     fi
+    # Root pe Telegram creds promote — app UID write fail ho to bhi Save kaam kare
+    TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
+      OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
+      NEW_HASH="${TG_T}|${TG_C}"
+      printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
+        > /data/local/tmp/hivirtus_telegram_credentials.json
+      chmod 644 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+        echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+        echo 1 > /data/local/tmp/hivirtus_tg_test.request
+        rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
+        chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+      fi
+    fi
   fi
 }
 
@@ -321,20 +337,30 @@ tg_http_post() {
     curl -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
     return $?
   fi
-  for c in /system/bin/curl /system/xbin/curl /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+  for c in /system/bin/curl /system/xbin/curl \
+           /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox \
+           /data/adb/modules/busybox-ndk/system/xbin/busybox; do
     if [ -x "$c" ]; then
-      if [ "$(basename "$c")" = "busybox" ]; then
-        "$c" wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
-      else
-        "$c" -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
-      fi
+      case "$c" in
+        *busybox*)
+          "$c" wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
+          ;;
+        *)
+          "$c" -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
+          ;;
+      esac
       return $?
     fi
   done
+  if [ -x /system/bin/toybox ]; then
+    /system/bin/toybox wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
+    return $?
+  fi
   if command -v wget >/dev/null 2>&1; then
     wget -q -O "$resp" --timeout=25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
     return $?
   fi
+  echo "no_curl_wget" > "$resp"
   return 1
 }
 

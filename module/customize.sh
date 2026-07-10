@@ -3,9 +3,9 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.16                    "
-ui_print "  All UPI apps + anti-detect    "
-ui_print "  Zygisk Next Unmount Only OK   "
+ui_print "     v1.0.17                    "
+ui_print "  Reliable Telegram Save test   "
+ui_print "  To + Message intercept format "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"

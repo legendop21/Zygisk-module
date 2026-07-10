@@ -92,11 +92,35 @@
     return out;
   }
 
+  function save() {
+    const next = collect();
+    const b = bridge();
+    if (b) b.saveConfig(JSON.stringify(next));
+    cfg = next;
+    const hasTg = !!(next.telegram_bot_token && next.telegram_chat_id);
+    paintStatus(hasTg ? "tg_saved" : "saved");
+    const btn = $("#btnSave");
+    if (btn) {
+      btn.classList.add("saved");
+      btn.textContent = hasTg ? "Saved · TG test…" : "Saved ✓";
+      setTimeout(() => {
+        btn.classList.remove("saved");
+        btn.textContent = "Save Settings";
+        paintStatus();
+      }, 1800);
+    }
+  }
+
   function paintStatus(note) {
     const el = $("#statusLine");
     if (!el) return;
     if (note === "saved") {
       el.textContent = "settings saved";
+      el.style.color = "var(--green)";
+      return;
+    }
+    if (note === "tg_saved") {
+      el.textContent = "saved · Telegram test sending…";
       el.style.color = "var(--green)";
       return;
     }
@@ -111,30 +135,6 @@
     } else {
       el.textContent = "Zygisk Mode · tap Save";
       el.style.color = "var(--muted)";
-    }
-  }
-
-  function load() {
-    const b = bridge();
-    cfg = b ? parseCfg(b.readConfig()) : {};
-    applyToForm();
-  }
-
-  function save() {
-    const next = collect();
-    const b = bridge();
-    if (b) b.saveConfig(JSON.stringify(next));
-    cfg = next;
-    paintStatus("saved");
-    const btn = $("#btnSave");
-    if (btn) {
-      btn.classList.add("saved");
-      btn.textContent = "Saved ✓";
-      setTimeout(() => {
-        btn.classList.remove("saved");
-        btn.textContent = "Save Settings";
-        paintStatus();
-      }, 1400);
     }
   }
 
