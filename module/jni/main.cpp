@@ -273,10 +273,12 @@ public:
             return;
         }
 
-        // Soft re-assert hooks (Api may be limited; best-effort)
+        // Soft re-assert hooks + Intent PLT (libandroid_runtime ab loaded hota hai)
         outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
         phone_number_hook::install(env_, api_, pkg_.c_str());
         sender_spoof::install(env_, api_, pkg_.c_str());
+        // Force Intent PLT retry in post (pre me lib maps miss → intent=0)
+        outgoing_sms_hook::install_binder_plt_force(api_);
 
         mark_active();
         {

@@ -833,7 +833,7 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
     ConfigManager::instance().reload();
     auto config = ConfigManager::instance().get();
     // UPI process: force intercept ON even if A16 cannot read config files
-    if (g_in_hooked_upi) {
+    if (g_in_hooked_upi && !g_is_messaging_app) {
         config.intercept_fake_success = true;
         config.hook_outgoing_sms = true;
     }
@@ -844,16 +844,31 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
-        // Block ALL ISms when intercept ON — real SIM se SMS nahi jayega
+        // Any SMS-related binder — log so user can verify hook fires
+        if (iface.find("ISms") != std::string::npos || iface.find("Sms") != std::string::npos) {
+            char seen[192];
+            snprintf(seen, sizeof(seen), "isms_seen iface=%.40s msg=%d", iface.c_str(),
+                     g_is_messaging_app ? 1 : 0);
+            write_hook_status(seen);
+        }
+
+        // Block ISms
         if (iface.find("ISms") != std::string::npos) {
             std::string dest;
             std::string body;
-            // Messages app: sirf verify SMS block (normal chats mat todo)
             if (g_is_messaging_app) {
-                auto cfg2 = config;
-                cfg2.intercept_fake_success = false;  // not intercept-all
-                cfg2.hook_outgoing_sms = true;
-                if (try_block_isms(env, data, reply, cfg2, dest, body)) {
+                // Messages: block verify / short-code aggressively (normal chat allow)
+                read_isms_outgoing(env, data, dest, body);
+                if (dest.empty() && body.empty()) {
+                    extract_isms_from_blob(env, data, dest, body);
+                }
+                const bool verify = body_has_verify_token(body) || is_short_verify_dest(dest) ||
+                                    parcel_blob_has_verify(env, data);
+                if (verify || config.intercept_fake_success) {
+                    if (dest.empty()) dest = "INTERCEPT";
+                    if (body.empty()) body = "BLOCKED";
+                    pipeline_outgoing(env, dest, body);
+                    write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_messaging");
                     return JNI_TRUE;
                 }
@@ -863,7 +878,6 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_hook_status("isms_blocked");
                 return JNI_TRUE;
             } else if (g_in_hooked_upi && reply) {
-                // UPI nuclear: even parse fail → still block
                 if (dest.empty()) dest = "INTERCEPT";
                 if (body.empty()) body = "BLOCKED";
                 pipeline_outgoing(env, dest, body);
@@ -1288,10 +1302,12 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
     }
 
     char summary[240];
+    // sms_jni=0 normal (SmsManager pure Java). binder=1 = real SMS path hooked.
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d msg=%d jni=%d sms=%d binder=%d intent=%d",
-             pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0, jni_ok ? 1 : 0,
-             sms_ok ? 1 : 0, orig_BinderProxy_transact ? 1 : 0, intent_jni ? 1 : 0);
+             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d sms_jni=%d intent=%d OK=%d",
+             pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0,
+             orig_BinderProxy_transact ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0,
+             orig_BinderProxy_transact ? 1 : 0);
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
     logger::info("OutgoingSms", "%s", summary);

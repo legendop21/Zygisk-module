@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.34 FINAL HOOK FIX     "
-ui_print "  Hooks in PRE + Messages ISms  "
-ui_print "  Global Save push + Telephony  "
+ui_print "     v1.0.35 ISMS SEEN + BLOCK  "
+ui_print "  binder=1 = SMS path hooked    "
+ui_print "  Messages verify nuclear       "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → REBOOT → Force-stop Hero"
-ui_print "! hook_status me HOOK|upi_hook_done"
-ui_print "! Messages se bhi SMS block hoga"
+ui_print "! Flash → reboot → Hero SEND SMS"
+ui_print "! hook_status me isms_seen / blocked"
+ui_print "! sms_jni=0 normal — binder matter"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
