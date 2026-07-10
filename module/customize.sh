@@ -3,16 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.24 TG FILES SEED       "
-ui_print "  Create TG placeholders 0666   "
-ui_print "  PhonePe Save can overwrite    "
-ui_print "  JNI-only hooks · no PLT       "
+ui_print "     v1.0.25 TG WATCHDOG         "
+ui_print "  No seed spam · clear TG status"
+ui_print "  Empty creds → log tells Save  "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! After reboot check tmp for:"
-ui_print "!  hivirtus_telegram_credentials.json"
-ui_print "!  hivirtus_tg_test.request"
-ui_print "! Then PhonePe → Save again"
+ui_print "! Spoof phone OK = Save works"
+ui_print "! TELEGRAM tab → Save again"
+ui_print "! tg_forward.log: tg_test_ok"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"

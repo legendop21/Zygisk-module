@@ -241,7 +241,7 @@ hivirtus_boot_activate_overlay() {
 # PhonePe/GPay cannot CREATE files in /data/local/tmp (SELinux).
 # Root creates empty 0666 placeholders → app can OVERWRITE → TG Save works.
 hivirtus_seed_app_writable_files() {
-  local f
+  local f quiet="${1:-}"
   for f in \
     /data/local/tmp/hivirtus_ui_save.json \
     /data/local/tmp/hivirtus_telegram_credentials.json \
@@ -263,17 +263,68 @@ hivirtus_seed_app_writable_files() {
       esac
     fi
     chmod 666 "$f" 2>/dev/null
-    chown root:root "$f" 2>/dev/null || true
   done
-  # Also ensure runtime config is writable for merge
   if [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ]; then
     chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
   else
     echo '{}' > /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
   fi
-  echo "tg_files_seeded $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  # Log ONCE per boot (spam mat karo)
+  if [ "$quiet" != "quiet" ] && [ ! -f /data/local/tmp/hivirtus_tg_seeded.flag ]; then
+    echo "tg_files_seeded $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    echo 1 > /data/local/tmp/hivirtus_tg_seeded.flag
+    chmod 644 /data/local/tmp/hivirtus_tg_seeded.flag 2>/dev/null
+  fi
   chmod 666 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+}
+
+# Diagnose + force-queue TG test when token present anywhere
+hivirtus_tg_watchdog() {
+  local src="" tg_t="" tg_c=""
+  for src in \
+    /data/local/tmp/hivirtus_ui_save.json \
+    /data/local/tmp/hivirtus_telegram_credentials.json \
+    /data/local/tmp/hivirtus_zygisk_mode_config.json \
+    /data/adb/modules/hivirtus_zygisk_mode/config.json
+  do
+    [ -f "$src" ] || continue
+    [ -z "$tg_t" ] && tg_t=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    [ -z "$tg_c" ] && tg_c=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  done
+  # Also harvest PhonePe filesDir
+  hivirtus_harvest_saves 2>/dev/null
+  for src in /data/local/tmp/hivirtus_ui_save.json /data/local/tmp/hivirtus_telegram_credentials.json; do
+    [ -f "$src" ] || continue
+    [ -z "$tg_t" ] && tg_t=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    [ -z "$tg_c" ] && tg_c=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  done
+
+  if [ -z "$tg_t" ] || [ -z "$tg_c" ] || [ ${#tg_t} -lt 20 ]; then
+    # Only log empty status once every ~60s
+    NOW=$(date +%s)
+    LAST=$(cat /data/local/tmp/hivirtus_tg_empty_log.ts 2>/dev/null || echo 0)
+    if [ $((NOW - LAST)) -ge 60 ]; then
+      echo "tg_creds_EMPTY — PhonePe bubble → TELEGRAM tab → Token+Chat → Save $(date +%s)" \
+        >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      echo "$NOW" > /data/local/tmp/hivirtus_tg_empty_log.ts
+    fi
+    return 0
+  fi
+
+  printf '%s\n' "{\"telegram_bot_token\":\"${tg_t}\",\"telegram_chat_id\":\"${tg_c}\"}" \
+    > /data/local/tmp/hivirtus_telegram_credentials.json
+  chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+  HASH="${tg_t}|${tg_c}"
+  OLD=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
+  if [ "$HASH" != "$OLD" ] || [ -f /data/local/tmp/hivirtus_tg_test.request ]; then
+    echo "$HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+    echo 1 > /data/local/tmp/hivirtus_tg_test.request
+    chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+    if [ "$HASH" != "$OLD" ]; then
+      echo "tg_test_queued_watchdog $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    fi
+  fi
 }
 
 # Zygisk Next Enforced denylist blocks Virtus in UPI/banking apps.
