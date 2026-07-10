@@ -58,6 +58,7 @@ struct ModuleConfig {
     bool prefix_enabled = false;
     std::string prefix_text;
     bool auto_hook_foreground = true;
+    bool hook_all_upi_apps = true;
 
     bool is_upi_app_hooked(const std::string& package) const;
     int timer_bonus_for_package(const std::string& package) const;

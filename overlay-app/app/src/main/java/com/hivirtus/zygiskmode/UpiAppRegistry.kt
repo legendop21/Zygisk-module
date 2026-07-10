@@ -116,8 +116,8 @@ object UpiAppRegistry {
         UpiApp("com.msf.axis", "Axis Alt", listOf("AXIS"), 30),
     )
 
-    fun defaultHookMap(): Map<String, Boolean> =
-        ALL.associate { it.packageName to false }
+    fun defaultHookMap(hookAll: Boolean = true): Map<String, Boolean> =
+        ALL.associate { it.packageName to hookAll }
 
     fun findByPackage(packageName: String): UpiApp? =
         ALL.firstOrNull { it.packageName == packageName }

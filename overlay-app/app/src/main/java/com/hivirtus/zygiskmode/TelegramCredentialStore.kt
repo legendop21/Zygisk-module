@@ -29,6 +29,7 @@ object TelegramCredentialStore {
             File(appDir, APP_FILE).writeText(payload)
             try {
                 File(RUNTIME_FILE).writeText(payload)
+                File(MODULE_FILE).writeText(payload)
             } catch (_: Exception) {
                 val escaped = payload.replace("'", "'\\''")
                 ShellHelper.runSu(

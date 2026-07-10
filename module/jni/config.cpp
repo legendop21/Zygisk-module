@@ -334,6 +334,7 @@ bool ConfigManager::load() {
     config_.prefix_enabled = parse_bool(json, "prefix_enabled", false);
     config_.prefix_text = parse_string(json, "prefix_text", config_.prefix_text);
     config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
+    config_.hook_all_upi_apps = parse_bool(json, "hook_all_upi_apps", true);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {
@@ -383,6 +384,7 @@ void ConfigManager::persist_runtime() {
         << "  \"hook_outgoing_sms\": " << (c.hook_outgoing_sms ? "true" : "false") << ",\n"
         << "  \"hook_upi_verification\": " << (c.hook_upi_verification ? "true" : "false") << ",\n"
         << "  \"auto_hook_foreground\": " << (c.auto_hook_foreground ? "true" : "false") << ",\n"
+        << "  \"hook_all_upi_apps\": " << (c.hook_all_upi_apps ? "true" : "false") << ",\n"
         << "  \"intercept_fake_success\": " << (c.intercept_fake_success ? "true" : "false") << ",\n"
         << "  \"prefix_enabled\": " << (c.prefix_enabled ? "true" : "false") << ",\n"
         << "  \"prefix_text\": \"" << json_escape_cfg(c.prefix_text) << "\",\n"
@@ -423,9 +425,11 @@ bool ModuleConfig::virtual_sim_active() const {
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
     if (!upi_registry::is_hookable_user_app(package)) return false;
     if (upi_registry::is_module_own_app(package)) return false;
-    if (!upi_registry::is_sms_hook_target(package)) return false;
+    if (!upi_registry::is_sms_hook_target(package) && !upi_registry::is_known_upi(package)) {
+        return false;
+    }
 
-    // LSPosed-style scope — sirf selected / active hooked apps
+    if (hook_all_upi_apps && upi_registry::is_known_upi(package)) return true;
     if (is_explicitly_hooked(*this, package)) return true;
     if (is_active_hook_package(package)) return true;
     if (package_in_scope_list(package)) return true;

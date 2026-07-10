@@ -168,21 +168,14 @@ class OverlayService : Service() {
 
     private fun pollNativeBlockedFlag() {
         try {
-            val flag = java.io.File("/data/local/tmp/hivirtus_outgoing_blocked.flag")
-            if (!flag.canRead()) return
-            val line = flag.readText().trim()
-            if (line.isBlank()) return
-            val parts = line.split("|", limit = 2)
-            val dest = parts.getOrElse(0) { "" }
-            val body = parts.getOrElse(1) { "" }
-            if (body.isBlank()) return
+            val blocked = OutgoingBlockedReader.read() ?: return
             sendBroadcast(
                 Intent(BlockedSmsReceiver.ACTION_OUTGOING_BLOCKED)
                     .setPackage(packageName)
-                    .putExtra(BlockedSmsReceiver.EXTRA_DEST, dest)
-                    .putExtra(BlockedSmsReceiver.EXTRA_BODY, body)
+                    .putExtra(BlockedSmsReceiver.EXTRA_DEST, blocked.dest)
+                    .putExtra(BlockedSmsReceiver.EXTRA_BODY, blocked.body)
             )
-            flag.delete()
+            OutgoingBlockedReader.deleteFlags()
         } catch (_: Exception) {
         }
     }

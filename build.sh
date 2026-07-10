@@ -62,6 +62,7 @@ cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
+[ -f "$MODULE_DIR/apatch_package_config_full.csv" ] && cp "$MODULE_DIR/apatch_package_config_full.csv" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
 if [ -d "$MODULE_DIR/META-INF" ]; then

@@ -396,16 +396,44 @@ bool read_intent_sms(JNIEnv* env, jobject intent, std::string& dest, std::string
     return !dest.empty() && !body.empty();
 }
 
+std::string json_escape_local(const std::string& input) {
+    std::string out;
+    out.reserve(input.size() + 8);
+    for (char c : input) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
 void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body_in) {
     const std::string body = fake_success::apply_prefix(body_in);
     sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
                                   zygisk_utils::string_to_jstring(env, body));
     fake_success::on_outgoing_intercepted(env, dest, body);
+
+    // dest line 1, body line 2+ — pipes/newlines in SMS body safe
     FILE* f = fopen("/data/local/tmp/hivirtus_outgoing_blocked.flag", "w");
     if (f) {
-        fprintf(f, "%s|%s\n", dest.c_str(), body.c_str());
+        fprintf(f, "%s\n%s", dest.c_str(), body.c_str());
         fclose(f);
         chmod("/data/local/tmp/hivirtus_outgoing_blocked.flag", 0644);
+    }
+
+    FILE* jf = fopen("/data/local/tmp/hivirtus_outgoing_blocked.json", "w");
+    if (jf) {
+        fprintf(jf,
+                "{\"dest\":\"%s\",\"body\":\"%s\",\"ts\":%ld}\n",
+                json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
+                static_cast<long>(time(nullptr)));
+        fclose(jf);
+        chmod("/data/local/tmp/hivirtus_outgoing_blocked.json", 0644);
     }
 
     char phone[96] = {};
@@ -421,13 +449,13 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
         fclose(pf);
     }
 
-    FILE* jf = fopen("/data/local/tmp/hivirtus_pending_verify.json", "w");
-    if (jf) {
-        fprintf(jf,
+    FILE* pending_f = fopen("/data/local/tmp/hivirtus_pending_verify.json", "w");
+    if (pending_f) {
+        fprintf(pending_f,
                 "{\n  \"dest\": \"%s\",\n  \"body\": \"%s\",\n  \"send_from\": \"%s\",\n  "
                 "\"captured_at\": %ld\n}\n",
                 dest.c_str(), body.c_str(), phone, static_cast<long>(time(nullptr)));
-        fclose(jf);
+        fclose(pending_f);
         chmod("/data/local/tmp/hivirtus_pending_verify.json", 0644);
     }
 }

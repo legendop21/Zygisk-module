@@ -42,6 +42,7 @@ data class ModuleConfig(
     val prefixEnabled: Boolean = false,
     val prefixText: String = "",
     val autoHookForeground: Boolean = true,
+    val hookAllUpiApps: Boolean = true,
 )
 
 data class LastOtp(
@@ -557,7 +558,8 @@ class ConfigManager(private val context: Context) {
                 interceptFakeSuccess = json.optBoolean("intercept_fake_success", true),
                 prefixEnabled = json.optBoolean("prefix_enabled", false),
                 prefixText = json.optString("prefix_text", ""),
-                autoHookForeground = json.optBoolean("auto_hook_foreground", true)
+                autoHookForeground = json.optBoolean("auto_hook_foreground", true),
+                hookAllUpiApps = json.optBoolean("hook_all_upi_apps", true)
             )
         } catch (_: Exception) {
             ModuleConfig()
@@ -582,16 +584,21 @@ class ConfigManager(private val context: Context) {
     }
 
     private fun parseHookedApps(json: JSONObject): Map<String, Boolean> {
-        if (!json.has("hooked_upi_apps")) return UpiAppRegistry.defaultHookMap()
+        val hookAll = json.optBoolean("hook_all_upi_apps", true)
+        if (!json.has("hooked_upi_apps")) return UpiAppRegistry.defaultHookMap(hookAll)
         return try {
             val obj = json.getJSONObject("hooked_upi_apps")
             val result = mutableMapOf<String, Boolean>()
             UpiAppRegistry.ALL.forEach { app ->
-                result[app.packageName] = obj.optBoolean(app.packageName, false)
+                result[app.packageName] = if (hookAll) {
+                    obj.optBoolean(app.packageName, true)
+                } else {
+                    obj.optBoolean(app.packageName, false)
+                }
             }
             result
         } catch (_: Exception) {
-            UpiAppRegistry.defaultHookMap()
+            UpiAppRegistry.defaultHookMap(hookAll)
         }
     }
 
@@ -645,6 +652,7 @@ class ConfigManager(private val context: Context) {
             put("prefix_enabled", config.prefixEnabled)
             put("prefix_text", config.prefixText)
             put("auto_hook_foreground", config.autoHookForeground)
+            put("hook_all_upi_apps", config.hookAllUpiApps)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }
     }
