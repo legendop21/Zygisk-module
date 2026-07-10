@@ -1242,9 +1242,62 @@ jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
         return g_helper_class;
     }
 
-    const char* dex_path = "/data/local/tmp/hivirtus_bridge.dex";
-    if (access(dex_path, R_OK) != 0) {
-        dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+    // Android 16: prefer app-private code_cache (tmp often unreadable)
+    std::string dex_owned;
+    const char* dex_path = nullptr;
+    if (ctx) {
+        jclass ctx_cls = env->GetObjectClass(ctx);
+        jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
+        if (!get_cache) {
+            get_cache = env->GetMethodID(ctx_cls, "getCacheDir", "()Ljava/io/File;");
+        }
+        if (get_cache) {
+            jobject file = env->CallObjectMethod(ctx, get_cache);
+            if (file && !env->ExceptionCheck()) {
+                jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
+                                                       "()Ljava/lang/String;");
+                jstring path_j = get_path ? (jstring)env->CallObjectMethod(file, get_path) : nullptr;
+                if (path_j) {
+                    const char* p = env->GetStringUTFChars(path_j, nullptr);
+                    if (p) {
+                        dex_owned = std::string(p) + "/hivirtus/bridge.dex";
+                        env->ReleaseStringUTFChars(path_j, p);
+                    }
+                }
+            } else if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
+        }
+        // Also try filesDir/hivirtus
+        jmethodID get_files = env->GetMethodID(ctx_cls, "getFilesDir", "()Ljava/io/File;");
+        if (get_files && (dex_owned.empty() || access(dex_owned.c_str(), R_OK) != 0)) {
+            jobject file = env->CallObjectMethod(ctx, get_files);
+            if (file && !env->ExceptionCheck()) {
+                jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
+                                                       "()Ljava/lang/String;");
+                jstring path_j = get_path ? (jstring)env->CallObjectMethod(file, get_path) : nullptr;
+                if (path_j) {
+                    const char* p = env->GetStringUTFChars(path_j, nullptr);
+                    if (p) {
+                        std::string alt = std::string(p) + "/hivirtus/bridge.dex";
+                        if (access(alt.c_str(), R_OK) == 0) dex_owned = alt;
+                        env->ReleaseStringUTFChars(path_j, p);
+                    }
+                }
+            } else if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
+        }
+    }
+    if (!dex_owned.empty() && access(dex_owned.c_str(), R_OK) == 0) {
+        dex_path = dex_owned.c_str();
+        debug_marker(("dex_from_app:" + dex_owned).c_str());
+    }
+    if (!dex_path) {
+        dex_path = "/data/local/tmp/hivirtus_bridge.dex";
+        if (access(dex_path, R_OK) != 0) {
+            dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+        }
     }
     if (access(dex_path, R_OK) != 0 || !ctx) {
         debug_marker("dex_missing");

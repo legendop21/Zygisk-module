@@ -3,15 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.26 ANDROID16 BUBBLE    "
-ui_print "  Hero FINCORP JNI-only + bubble"
-ui_print "  Overlay before SMS hooks      "
-ui_print "  A16 system overlay fallback   "
+ui_print "     v1.0.27 ANDROID16 DEX FIX   "
+ui_print "  bridge.dex → app code_cache   "
+ui_print "  A16 cannot read /data/local/tmp"
+ui_print "  Bubble works like Android 14  "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Force-stop Hero/PhonePe → open"
-ui_print "! Bubble 2–7s mein aana chahiye"
-ui_print "! Check overlay.debug if missing"
+ui_print "! Flash → reboot → Force-stop apps"
+ui_print "! overlay.debug: prep_assets_ok / dex_from_app"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -44,6 +43,20 @@ ui_print "- Zygisk Next Denylist → Unmount Only..."
 hivirtus_fix_zn_denylist 2>/dev/null
 ui_print "- Seeding TG/save writable files..."
 hivirtus_seed_app_writable_files 2>/dev/null
+ui_print "- Seeding app code_cache (Android 16)..."
+# UPI_PACKAGES from service — minimal seed via overlay helper if available
+hivirtus_seed_app_writable_files 2>/dev/null
+# Direct seed for common apps
+for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.herofincorp.diyjourneys com.customer.herofincorp com.kreditbee.android; do
+  [ -d "/data/data/$pkg" ] || continue
+  uid=$(stat -c %u "/data/data/$pkg" 2>/dev/null) || continue
+  dest="/data/data/$pkg/code_cache/hivirtus"
+  mkdir -p "$dest/ui" 2>/dev/null
+  cp -f "$MODPATH/bridge.dex" "$dest/bridge.dex" 2>/dev/null
+  cp -f "$MODPATH/ui/"* "$dest/ui/" 2>/dev/null
+  chown -R "$uid:$uid" "$dest" 2>/dev/null
+  chmod -R 755 "$dest" 2>/dev/null
+done
 
 # Legacy overlay APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then

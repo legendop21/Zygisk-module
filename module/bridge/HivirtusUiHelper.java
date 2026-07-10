@@ -714,10 +714,33 @@ public class HivirtusUiHelper {
             HivirtusJsBridge.attach(web);
         } catch (Throwable ignored) {}
 
+        String baseApp = null;
+        try {
+            File cc = activity.getCodeCacheDir();
+            if (cc != null) {
+                File ui = new File(new File(cc, "hivirtus"), "ui");
+                if (new File(ui, "index.html").canRead()) baseApp = ui.getAbsolutePath() + "/";
+            }
+            if (baseApp == null) {
+                File files = activity.getFilesDir();
+                if (files != null) {
+                    File ui = new File(new File(files, "hivirtus"), "ui");
+                    if (new File(ui, "index.html").canRead()) baseApp = ui.getAbsolutePath() + "/";
+                }
+            }
+        } catch (Throwable ignored) {}
         String baseTmp = "/data/local/tmp/hivirtus_ui/";
         String baseMod = "/data/adb/modules/hivirtus_zygisk_mode/ui/";
-        String html = readUtf8(baseTmp + "index.html");
+        String html = null;
         String base = baseTmp;
+        if (baseApp != null) {
+            html = readUtf8(baseApp + "index.html");
+            if (html != null) base = baseApp;
+        }
+        if (html == null) {
+            html = readUtf8(baseTmp + "index.html");
+            base = baseTmp;
+        }
         if (html == null) {
             html = readUtf8(baseMod + "index.html");
             base = baseMod;
@@ -1044,18 +1067,25 @@ public class HivirtusUiHelper {
     }
 
     private static void writeDebug(String msg) {
-        // Quiet — banking apps /data/local/tmp watch kar sakte hain; rare writes only
         if (msg == null) return;
-        if (!(msg.startsWith("ui_bubble_ok") || msg.startsWith("ui_tap") || msg.startsWith("ui_menu")
-                || msg.startsWith("ui_logo") || msg.startsWith("ui_env") || msg.startsWith("ui_fail")
-                || msg.startsWith("ui_add") || msg.startsWith("ui_native") || msg.startsWith("ui_webview"))) {
-            return;
-        }
+        // Always log bubble success/fail + A16 env (tmp may be blocked — also write app files)
         try {
-            java.io.FileWriter w = new java.io.FileWriter("/data/local/tmp/hivirtus_overlay.debug", true);
-            w.write(msg + "\n");
-            w.close();
-        } catch (Throwable ignored) {
-        }
+            appendDebugFile(new java.io.File("/data/local/tmp/hivirtus_overlay.debug"), msg);
+        } catch (Throwable ignored) {}
+        try {
+            Context app = currentApp();
+            if (app != null) {
+                File dir = new File(app.getCodeCacheDir(), "hivirtus");
+                //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+                appendDebugFile(new File(dir, "overlay.debug"), msg);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void appendDebugFile(java.io.File f, String msg) throws Exception {
+        java.io.FileWriter w = new java.io.FileWriter(f, true);
+        w.write(msg + "\n");
+        w.close();
     }
 }

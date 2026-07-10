@@ -221,11 +221,42 @@ mark_active() {
   hivirtus_mark_foreground_upi "$1"
 }
 
+# Android 16: copy bridge.dex + UI into each UPI app code_cache (tmp unreadable)
+hivirtus_seed_app_code_cache() {
+  local pkg uid dest mod
+  mod="/data/adb/modules/hivirtus_zygisk_mode"
+  [ -f "$mod/bridge.dex" ] || return 0
+  for pkg in $UPI_PACKAGES; do
+    pkg=$(echo "$pkg" | tr -d ' \r\n')
+    [ -z "$pkg" ] && continue
+    [ -d "/data/data/$pkg" ] || continue
+    uid=$(stat -c %u "/data/data/$pkg" 2>/dev/null) || continue
+    [ -n "$uid" ] || continue
+    for dest in \
+      "/data/data/$pkg/code_cache/hivirtus" \
+      "/data/user/0/$pkg/code_cache/hivirtus" \
+      "/data/user_de/0/$pkg/code_cache/hivirtus"
+    do
+      parent=$(dirname "$dest")
+      [ -d "$parent" ] || continue
+      mkdir -p "$dest/ui" 2>/dev/null
+      cp -f "$mod/bridge.dex" "$dest/bridge.dex" 2>/dev/null
+      cp -f "$mod/ui/"* "$dest/ui/" 2>/dev/null
+      chmod 755 "$dest" "$dest/ui" 2>/dev/null
+      chmod 644 "$dest/bridge.dex" "$dest/ui/"* 2>/dev/null
+      chown -R "$uid:$uid" "$dest" 2>/dev/null
+      restorecon -R "$dest" 2>/dev/null
+    done
+  done
+  echo "code_cache_seeded $(date +%s)" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+}
+
 sync_config
 
 # Telegram paths app-writable + boot pe ek test agar creds pehle se hain
 (
   hivirtus_seed_app_writable_files
+  hivirtus_seed_app_code_cache
   # Boot test: pehle se token ho to 🚀 test bhejo (Save ke bina bhi)
   if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ]; then
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
@@ -578,6 +609,7 @@ rewrite_inbox_sender_id() {
   while true; do
     sleep 45
     hivirtus_seed_app_writable_files quiet 2>/dev/null
+    hivirtus_seed_app_code_cache 2>/dev/null
   done
 ) &
 

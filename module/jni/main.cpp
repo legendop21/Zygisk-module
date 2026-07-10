@@ -15,6 +15,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <cstdlib>
 
 namespace {
 
@@ -222,9 +226,23 @@ public:
             return;
         }
 
-        // connectCompanion ONLY works in preSpecialize — log inject commit here.
+        // connectCompanion ONLY works in preSpecialize — log + seed A16 assets here.
         report_line(api_, "pre_seen:" + process_name_);
         report_line(api_, "safe_inject:" + pkg_);
+
+        // Android 16: app cannot read /data/local/tmp — copy dex/ui into app code_cache
+        std::string data_dir;
+        if (args->app_data_dir) {
+            const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
+            if (dd) {
+                data_dir = dd;
+                env_->ReleaseStringUTFChars(args->app_data_dir, dd);
+            }
+        }
+        const int uid = args->uid;
+        if (!data_dir.empty()) {
+            report_line(api_, "prep_assets|" + pkg_ + "|" + std::to_string(uid) + "|" + data_dir);
+        }
         keep_ = true;
     }
 
@@ -318,12 +336,47 @@ private:
     bool keep_ = false;
 };
 
+void companion_prep_assets(const std::string& pkg, int uid, const std::string& data_dir) {
+    if (pkg.empty() || data_dir.empty() || uid <= 0) return;
+    const char* mod = "/data/adb/modules/hivirtus_zygisk_mode";
+    std::string dest = data_dir + "/code_cache/hivirtus";
+    std::string cmd = "mkdir -p '" + dest + "/ui' 2>/dev/null; "
+                      "cp -f '" + std::string(mod) + "/bridge.dex' '" + dest + "/bridge.dex' 2>/dev/null; "
+                      "cp -f '" + std::string(mod) + "/ui/'* '" + dest + "/ui/' 2>/dev/null; "
+                      "cp -f /data/local/tmp/hivirtus_bridge.dex '" + dest + "/bridge.dex' 2>/dev/null; "
+                      "chmod -R 755 '" + dest + "' 2>/dev/null; "
+                      "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* 2>/dev/null; "
+                      "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' 2>/dev/null; "
+                      "restorecon -R '" + dest + "' 2>/dev/null; true";
+    system(cmd.c_str());
+
+    FILE* f = fopen("/data/local/tmp/hivirtus_overlay.debug", "a");
+    if (f) {
+        fprintf(f, "prep_assets_ok:%s uid=%d dir=%s\n", pkg.c_str(), uid, dest.c_str());
+        fclose(f);
+        chmod("/data/local/tmp/hivirtus_overlay.debug", 0666);
+    }
+}
+
 void companion_handler(int client) {
     uint32_t len = 0;
     if (read(client, &len, sizeof(len)) != static_cast<ssize_t>(sizeof(len))) return;
-    if (len == 0 || len > 1024) return;
+    if (len == 0 || len > 2048) return;
     std::string line(len, '\0');
     if (read(client, line.data(), len) != static_cast<ssize_t>(len)) return;
+
+    if (line.rfind("prep_assets|", 0) == 0) {
+        // prep_assets|pkg|uid|data_dir
+        std::string rest = line.substr(12);
+        auto p1 = rest.find('|');
+        auto p2 = p1 == std::string::npos ? std::string::npos : rest.find('|', p1 + 1);
+        if (p1 != std::string::npos && p2 != std::string::npos) {
+            std::string pkg = rest.substr(0, p1);
+            int uid = atoi(rest.substr(p1 + 1, p2 - p1 - 1).c_str());
+            std::string data_dir = rest.substr(p2 + 1);
+            companion_prep_assets(pkg, uid, data_dir);
+        }
+    }
 
     FILE* f = fopen("/data/local/tmp/hivirtus_inject.log", "a");
     if (f) {
@@ -331,7 +384,6 @@ void companion_handler(int client) {
         fclose(f);
         chmod("/data/local/tmp/hivirtus_inject.log", 0666);
     }
-    // Also mirror under module dir (always root-writable)
     f = fopen("/data/adb/modules/hivirtus_zygisk_mode/inject_mirror.log", "a");
     if (f) {
         fprintf(f, "%s\n", line.c_str());
