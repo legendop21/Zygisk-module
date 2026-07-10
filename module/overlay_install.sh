@@ -42,6 +42,15 @@ hivirtus_grant_one_overlay() {
 
 hivirtus_overlay_core_pkgs() {
   cat <<'PKGS'
+com.google.android.apps.nexuslauncher
+com.android.launcher3
+com.android.launcher
+com.miui.home
+com.mi.android.globallauncher
+com.sec.android.app.launcher
+com.oppo.launcher
+com.realme.launcher
+com.oneplus.launcher
 com.android.phone
 com.android.providers.telephony
 com.google.android.apps.messaging

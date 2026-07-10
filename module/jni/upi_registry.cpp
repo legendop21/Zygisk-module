@@ -136,6 +136,36 @@ bool is_module_own_app(const std::string& package) {
     return package == "com.hivirtus.zygiskmode";
 }
 
+bool is_launcher_package(const std::string& package) {
+    if (package.empty()) return false;
+    static const char* kLaunchers[] = {
+        "com.google.android.apps.nexuslauncher",
+        "com.android.launcher3",
+        "com.android.launcher",
+        "com.miui.home",
+        "com.mi.android.globallauncher",
+        "com.sec.android.app.launcher",
+        "com.oppo.launcher",
+        "com.realme.launcher",
+        "com.nothing.launcher",
+        "com.transsion.hilauncher",
+        "com.bbk.launcher2",
+        "com.huawei.android.launcher",
+        "com.tblenovo.launcher",
+        "com.motorola.launcher3",
+        "com.asus.launcher",
+        "com.sonymobile.home",
+        "com.oneplus.launcher",
+        nullptr,
+    };
+    for (const char** name = kLaunchers; *name; ++name) {
+        if (package == *name) return true;
+    }
+    if (package.find("launcher") != std::string::npos) return true;
+    if (package == "com.miui.home") return true;
+    return false;
+}
+
 bool is_denied_hook_package(const std::string& package) {
     if (package.empty()) return true;
 
@@ -166,9 +196,10 @@ bool is_denied_hook_package(const std::string& package) {
     for (const char** name = kDenyExact; *name; ++name) {
         if (package == *name) return true;
     }
+    // Launcher — overlay menu ke liye allow (SMS hooks nahi)
+    if (is_launcher_package(package)) return false;
     if (package.rfind("com.android.", 0) == 0) return true;
     if (package.rfind("android.", 0) == 0) return true;
-    if (package.find("launcher") != std::string::npos) return true;
     if (package.find("inputmethod") != std::string::npos) return true;
     return false;
 }
@@ -177,6 +208,7 @@ bool is_whitelisted_hook_process(const std::string& package) {
     if (package.empty()) return false;
     if (package == "zygote" || package == "zygote64" || package == "system_server") return false;
     if (is_module_own_app(package)) return false;
+    if (is_launcher_package(package)) return true;
     if (is_denied_hook_package(package)) return false;
 
     static const char* kCore[] = {

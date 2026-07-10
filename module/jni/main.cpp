@@ -277,6 +277,19 @@ public:
                                       config.virtual_sim_active();
         logger::init(config.log_file);
 
+        // Home screen / app drawer — sirf gold V bubble + menu (screenshot wali jagah)
+        if (upi_registry::is_launcher_package(process_name_)) {
+            mark_zygisk_native_active();
+            touch_module_heartbeat();
+            touch_upi_inject(process_name_.c_str());
+            if (native_overlay_wanted()) {
+                schedule_overlay_ui(env_, api_, process_name_, 2);
+                logger::info("Hivirtus", "Launcher floating menu in %s", process_name_.c_str());
+            }
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
         // Fragile banking — sirf SMS block hooks (crashy UPI hooks / overlay skip)
         if (is_hooked_upi_ && upi_registry::is_fragile_banking_app(process_name_)) {
             touch_upi_inject(process_name_.c_str());
@@ -339,7 +352,7 @@ public:
 
         if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
             upi_hook::install(env_, api_, process_name_);
-            if (!fragile_upi && !overlay_only_mode()) {
+            if (!fragile_upi) {
                 schedule_overlay_ui(env_, api_, process_name_, hook_delay > 0 ? hook_delay : 3);
                 logger::info("Hivirtus", "Native overlay scheduled in %s (%ds)", process_name_.c_str(),
                              hook_delay > 0 ? hook_delay : 3);
@@ -347,7 +360,7 @@ public:
         }
 
         if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof) &&
-            native_overlay_wanted() && !overlay_only_mode()) {
+            native_overlay_wanted()) {
             schedule_overlay_ui(env_, api_, process_name_, 2);
         }
 
