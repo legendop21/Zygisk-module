@@ -1377,18 +1377,17 @@ bool force_java_bubble(JNIEnv* env) {
 void* overlay_keepalive_worker(void*) {
     JNIEnv* env = nullptr;
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
-    // Soft keepalive — PhonePe crash avoid (no double native+java spam)
-    bool java_ok = false;
-    for (int i = 0; i < 80; ++i) {
-        usleep(i < 40 ? 500000 : 1500000);
-        if (!java_ok) {
-            java_ok = force_java_bubble(env);
-        } else if (i % 10 == 0) {
-            force_java_bubble(env);  // light refresh only
-        }
-        // Native fallback ONLY if Java never worked (avoid double overlay crash)
-        if (!java_ok && i > 6 && i % 5 == 0) {
-            force_native_bubble(env);
+    // Ultra-soft: Java bubble only, stop once attached — no native double overlay
+    for (int i = 0; i < 30; ++i) {
+        usleep(800000);
+        if (force_java_bubble(env)) {
+            // attached — rare refresh only
+            for (int j = 0; j < 10; ++j) {
+                usleep(3000000);
+                force_java_bubble(env);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+            }
+            break;
         }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
@@ -1476,8 +1475,8 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     if (env) env->GetJavaVM(&g_vm);
     debug_marker(("overlay_install:" + package_name).c_str());
     request_overlay_grant(package_name);
-    try_install_activity_hooks();
-    schedule_plt_hooks();
+    // NO PLT Activity hooks — banking apps crash / detect
+    // Java UiHelper lifecycle + soft keepalive only
     schedule_keepalive();
 }
 

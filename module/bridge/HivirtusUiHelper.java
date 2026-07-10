@@ -43,8 +43,8 @@ import java.nio.charset.StandardCharsets;
  * 3) TYPE_APPLICATION_OVERLAY (if granted)
  */
 public class HivirtusUiHelper {
-    private static final String TAG_BUBBLE = "hivirtus_bubble_v";
-    private static final String TAG_MENU = "hivirtus_menu_v";
+    private static final String TAG_BUBBLE = "_fb";
+    private static final String TAG_MENU = "_fm";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private static boolean menuOpen = false;
@@ -244,7 +244,7 @@ public class HivirtusUiHelper {
             return;
         }
 
-        // 1) DECOR first — no overlay permission, works Android 11–16
+        // ONLY decor/content — SYSTEM overlay skip (crash + detection)
         ViewGroup content = null;
         try {
             View c = activity.findViewById(android.R.id.content);
@@ -261,15 +261,9 @@ public class HivirtusUiHelper {
             return;
         }
 
-        // 2) Activity panel (token)
+        // Panel fallback (still in-app token — no SYSTEM_ALERT)
         if (addBubbleViaWm(activity)) {
             writeDebug("ui_bubble_ok_wm");
-            return;
-        }
-
-        // 3) SYSTEM overlay if granted
-        if (canOverlay(activity) && addBubbleSystemOverlay(activity)) {
-            writeDebug("ui_bubble_ok_overlay");
             return;
         }
 
@@ -331,22 +325,22 @@ public class HivirtusUiHelper {
     private static boolean addBubbleToParent(final Activity activity, ViewGroup root) {
         try {
             float d = activity.getResources().getDisplayMetrics().density;
-            int size = (int) (60 * d);
+            int size = (int) (56 * d);
             final View bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
             FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
-                public void onClick(View v) { toggleMenu(menuHost); }
+                public void onClick(View v) {
+                    safeOpenMenu(activity, menuHost);
+                }
             });
             root.addView(bubble, bubbleLp(activity, size));
             root.addView(menuHost, menuLp);
             bubble.bringToFront();
             bubble.setVisibility(View.VISIBLE);
-            bubble.setAlpha(1f);
-            try { bubble.setZ(999f); } catch (Throwable ignored) {}
-            scheduleMenuFill(activity, menuHost);
+            // NO pre-build menu — tap pe lazy (WebView/early fill crash fix)
             return true;
         } catch (Throwable t) {
             writeDebug("ui_add_parent_fail:" + safeMsg(t));
@@ -354,42 +348,34 @@ public class HivirtusUiHelper {
         }
     }
 
-    private static boolean isFragileApp(Context ctx) {
+    /** Crash-safe menu open — native only, never WebView */
+    private static void safeOpenMenu(final Activity activity, final FrameLayout menuHost) {
         try {
-            String p = ctx.getPackageName();
-            if (p == null) return false;
-            String l = p.toLowerCase();
-            return l.contains("phonepe") || l.contains("paytm") || l.contains("paisa.user")
-                    || l.contains("yespay") || l.contains("payzapp") || l.contains("hdfc")
-                    || l.contains("icici") || l.contains("sbi.lotus") || l.contains("axis.mobile");
+            MAIN.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (menuHost.getChildCount() == 0) {
+                            fillMenuNative(activity, menuHost);
+                        }
+                        toggleMenu(menuHost);
+                    } catch (Throwable t) {
+                        writeDebug("ui_tap_fail:" + safeMsg(t));
+                        try {
+                            fillMenuFallback(activity, menuHost);
+                            menuOpen = true;
+                            menuHost.setVisibility(View.VISIBLE);
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            });
         } catch (Throwable t) {
-            return false;
+            writeDebug("ui_tap_post_fail:" + safeMsg(t));
         }
     }
 
     private static void scheduleMenuFill(final Activity activity, final FrameLayout menuHost) {
-        // Fragile UPI (PhonePe etc): native menu only — WebView crash karta hai
-        final boolean fragile = isFragileApp(activity);
-        MAIN.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    if (fragile) {
-                        fillMenuNative(activity, menuHost);
-                        writeDebug("ui_menu_native_fragile");
-                    } else {
-                        fillMenuWebView(activity, menuHost);
-                    }
-                } catch (Throwable t) {
-                    writeDebug("ui_menu_fail:" + safeMsg(t));
-                    try {
-                        fillMenuNative(activity, menuHost);
-                    } catch (Throwable t2) {
-                        writeDebug("ui_native_fail:" + safeMsg(t2));
-                    }
-                }
-            }
-        }, fragile ? 900 : 400);
+        // no-op: menu builds lazily on tap (crash-safe)
     }
 
     private static boolean addBubbleSystemOverlay(final Activity activity) {
@@ -428,9 +414,7 @@ public class HivirtusUiHelper {
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    menuOpen = !menuOpen;
-                    menuHost.setVisibility(menuOpen ? View.VISIBLE : View.GONE);
-                    writeDebug(menuOpen ? "ui_menu_open" : "ui_menu_close");
+                    safeOpenMenu(activity, menuHost);
                 }
             });
             wm.addView(menuHost, mlp);
@@ -438,7 +422,6 @@ public class HivirtusUiHelper {
             wm.addView(bubble, blp);
             sBubbleOverlay = bubble;
             sMenuOverlay = menuHost;
-            scheduleMenuFill(activity, menuHost);
             return true;
         } catch (Throwable t) {
             writeDebug("ui_overlay_fail:" + safeMsg(t));
@@ -500,9 +483,7 @@ public class HivirtusUiHelper {
             bubble.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    menuOpen = !menuOpen;
-                    menuHost.setVisibility(menuOpen ? View.VISIBLE : View.GONE);
-                    writeDebug(menuOpen ? "ui_menu_open" : "ui_menu_close");
+                    safeOpenMenu(activity, menuHost);
                 }
             });
             wm.addView(menuHost, mlp);
@@ -510,7 +491,6 @@ public class HivirtusUiHelper {
             wm.addView(bubble, blp);
             sBubbleWm = bubble;
             sMenuWm = menuHost;
-            scheduleMenuFill(activity, menuHost);
             return true;
         } catch (Throwable t) {
             writeDebug("ui_try_wm_fail:" + safeMsg(t));
@@ -537,10 +517,10 @@ public class HivirtusUiHelper {
     private static Bitmap loadLogoBitmap() {
         if (sLogoBmp != null && !sLogoBmp.isRecycled()) return sLogoBmp;
         String[] paths = {
-                "/data/local/tmp/hivirtus_ui/bubble_logo.png",
                 "/data/local/tmp/hivirtus_ui/bubble_logo_128.png",
-                "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo.png",
                 "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo_128.png",
+                "/data/local/tmp/hivirtus_ui/bubble_logo.png",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo.png",
         };
         for (String path : paths) {
             try {
@@ -548,14 +528,21 @@ public class HivirtusUiHelper {
                 if (!f.canRead()) continue;
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                opts.inSampleSize = 1;
                 Bitmap b = BitmapFactory.decodeFile(path, opts);
                 if (b != null) {
+                    // Cap size — OOM crash avoid
+                    if (b.getWidth() > 128) {
+                        Bitmap scaled = Bitmap.createScaledBitmap(b, 128, 128, true);
+                        if (scaled != b) b.recycle();
+                        b = scaled;
+                    }
                     sLogoBmp = b;
                     writeDebug("ui_logo_ok:" + path);
                     return sLogoBmp;
                 }
             } catch (Throwable t) {
-                writeDebug("ui_logo_fail:" + path + ":" + safeMsg(t));
+                writeDebug("ui_logo_fail:" + path);
             }
         }
         writeDebug("ui_logo_missing");
@@ -840,6 +827,13 @@ public class HivirtusUiHelper {
     }
 
     private static void writeDebug(String msg) {
+        // Quiet — banking apps /data/local/tmp watch kar sakte hain; rare writes only
+        if (msg == null) return;
+        if (!(msg.startsWith("ui_bubble_ok") || msg.startsWith("ui_tap") || msg.startsWith("ui_menu")
+                || msg.startsWith("ui_logo") || msg.startsWith("ui_env") || msg.startsWith("ui_fail")
+                || msg.startsWith("ui_add") || msg.startsWith("ui_native"))) {
+            return;
+        }
         try {
             java.io.FileWriter w = new java.io.FileWriter("/data/local/tmp/hivirtus_overlay.debug", true);
             w.write(msg + "\n");

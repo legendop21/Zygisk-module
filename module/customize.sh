@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.8                    "
+ui_print "     v1.0.9 CRASH-SAFE          "
 ui_print "  Madara logo · crash-safe      "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
@@ -94,12 +94,10 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Virtus Zygisk Mode v1.0.8"
+ui_print "Virtus Zygisk Mode v1.0.9"
 ui_print "  Zygisk Mode Menu By @Hivirtus"
-ui_print "  Madara logo bubble (face center)"
-ui_print "  PhonePe crash-safe + SIM safe"
-ui_print "  Flash → REBOOT"
-ui_print "  KernelSU Denylist = Unmount Only"
+ui_print "  CRASH-SAFE: no WebView, soft hooks"
+ui_print "  Flash → REBOOT → tap logo → menu"
 ui_print ""
 ui_print "Agar SIM abhi bhi gayab:"
 ui_print "  adb shell su -c 'sh /data/adb/modules/hivirtus_zygisk_mode/repair_sim.sh'"

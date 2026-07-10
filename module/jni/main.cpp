@@ -180,21 +180,20 @@ public:
         const int delay = upi_registry::hook_startup_delay_sec(process_name_);
         const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
 
-        // SMS intercept — delayed more on fragile apps (PhonePe crash avoid)
+        // SMS intercept — deferred only (immediate PLT install crash karta hai)
         if (sms_block) {
-            const int sms_delay = fragile ? (delay > 4 ? delay : 5) : (delay > 0 ? delay : 2);
-            outgoing_sms_hook::install(env_, api_, false, false, true);
+            const int sms_delay = fragile ? 8 : 5;
             outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            logger::info("Virtus", "Safe ISms intercept in %s delay=%d", process_name_.c_str(),
-                         sms_delay);
+            logger::info("Virtus", "Deferred ISms in %s delay=%d", process_name_.c_str(), sms_delay);
         }
 
         (void)phone_spoof;
         (void)want_sender;
+        (void)delay;
 
-        // Floating bubble — fragile apps: wait 2s so app UI settle
+        // Bubble after app UI settle — sab apps pe 2s
         if (native_overlay_wanted()) {
-            schedule_overlay_ui(env_, api_, process_name_, fragile ? 2 : 0);
+            schedule_overlay_ui(env_, api_, process_name_, 2);
             logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
         }
 
