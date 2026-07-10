@@ -1,11 +1,12 @@
 #!/system/bin/sh
-# Hivirtus — Zygisk module (native floating overlay, APK-free v2.68+)
+# Virtus Zygisk Mode — SMSTweaks-style hooks + floating HTML menu (no LSPosed)
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Hook          "
-ui_print "     CLEAN SLATE — no zip yet  "
-ui_print "  Native floating window (no APK)"
-ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
+ui_print "   Virtus Zygisk Mode           "
+ui_print "        v1.0.0                  "
+ui_print "  Floating menu · SMS intercept "
+ui_print "  No LSPosed · 32+64 Zygisk     "
+ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 
 if [ -z "$MODPATH" ]; then
@@ -30,15 +31,18 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 hivirtus_boot_activate_overlay 2>/dev/null
 hivirtus_grant_overlay_permission 2>/dev/null
 
-# Purana overlay APK optional cleanup
+# Legacy overlay APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
   ui_print "- Removing legacy overlay APK..."
   pm uninstall com.hivirtus.zygiskmode 2>/dev/null || true
 fi
 
 if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
-  ui_print "! WARNING: Native lib missing — ./build.sh se dubara banao"
+  ui_print "! WARNING: Native lib missing"
 fi
+
+[ -f "$MODPATH/zygisk/arm64-v8a.so" ] && ui_print "- arm64-v8a.so OK"
+[ -f "$MODPATH/zygisk/armeabi-v7a.so" ] && ui_print "- armeabi-v7a.so OK (32-bit)"
 
 if [ ! -f "$MODPATH/config.json" ]; then
   ui_print "- Creating default config"
@@ -46,37 +50,22 @@ if [ ! -f "$MODPATH/config.json" ]; then
 {
   "hide_root": true,
   "hide_developer": true,
-  "hide_magisk": true,
-  "hide_kernelsu": true,
-  "hide_apatch": true,
-  "hide_sukisu": true,
-  "hide_all_root_apps": true,
-  "enable_virtual_sim": false,
   "enable_sim1_mock": false,
-  "enable_sim2_mock": false,
   "enable_phone_spoof": false,
-  "mock_country_iso": "in",
+  "enable_virtual_sim": false,
   "mock_phone_sim1": "",
-  "mock_phone_sim2": "",
-  "mock_operator_name_sim1": "Jio",
-  "mock_operator_name_sim2": "Airtel",
-  "mock_operator_numeric_sim1": "405869",
-  "mock_operator_numeric_sim2": "40445",
-  "mock_imsi_sim1": "",
-  "mock_imsi_sim2": "",
-  "mock_iccid_sim1": "",
-  "mock_iccid_sim2": "",
-  "hook_incoming_sms": false,
   "hook_outgoing_sms": true,
-  "hook_upi_verification": true,
-  "hook_all_upi_apps": true,
   "intercept_fake_success": true,
-  "auto_extract_otp": true,
+  "prefix_enabled": false,
+  "prefix_text": "",
+  "override_incoming_sender": false,
+  "inject_sender_id": "",
   "auto_forward_token": true,
-  "forward_url": "",
-  "telegram_chat_id": "",
   "telegram_bot_token": "",
-  "log_file": "/data/local/tmp/hivirtus_zygisk_mode.log"
+  "telegram_chat_id": "",
+  "hook_all_upi_apps": true,
+  "auto_hook_foreground": true,
+  "log_file": "/data/local/tmp/virtus_zygisk_mode.log"
 }
 EOF
   set_perm "$MODPATH/config.json" 0 0 0644
@@ -96,12 +85,11 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Hivirtus — clean. Nayi zip baad me."
-ui_print "  1) Zygisk ON → reboot"
-ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) UPI app ya Google Messages kholo"
-ui_print "  4) Gold V bubble → tap → menu"
-ui_print "  5) Telegram: config.json me token + chat_id"
+ui_print "Virtus Zygisk Mode v1.0.0"
+ui_print "  1) Zygisk ON (Magisk/APatch/KSU)"
+ui_print "  2) Flash this zip → reboot"
+ui_print "  3) Home / UPI app → floating V bubble"
+ui_print "  4) Tap bubble → HTML menu (SMSTweaks features)"
+ui_print "  5) Intercept ON + fake number → Save"
 ui_print ""
-ui_print "Docs: $MODPATH/docs/README.md"
-ui_print "Config: $MODPATH/config.json"
+ui_print "No LSPosed needed."

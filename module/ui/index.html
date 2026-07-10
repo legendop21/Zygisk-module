@@ -3,83 +3,186 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Hivirtus</title>
+  <title>Virtus Zygisk Mode</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="shell">
+  <div class="shell" id="shell">
     <header class="top">
       <div class="brand">
         <span class="mark">V</span>
         <div>
-          <div class="name">Hivirtus</div>
-          <div class="sub" id="statusLine">checking…</div>
+          <div class="name">Virtus</div>
+          <div class="sub" id="statusLine">Zygisk Mode</div>
         </div>
       </div>
-      <button type="button" class="icon-btn" id="btnMin" aria-label="Minimize">−</button>
+      <button type="button" class="icon-btn" id="btnMin" aria-label="Close">✕</button>
     </header>
 
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="system">System</button>
-      <button class="tab" data-tab="sms">SMS</button>
+      <button class="tab active" data-tab="basic">Basic</button>
+      <button class="tab" data-tab="advanced">Advanced</button>
       <button class="tab" data-tab="telegram">Telegram</button>
     </nav>
 
     <main class="panels">
-      <section class="panel active" id="panel-system">
-        <label class="row">
-          <span>Hide developer</span>
-          <input type="checkbox" data-key="hide_developer" />
-        </label>
-        <label class="row">
-          <span>Hide root</span>
-          <input type="checkbox" data-key="hide_root" />
-        </label>
-        <label class="field">
-          <span>Mock SIM number</span>
-          <input type="tel" maxlength="10" inputmode="numeric" data-key="mock_phone_sim1" placeholder="10 digit" />
-        </label>
-        <label class="row">
-          <span>Enable mock SIM</span>
-          <input type="checkbox" data-key="enable_sim1_mock" />
-        </label>
+      <!-- BASIC — SMSTweaks style -->
+      <section class="panel active" id="panel-basic">
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-purple">📱</div>
+            <div class="card-copy">
+              <h3>Fake Phone Number</h3>
+              <p>Override number shown to apps</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="enable_sim1_mock" id="swFake" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="bodyFake">
+            <label class="field">
+              <span>Phone number</span>
+              <input type="tel" maxlength="13" inputmode="numeric" data-key="mock_phone_sim1" placeholder="+91 XXXXX XXXXX" />
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-cyan">✉️</div>
+            <div class="card-copy">
+              <h3>Outgoing SMS Prefix</h3>
+              <p>Prepend text to every outgoing SMS</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="prefix_enabled" id="swPrefix" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="bodyPrefix">
+            <label class="field">
+              <span>Prefix text</span>
+              <input type="text" data-key="prefix_text" placeholder="BANK " />
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-green">🏷️</div>
+            <div class="card-copy">
+              <h3>Incoming Sender ID</h3>
+              <p>Override sender shown on incoming SMS</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="override_incoming_sender" id="swSender" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="bodySender">
+            <label class="field">
+              <span>Sender ID</span>
+              <input type="text" data-key="inject_sender_id" placeholder="MYBANK" />
+            </label>
+          </div>
+        </article>
       </section>
 
-      <section class="panel" id="panel-sms">
-        <label class="row">
-          <span>Block outgoing SMS</span>
-          <input type="checkbox" data-key="hook_outgoing_sms" />
-        </label>
-        <label class="row">
-          <span>Fake success (intercept)</span>
-          <input type="checkbox" data-key="intercept_fake_success" />
-        </label>
-        <label class="row">
-          <span>Hook incoming SMS</span>
-          <input type="checkbox" data-key="hook_incoming_sms" />
-        </label>
-        <p class="hint">Intercept ON = verify token real SIM se nahi jayega. Telegram pe forward hoga.</p>
+      <!-- ADVANCED -->
+      <section class="panel" id="panel-advanced">
+        <article class="card card-danger">
+          <div class="card-head">
+            <div class="ico ico-red">🚫</div>
+            <div class="card-copy">
+              <h3>Intercept &amp; Fake Success</h3>
+              <p>Block SMS but tell app it was sent</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="intercept_fake_success" id="swIntercept" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="warn">
+            When ON, no SMS leaves your SIM. App gets a fake success callback — same as SMSTweaks.
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-gold">🔒</div>
+            <div class="card-copy">
+              <h3>Hide Root</h3>
+              <p>Hide Magisk / APatch / KSU traces</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="hide_root" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-gold">🛠️</div>
+            <div class="card-copy">
+              <h3>Hide Developer</h3>
+              <p>Hide developer options / USB debug</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="hide_developer" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-cyan">📤</div>
+            <div class="card-copy">
+              <h3>Block Outgoing SMS</h3>
+              <p>Also block verify / UPI tokens</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="hook_outgoing_sms" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </article>
       </section>
 
+      <!-- TELEGRAM -->
       <section class="panel" id="panel-telegram">
-        <label class="field">
-          <span>Bot token</span>
-          <input type="text" data-key="telegram_bot_token" autocomplete="off" spellcheck="false" />
-        </label>
-        <label class="field">
-          <span>Chat ID</span>
-          <input type="text" data-key="telegram_chat_id" inputmode="numeric" />
-        </label>
-        <label class="row">
-          <span>Auto forward token</span>
-          <input type="checkbox" data-key="auto_forward_token" />
-        </label>
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-blue">✈️</div>
+            <div class="card-copy">
+              <h3>Telegram Forwarding</h3>
+              <p>Send intercepted SMS to your bot</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="auto_forward_token" id="swTg" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="bodyTg">
+            <label class="field">
+              <span>Bot token</span>
+              <input type="text" data-key="telegram_bot_token" autocomplete="off" spellcheck="false" placeholder="123456:ABC…" />
+            </label>
+            <label class="field">
+              <span>Chat ID</span>
+              <input type="text" data-key="telegram_chat_id" inputmode="numeric" placeholder="-100123…" />
+            </label>
+            <p class="hint">@BotFather → /newbot → token. Chat ID via @userinfobot</p>
+          </div>
+        </article>
       </section>
     </main>
 
     <footer class="foot">
-      <button type="button" class="primary" id="btnSave">Save</button>
-      <span class="credit">@hivirtus · zygisk</span>
+      <button type="button" class="primary" id="btnSave">Save Settings</button>
+      <span class="credit">Virtus Zygisk Mode · no LSPosed · @hivirtus</span>
     </footer>
   </div>
   <script src="app.js"></script>

@@ -4,6 +4,7 @@
 /.ndk/
 /.android/
 *.zip
+!releases/*.zip
 *.apk
 *.aab
 

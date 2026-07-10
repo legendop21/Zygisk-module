@@ -1,7 +1,5 @@
-# Releases — clean slate
+# Releases
 
-Purani saari zip files hata di gayi hain.
+Latest: **virtus-zygisk-mode-v1.0.0.zip**
 
-Jab tum ready ho, bata dena **kaise** aur **kab** nayi zip banani hai — tab yahan fresh build aayegi.
-
-**Abhi kuch flash mat karna** — nayi zip abhi nahi hai.
+Flash with Magisk / APatch / KernelSU (Zygisk ON). No LSPosed.

@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODULE_DIR="$ROOT_DIR/module"
 OUTPUT_DIR="$ROOT_DIR/dist"
-# v2.68+: arm64-only default (~3MB zip). Multi-ABI: ABI_LIST="arm64-v8a armeabi-v7a" ./build.sh
-ABI_LIST="${ABI_LIST:-arm64-v8a}"
+# v1.0+: both ABIs (32+64) like SMSTweaks scope. Arm64-only: ABI_LIST="arm64-v8a" ./build.sh
+ABI_LIST="${ABI_LIST:-arm64-v8a armeabi-v7a}"
 
 # Auto-detect NDK (Mac: ~/Library/Android/sdk/ndk/...)
 if [[ -z "${ANDROID_NDK:-}" ]] || [[ ! -f "${ANDROID_NDK}/build/cmake/android.toolchain.cmake" ]]; then
@@ -29,7 +29,7 @@ if [[ ! -f "$TOOLCHAIN" ]]; then
   exit 1
 fi
 
-echo "==> Building Hivirtus Magisk module (native lib → zygisk/ folder)"
+echo "==> Building Virtus Zygisk Mode (native lib → zygisk/ folder)"
 rm -rf "$OUTPUT_DIR" "$ROOT_DIR/build"
 mkdir -p "$OUTPUT_DIR/zygisk"
 
@@ -130,11 +130,11 @@ if [ -d "$ROOT_DIR/docs" ]; then
   echo "==> Bundled docs/ (Hinglish phase guides)"
 fi
 
-ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
+ZIP_NAME="virtus-zygisk-mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. hivirtus-zygisk-hook ZIP — native floating overlay (no APK)."
-echo "    Zygisk ON → flash zip → reboot → UPI app / Messages → gold V bubble"
-echo "    Docs: module/docs/README.md (Hinglish)"
+echo "==> Done. Virtus Zygisk Mode ZIP"
+echo "    Zygisk ON → flash → reboot → floating V bubble → HTML menu"
+echo "    SMSTweaks logic: intercept, fake number, sender ID, Telegram"

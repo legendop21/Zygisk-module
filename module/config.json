@@ -23,11 +23,12 @@
   "prefix_enabled": false,
   "prefix_text": "",
   "override_incoming_sender": false,
+  "inject_sender_id": "",
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "fake_intercept_telegram": true,
   "telegram_bot_token": "",
   "telegram_chat_id": "",
   "forward_url": "",
-  "log_file": "/data/local/tmp/hivirtus_zygisk_mode.log"
+  "log_file": "/data/local/tmp/virtus_zygisk_mode.log"
 }

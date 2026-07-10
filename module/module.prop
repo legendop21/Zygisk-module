@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
-name=Hivirtus Zygisk Hook
-version=v0.0.0-clean
-versionCode=1
+name=Virtus Zygisk Mode
+version=v1.0.0
+versionCode=10000
 author=@hivirtus
-description=Clean slate — nayi zip user instructions ke baad build hogi. @Hivirtus
+description=SMSTweaks logic via Zygisk. Floating HTML menu. Intercept, fake number, sender ID, Telegram. No LSPosed. 32+64.
 zygisk=1
