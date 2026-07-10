@@ -7,6 +7,7 @@
 #include "sender_spoof.hpp"
 #include "phone_number_hook.hpp"
 
+#include <cstdint>
 #include <ctime>
 #include <cstdio>
 #include <cstring>
@@ -17,11 +18,10 @@
 
 namespace {
 
-// v1.0.18 CRASH-SAFE:
-// - No root_hide in postSpecialize (KernelSU+HMA pe crash)
-// - No immediate BinderProxy/PLT (YesPay/GPay instant crash)
-// - Only deferred SMS + soft overlay
-// - Phone/sender hooks only when enabled, deferred
+// v1.0.20:
+// - Root companion logs inject (app UID / SELinux se /data/local/tmp write fail ho sakta)
+// - Process name :suffix strip (com.phonepe.app:push → com.phonepe.app)
+// - Skip reasons logged so waiting_for_upi_app_open debug ho sake
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
@@ -68,13 +68,10 @@ bool is_dangerous_process(const std::string& process) {
     return false;
 }
 
-void mark_active() {
-    FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
-    if (f) {
-        fprintf(f, "1\n");
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0644);
-    }
+std::string base_package(const std::string& process) {
+    const auto pos = process.find(':');
+    if (pos == std::string::npos) return process;
+    return process.substr(0, pos);
 }
 
 void append_diag(const char* path, const char* line) {
@@ -82,7 +79,33 @@ void append_diag(const char* path, const char* line) {
     if (!f) return;
     fprintf(f, "%s\n", line);
     fclose(f);
-    chmod(path, 0644);
+    chmod(path, 0666);
+}
+
+void report_line(zygisk::Api* api, const std::string& line) {
+    // Prefer root companion (reliable). Fallback: direct write.
+    if (api) {
+        const int fd = api->connectCompanion();
+        if (fd >= 0) {
+            const uint32_t len = static_cast<uint32_t>(line.size());
+            if (write(fd, &len, sizeof(len)) == static_cast<ssize_t>(sizeof(len)) &&
+                (len == 0 || write(fd, line.data(), len) == static_cast<ssize_t>(len))) {
+                close(fd);
+                return;
+            }
+            close(fd);
+        }
+    }
+    append_diag("/data/local/tmp/hivirtus_inject.log", line.c_str());
+}
+
+void mark_active() {
+    FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
+    if (f) {
+        fprintf(f, "1\n");
+        fclose(f);
+        chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0644);
+    }
 }
 
 bool native_overlay_wanted() {
@@ -181,79 +204,88 @@ public:
         const char* process = env_->GetStringUTFChars(args->nice_name, nullptr);
         process_name_ = process ? process : "";
         env_->ReleaseStringUTFChars(args->nice_name, process);
+        pkg_ = base_package(process_name_);
 
-        if (is_dangerous_process(process_name_) ||
-            upi_registry::is_module_own_app(process_name_) ||
-            !upi_registry::is_sms_hook_target(process_name_)) {
+        if (is_dangerous_process(pkg_) ||
+            upi_registry::is_module_own_app(pkg_) ||
+            !upi_registry::is_sms_hook_target(pkg_)) {
+            // Still report UPI-looking names that we skipped for other reasons
+            if (!pkg_.empty() && !is_dangerous_process(pkg_) &&
+                (pkg_.find("pay") != std::string::npos ||
+                 pkg_.find("upi") != std::string::npos ||
+                 pkg_.find("bank") != std::string::npos ||
+                 pkg_.find("loan") != std::string::npos ||
+                 pkg_.find("kredit") != std::string::npos)) {
+                report_line(api_, "skip_not_target:" + process_name_);
+            }
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
+
+        // Root companion: prove Zygisk loaded us into this UPI process
+        report_line(api_, "pre_seen:" + process_name_);
+        keep_ = true;
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
         (void)args;
+        if (!keep_) return;
 
-        if (is_dangerous_process(process_name_) ||
-            upi_registry::is_module_own_app(process_name_) ||
-            !upi_registry::is_sms_hook_target(process_name_)) {
+        if (is_dangerous_process(pkg_) ||
+            upi_registry::is_module_own_app(pkg_) ||
+            !upi_registry::is_sms_hook_target(pkg_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
-        if (!config.is_upi_app_hooked(process_name_)) {
+        if (!config.is_upi_app_hooked(pkg_)) {
+            report_line(api_, "skip_config_off:" + pkg_);
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
-        // Minimal work first — crash se pehle log
         logger::init(config.log_file);
         mark_active();
-        append_diag("/data/local/tmp/hivirtus_inject.log",
-                    ("safe_inject:" + process_name_).c_str());
+        report_line(api_, "safe_inject:" + pkg_);
+        if (process_name_ != pkg_) {
+            report_line(api_, "proc:" + process_name_);
+        }
 
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
         const auto& live = ConfigManager::instance().get();
 
-        // root_hide DISABLED in v1.0.18 — KernelSU+HMA+banking pe crash
-        // (hide via Zygisk Next Unmount Only + HMA-OSS instead)
-
         const bool sms_block = live.hook_outgoing_sms || live.intercept_fake_success;
         const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
                                  live.enable_sim1_mock;
         const bool want_sender = sender_spoof_wanted(live);
-        const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
-        const bool yespay = is_yespay(process_name_);
+        const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
+        const bool yespay = is_yespay(pkg_);
 
-        // SMS — ONLY deferred (immediate PLT = YesPay/GPay crash)
         if (sms_block) {
             int sms_delay = 4;
             if (fragile) sms_delay = 8;
             if (yespay) sms_delay = 12;
             outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("isms_deferred:" + process_name_ + " d=" + std::to_string(sms_delay)).c_str());
+            report_line(api_, "isms_deferred:" + pkg_ + " d=" + std::to_string(sms_delay));
         }
 
-        // Phone spoof — only if user enabled, deferred
         if (phone_spoof) {
             const int ph_delay = yespay ? 14 : (fragile ? 10 : 6);
             phone_number_hook::schedule_deferred_install(
-                env_, api_, process_name_.c_str(), ph_delay);
+                env_, api_, pkg_.c_str(), ph_delay);
         }
 
-        // Sender ID — only if enabled, deferred
         if (want_sender) {
             const int sd = yespay ? 14 : (fragile ? 10 : 5);
-            schedule_sender(env_, api_, process_name_, sd);
+            schedule_sender(env_, api_, pkg_, sd);
         }
 
-        // Bubble — after UI settle
         if (native_overlay_wanted()) {
             const int ov = yespay ? 5 : (fragile ? 3 : 2);
-            schedule_overlay_ui(env_, api_, process_name_, ov);
+            schedule_overlay_ui(env_, api_, pkg_, ov);
         }
 
         touch_heartbeat();
@@ -277,8 +309,32 @@ private:
     zygisk::Api* api_ = nullptr;
     JNIEnv* env_ = nullptr;
     std::string process_name_;
+    std::string pkg_;
+    bool keep_ = false;
 };
+
+void companion_handler(int client) {
+    uint32_t len = 0;
+    if (read(client, &len, sizeof(len)) != static_cast<ssize_t>(sizeof(len))) return;
+    if (len == 0 || len > 1024) return;
+    std::string line(len, '\0');
+    if (read(client, line.data(), len) != static_cast<ssize_t>(len)) return;
+
+    FILE* f = fopen("/data/local/tmp/hivirtus_inject.log", "a");
+    if (f) {
+        fprintf(f, "%s\n", line.c_str());
+        fclose(f);
+        chmod("/data/local/tmp/hivirtus_inject.log", 0666);
+    }
+    // Also mirror under module dir (always root-writable)
+    f = fopen("/data/adb/modules/hivirtus_zygisk_mode/inject_mirror.log", "a");
+    if (f) {
+        fprintf(f, "%s\n", line.c_str());
+        fclose(f);
+    }
+}
 
 }  // namespace
 
 REGISTER_ZYGISK_MODULE(VirtusModule)
+REGISTER_ZYGISK_COMPANION(companion_handler)

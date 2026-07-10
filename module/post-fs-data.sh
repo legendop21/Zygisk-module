@@ -47,7 +47,7 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
 # Boot marker — version from module.prop (purana v1.0.6 string hata diya)
 VER=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
-[ -z "$VER" ] && VER="v1.0.19"
+[ -z "$VER" ] && VER="v1.0.20"
 echo "module_boot_${VER}" > /data/local/tmp/hivirtus_overlay.debug
 chmod 666 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
 # Inject log: boot line likho, purani safe_inject lines mat mitao completely —
@@ -63,6 +63,7 @@ chmod 644 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
 
 # Zygisk Next Enforced = no UPI inject (log stuck on waiting_for_upi_app_open)
 hivirtus_fix_zn_denylist
+hivirtus_apatch_allow_upi_inject
 
 # v1.0.6+: Native overlay only — legacy APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then

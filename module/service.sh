@@ -158,6 +158,27 @@ MODDIR="$MODDIR" hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission &
 # Keep Denylist Unmount Only so UPI apps still get Virtus inject
 hivirtus_fix_zn_denylist 2>/dev/null &
+hivirtus_apatch_allow_upi_inject 2>/dev/null &
+
+# If UPI app is foreground but no safe_inject yet → warn (denylist/APatch block)
+(
+  LAST_WARN=""
+  while true; do
+    sleep 8
+    FG=$(get_foreground_pkg)
+    [ -z "$FG" ] && continue
+    is_upi_pkg "$FG" || continue
+    if grep -q "safe_inject:$FG" /data/local/tmp/hivirtus_inject.log 2>/dev/null || \
+       grep -q "pre_seen:$FG" /data/local/tmp/hivirtus_inject.log 2>/dev/null; then
+      continue
+    fi
+    if [ "$FG" != "$LAST_WARN" ]; then
+      echo "WARN_fg_no_zygisk:$FG (open ZygiskNext=Unmount Only, force-stop app, reopen)" \
+        >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+      LAST_WARN="$FG"
+    fi
+  done
+) &
 
 # Keep bridge.dex + UI readable for app uid (SELinux-safe path)
 (

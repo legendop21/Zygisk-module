@@ -254,11 +254,18 @@ hivirtus_fix_zn_denylist() {
     znctl="$(command -v znctl)"
   fi
   if [ -n "$znctl" ]; then
-    "$znctl" enforce-denylist just_umount \
-      >/data/local/tmp/hivirtus_zn_denylist.txt 2>&1 || true
-    echo "zn_denylist=just_umount via $znctl" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
-    echo "OK: Zygisk Next Denylist → Unmount Only (reboot if still Enforced)" \
-      > /data/local/tmp/hivirtus_zn_hint.txt
+    if "$znctl" enforce-denylist just_umount \
+      >/data/local/tmp/hivirtus_zn_denylist.txt 2>&1; then
+      echo "zn_denylist=just_umount_ok via $znctl" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+      echo "OK: Zygisk Next Denylist → Unmount Only. Open GPay/YesPay then recheck inject.log" \
+        > /data/local/tmp/hivirtus_zn_hint.txt
+    else
+      echo "zn_denylist=CMD_FAIL via $znctl" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+      echo "FIX: Zygisk Next UI → Denylist Policy → Unmount Only → reboot" \
+        > /data/local/tmp/hivirtus_zn_hint.txt
+      echo "HINT: manually set Denylist=Unmount Only in ZygiskNext" \
+        >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+    fi
   else
     echo "zn_denylist=NO_ZNCTL" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
     echo "FIX: Zygisk Next → Denylist Policy → Unmount Only (NOT Enforced) → reboot" \
@@ -268,4 +275,28 @@ hivirtus_fix_zn_denylist() {
   fi
   chmod 644 /data/local/tmp/hivirtus_zn_hint.txt 2>/dev/null
   chmod 666 /data/local/tmp/hivirtus_inject.log 2>/dev/null
+}
+
+# APatch: UPI apps pe exclude=0 so Zygisk Next inject allow
+hivirtus_apatch_allow_upi_inject() {
+  AP_CFG="/data/adb/ap/package_config"
+  [ -f "$AP_CFG" ] || return 0
+  TMP="/data/local/tmp/hivirtus_ap_upi_fix.csv"
+  UPI_RE='phonepe|paytm|paisa|yespay|yesbank|kreditbee|moneyview|mobikwik|postpe|upi|payzapp|bhim|freecharge|stashfin|snapmint|dreamplug|fampay|slice|navi|bharatpe|supermoney|groww|hdfc|icici|axis|sbi|kotak|idfc|baroda'
+  awk -F, -v re="$UPI_RE" 'BEGIN{OFS=","}
+    NR==1 {print; next}
+    $1 ~ re {
+      # exclude=0 → allow zygisk/module path; keep other cols
+      $2=0
+      print
+      next
+    }
+    {print}
+  ' "$AP_CFG" > "$TMP" 2>/dev/null
+  if [ -s "$TMP" ]; then
+    cp -f "$TMP" "$AP_CFG" 2>/dev/null
+    chmod 644 "$AP_CFG" 2>/dev/null
+    echo "apatch_upi_exclude0" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+  fi
+  rm -f "$TMP" 2>/dev/null
 }
