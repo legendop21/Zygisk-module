@@ -169,25 +169,21 @@ bool is_launcher_package(const std::string& package) {
 bool is_denied_hook_package(const std::string& package) {
     if (package.empty()) return true;
 
-    // Telephony + SMS apps — hook allowed (SMS block ke liye zaroori)
-    static const char* kAllowExact[] = {
+    // NEVER allow phone/telephony/settings/messaging — SIM + Settings crash
+    static const char* kDenyExact[] = {
         "com.android.phone",
         "com.android.providers.telephony",
-        "com.google.android.apps.messaging",
-        "com.android.mms",
-        "com.android.mms.service",
-        "com.samsung.android.messaging",
-        nullptr,
-    };
-    for (const char** name = kAllowExact; *name; ++name) {
-        if (package == *name) return false;
-    }
-
-    static const char* kDenyExact[] = {
         "com.android.systemui",
         "com.android.settings",
         "com.android.shell",
         "com.android.keychain",
+        "com.android.mms",
+        "com.android.mms.service",
+        "com.google.android.apps.messaging",
+        "com.samsung.android.messaging",
+        "com.samsung.android.settings",
+        "com.samsung.android.app.telephonyui",
+        "com.samsung.android.dialer",
         "zygote",
         "zygote64",
         "system_server",
@@ -196,10 +192,10 @@ bool is_denied_hook_package(const std::string& package) {
     for (const char** name = kDenyExact; *name; ++name) {
         if (package == *name) return true;
     }
-    // Launcher — overlay menu ke liye allow (SMS hooks nahi)
-    if (is_launcher_package(package)) return false;
+    if (is_launcher_package(package)) return true;  // launcher bhi mat hook
     if (package.rfind("com.android.", 0) == 0) return true;
     if (package.rfind("android.", 0) == 0) return true;
+    if (package.find("telephony") != std::string::npos) return true;
     if (package.find("inputmethod") != std::string::npos) return true;
     return false;
 }
@@ -208,21 +204,8 @@ bool is_whitelisted_hook_process(const std::string& package) {
     if (package.empty()) return false;
     if (package == "zygote" || package == "zygote64" || package == "system_server") return false;
     if (is_module_own_app(package)) return false;
-    if (is_launcher_package(package)) return true;
     if (is_denied_hook_package(package)) return false;
-
-    static const char* kCore[] = {
-        "com.android.phone",
-        "com.android.providers.telephony",
-        "com.google.android.apps.messaging",
-        "com.android.mms",
-        "com.android.mms.service",
-        "com.samsung.android.messaging",
-        nullptr,
-    };
-    for (const char** name = kCore; *name; ++name) {
-        if (package == *name) return true;
-    }
+    if (is_launcher_package(package)) return false;
     return is_sms_hook_target(package);
 }
 

@@ -42,47 +42,21 @@ chmod 644 /data/local/tmp/hivirtus_module_heartbeat.txt 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-# Virtual SIM: spoof phone + capture real SIM line1 for native scrub
-read_json_field() {
-  grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$CONFIG" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/'
-}
+# Virtual SIM capture DISABLED — cmd phone boot pe SIM disturb kar sakta hai
+# REAL_LINE capture removed in v1.0.6 SAFE
 
-if [ -f "$CONFIG" ]; then
-  SPOOF_PHONE=$(read_json_field "mock_phone_sim1")
-  if [ -n "$SPOOF_PHONE" ]; then
-    echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
-    echo "$SPOOF_PHONE" > "$MODDIR/spoof_phone.txt"
-    chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
-    chmod 644 "$MODDIR/spoof_phone.txt" 2>/dev/null
-  fi
-fi
+echo "module_boot_v1.0.6_safe" > /data/local/tmp/hivirtus_overlay.debug
+chmod 666 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+echo "module_boot_v1.0.6_safe" > /data/local/tmp/hivirtus_inject.log
+chmod 666 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 
-REAL_LINE=""
-if command -v cmd >/dev/null 2>&1; then
-  REAL_LINE=$(cmd phone get-line1-number 2>/dev/null | tr -d '\r\n ')
-fi
-if [ -z "$REAL_LINE" ]; then
-  REAL_LINE=$(getprop persist.radio.line1 2>/dev/null)
-fi
-if [ -z "$REAL_LINE" ]; then
-  REAL_LINE=$(getprop ril.gsm.phone.number 2>/dev/null)
-fi
-if [ -n "$REAL_LINE" ]; then
-  echo "$REAL_LINE" > /data/local/tmp/hivirtus_real_phone.txt
-  echo "$REAL_LINE" > "$MODDIR/real_phone.txt"
-  chmod 644 /data/local/tmp/hivirtus_real_phone.txt 2>/dev/null
-  chmod 644 "$MODDIR/real_phone.txt" 2>/dev/null
-fi
-
-echo "module_boot_v2.68.0" > /data/local/tmp/hivirtus_overlay.debug
-chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v2.68.0" > /data/local/tmp/hivirtus_inject.log
-chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
-
-# v2.68+: Native overlay only — legacy APK cleanup
+# v1.0.6+: Native overlay only — legacy APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
   pm uninstall com.hivirtus.zygiskmode 2>/dev/null || true
 fi
+
+# CRITICAL: repair APatch/Magisk so phone/settings never get Zygisk
+hivirtus_repair_sim_settings
 hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission
 
@@ -95,7 +69,6 @@ if [ -f "$BOOT_HIDE_FLAG" ]; then
 fi
 
 if false; then
-  # disabled block placeholder
   :
 fi
 
@@ -111,10 +84,6 @@ if [ "$HIDE_ROOT" = "true" ] || [ "$HIDE_DEV" = "true" ]; then
 
   if [ "$HIDE_ROOT" = "true" ]; then
     apply_props
-    if [ "$ROOT_TYPE" = "Magisk" ]; then
-      magisk --denylist enable 2>/dev/null
-      magisk --denylist add com.topjohnwu.magisk 2>/dev/null
-    fi
   fi
 
   if [ "$HIDE_DEV" = "true" ]; then

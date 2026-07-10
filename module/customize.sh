@@ -1,11 +1,11 @@
 #!/system/bin/sh
-# Virtus Zygisk Mode — SMSTweaks-style hooks + floating HTML menu (no LSPosed)
+# Virtus Zygisk Mode — SAFE install (v1.0.6)
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "        v1.0.5                  "
-ui_print "  Floating menu · SMS intercept "
-ui_print "  No LSPosed · 32+64 Zygisk     "
+ui_print "     v1.0.6 SAFE                "
+ui_print "  SIM/Settings crash FIXED      "
+ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 
@@ -21,6 +21,7 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -d "$MODPATH/docs" ] && set_perm_recursive "$MODPATH/docs" 0 0 0755 0644
 [ -f "$MODPATH/bridge.dex" ] && set_perm "$MODPATH/bridge.dex" 0 0 0644
 [ -f "$MODPATH/diag_bubble.sh" ] && set_perm "$MODPATH/diag_bubble.sh" 0 0 0755
+[ -f "$MODPATH/repair_sim.sh" ] && set_perm "$MODPATH/repair_sim.sh" 0 0 0755
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
@@ -29,6 +30,10 @@ set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/overlay_install.sh" ] && set_perm "$MODPATH/overlay_install.sh" 0 0 0755
 
 . "$MODPATH/overlay_install.sh" 2>/dev/null
+MODDIR="$MODPATH"
+# CRITICAL on flash: repair bad APatch config that broke SIM
+ui_print "- Repairing SIM/Settings safety..."
+hivirtus_repair_sim_settings 2>/dev/null
 hivirtus_boot_activate_overlay 2>/dev/null
 hivirtus_grant_overlay_permission 2>/dev/null
 
@@ -45,12 +50,11 @@ fi
 [ -f "$MODPATH/zygisk/arm64-v8a.so" ] && ui_print "- arm64-v8a.so OK"
 [ -f "$MODPATH/zygisk/armeabi-v7a.so" ] && ui_print "- armeabi-v7a.so OK (32-bit)"
 
-if [ ! -f "$MODPATH/config.json" ]; then
-  ui_print "- Creating default config"
-  cat > "$MODPATH/config.json" << 'EOF'
+# Always refresh safe defaults (don't enable phone spoof / root hide)
+cat > "$MODPATH/config.json" << 'EOF'
 {
-  "hide_root": true,
-  "hide_developer": true,
+  "hide_root": false,
+  "hide_developer": false,
   "enable_sim1_mock": false,
   "enable_phone_spoof": false,
   "enable_virtual_sim": false,
@@ -69,15 +73,19 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "log_file": "/data/local/tmp/virtus_zygisk_mode.log"
 }
 EOF
-  set_perm "$MODPATH/config.json" 0 0 0644
-fi
+set_perm "$MODPATH/config.json" 0 0 0644
+# Wipe runtime spoof that triggers bad paths
+rm -f /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+rm -f /data/local/tmp/hivirtus_hooked_pkgs.txt 2>/dev/null
+cp -f "$MODPATH/config.json" /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+chmod 644 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
 
 if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
   ui_print "- KernelSU detected"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
-elif [ -d /data/adb/apatch ]; then
-  ui_print "- APatch detected"
+elif [ -d /data/adb/ap ] || [ -d /data/adb/apatch ]; then
+  ui_print "- APatch detected — phone/settings excluded"
 fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
@@ -86,11 +94,14 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Virtus Zygisk Mode v1.0.5"
-ui_print "  Android 11 → 16 supported"
-ui_print "  1) Zygisk ON → flash → reboot"
-ui_print "  2) Open UPI/finance app"
-ui_print "  3) Gold V TOP-LEFT → tap → menu"
-ui_print "  Mac diag: adb shell su -c 'sh /data/adb/modules/hivirtus_zygisk_mode/diag_bubble.sh'"
+ui_print "Virtus Zygisk Mode v1.0.6 SAFE"
+ui_print "  SIM + Settings crash FIXED"
+ui_print "  1) Flash → REBOOT (zaroori)"
+ui_print "  2) Settings / SIM check karo"
+ui_print "  3) UPI app → gold V → menu"
+ui_print ""
+ui_print "Agar SIM abhi bhi gayab:"
+ui_print "  adb shell su -c 'sh /data/adb/modules/hivirtus_zygisk_mode/repair_sim.sh'"
+ui_print "  phir reboot"
 ui_print ""
 ui_print "No LSPosed needed."

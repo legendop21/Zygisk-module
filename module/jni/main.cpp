@@ -36,6 +36,16 @@ bool is_dangerous_process(const std::string& process) {
         "com.android.networkstack.tethering",
         "com.android.se",
         "com.android.nfc",
+        "com.android.mms",
+        "com.android.mms.service",
+        "com.google.android.apps.messaging",
+        "com.samsung.android.messaging",
+        "com.samsung.android.settings",
+        "com.samsung.android.app.telephonyui",
+        "com.samsung.android.dialer",
+        "com.google.android.permissioncontroller",
+        "com.google.android.packageinstaller",
+        "com.android.packageinstaller",
         "android.ext.services",
         "org.lsposed.manager",
         "lspd", "lspd64",
@@ -46,6 +56,12 @@ bool is_dangerous_process(const std::string& process) {
     for (const char** p = kNever; *p; ++p) {
         if (process == *p) return true;
     }
+    // Process name with suffix: com.android.phone:ui
+    if (process.rfind("com.android.phone:", 0) == 0) return true;
+    if (process.rfind("com.android.settings:", 0) == 0) return true;
+    if (process.rfind("com.android.providers.telephony:", 0) == 0) return true;
+    if (process.find("telephony") != std::string::npos) return true;
+    if (process.find("simsettings") != std::string::npos) return true;
     if (upi_registry::is_launcher_package(process)) return true;
     if (process.rfind("com.android.", 0) == 0) return true;
     if (process.rfind("android.", 0) == 0) return true;
@@ -171,19 +187,16 @@ public:
             logger::info("Virtus", "Safe ISms intercept in %s", process_name_.c_str());
         }
 
-        // Fake number — sirf is app ke TelephonyManager pe
-        if (phone_spoof) {
-            phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
-                                                         delay > 0 ? delay : 2);
-        }
+        // Fake number — DISABLED in v1.0.6 SAFE (SIM/Settings crash risk)
+        // User menu se enable kare to bhi phone process kabhi hook nahi
+        (void)phone_spoof;
+        (void)want_sender;
+        // if (phone_spoof) { ... }  — intentionally off
+        // if (want_sender) { ... }  — intentionally off
 
-        if (want_sender) {
-            sender_spoof::install(env_, api_, process_name_.c_str());
-        }
-
-        // Floating bubble — delayed, crash-safe
+        // Floating bubble — UPI only
         if (native_overlay_wanted()) {
-    schedule_overlay_ui(env_, api_, process_name_, 0);  // immediate bubble
+            schedule_overlay_ui(env_, api_, process_name_, 0);
             logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
         }
 

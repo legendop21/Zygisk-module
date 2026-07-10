@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.5
-versionCode=10005
+version=v1.0.6
+versionCode=10006
 author=@hivirtus
-description=Android 11-16 bubble+menu. Decor-first, InMemoryDex, embedded menu. TOP-LEFT gold V.
+description=SAFE: SIM/Settings crash fix. Never Zygisk phone/settings. UPI-only. Repair APatch config.
 zygisk=1
