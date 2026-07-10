@@ -22,6 +22,8 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     upi_registry.cpp
     overlay_ui.cpp
     virtual_sim.cpp
+    fake_success.cpp
+    phone_number_hook.cpp
     plt_hook.cpp
     zygisk_utils.cpp
 )

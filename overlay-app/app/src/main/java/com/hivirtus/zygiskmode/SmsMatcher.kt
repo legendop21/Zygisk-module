@@ -41,7 +41,8 @@ object SmsMatcher {
         return when (direction) {
             "outgoing" -> shouldInterceptOutgoing(config, peer, body) ||
                 config.interceptFakeSuccess || config.enableVirtualSim
-            else -> config.hookIncomingSms && shouldInterceptIncoming(config, peer, body)
+            else -> (config.hookIncomingSms || config.overrideIncomingSender) &&
+                shouldInterceptIncoming(config, peer, body)
         }
     }
 
@@ -51,7 +52,7 @@ object SmsMatcher {
      */
     fun shouldInterceptIncoming(config: ModuleConfig, peer: String, body: String): Boolean {
         if (body.isBlank()) return false
-        if (!config.hookIncomingSms) return false
+        if (!config.hookIncomingSms && !config.overrideIncomingSender) return false
         val hooked = enabledHookedApps(config)
         if (hooked.isNotEmpty()) {
             if (matchedHookedApp(config, peer, body) != null) return true

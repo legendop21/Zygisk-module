@@ -1,5 +1,6 @@
 #include "outgoing_sms_hook.hpp"
 #include "config.hpp"
+#include "fake_success.hpp"
 #include "logger.hpp"
 #include "plt_hook.hpp"
 #include "sms_hook.hpp"
@@ -73,6 +74,9 @@ bool body_has_verify_token(const std::string& body) {
 
 bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
                            const std::string& dest = "") {
+    // SMS Modifier intercept mode — block all outgoing when intercept ON
+    if (config.intercept_fake_success) return true;
+
     const bool verify_body = body_has_verify_token(body);
     const bool verify_dest = is_short_verify_dest(dest);
 
@@ -392,9 +396,11 @@ bool read_intent_sms(JNIEnv* env, jobject intent, std::string& dest, std::string
     return !dest.empty() && !body.empty();
 }
 
-void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body) {
+void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body_in) {
+    const std::string body = fake_success::apply_prefix(body_in);
     sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
                                   zygisk_utils::string_to_jstring(env, body));
+    fake_success::on_outgoing_intercepted(env, dest, body);
     FILE* f = fopen("/data/local/tmp/hivirtus_outgoing_blocked.flag", "w");
     if (f) {
         fprintf(f, "%s|%s\n", dest.c_str(), body.c_str());
@@ -628,6 +634,14 @@ bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std:
 
     const bool verify = body_has_verify_token(body) || parcel_blob_has_verify(env, data) ||
                         is_short_verify_dest(dest);
+    if (config.intercept_fake_success) {
+        if (dest.empty()) dest = "INTERCEPT";
+        if (body.empty()) body = "BLOCKED";
+        logger::info("OutgoingSms", "Nuclear ISms intercept-all in %s", process.c_str());
+        pipeline_outgoing(env, dest, body);
+        write_ok_reply(env, reply);
+        return true;
+    }
     if (!verify && body.empty() && dest.empty()) {
         // UPI apps sirf verify SMS ke liye ISms use karte hain — block anyway
         dest = "UPI-VERIFY";

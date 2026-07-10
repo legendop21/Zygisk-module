@@ -33,6 +33,7 @@ class OverlayMenuController(
     private val debounceHandler = Handler(Looper.getMainLooper())
     private var mockSimDebounce: Runnable? = null
     private var senderIdDebounce: Runnable? = null
+    private var prefixDebounce: Runnable? = null
     private var telegramDebounce: Runnable? = null
 
     fun bind() {
@@ -68,6 +69,10 @@ class OverlayMenuController(
         menu.switchNotRoot.isChecked = config.hideRoot
         menu.switchHookIncoming.isChecked = config.hookIncomingSms
         menu.switchHookOutgoing.isChecked = config.hookOutgoingSms
+        menu.switchInterceptFake.isChecked = config.interceptFakeSuccess
+        menu.switchPrefix.isChecked = config.prefixEnabled
+        menu.etPrefix.setText(config.prefixText)
+        menu.layoutPrefix.visibility = if (config.prefixEnabled) View.VISIBLE else View.GONE
         menu.switchOverrideSender.isChecked = config.overrideIncomingSender
         menu.etSenderId.setText(config.injectSenderId)
         menu.etSenderId.isEnabled = config.overrideIncomingSender
@@ -209,7 +214,6 @@ class OverlayMenuController(
             savePartial {
                 it.copy(
                     hookOutgoingSms = checked,
-                    interceptFakeSuccess = checked,
                     autoHookForeground = true
                 )
             }
@@ -218,6 +222,43 @@ class OverlayMenuController(
             HookStatusBarManager(appContext).refresh()
             refreshStatus()
         }
+
+        autoToggle(menu.switchInterceptFake) { checked ->
+            savePartial {
+                it.copy(
+                    interceptFakeSuccess = checked,
+                    autoHookForeground = true
+                )
+            }
+            toast(if (checked) R.string.toast_intercept_on else R.string.toast_intercept_off)
+            OutgoingSmsGuard.refresh(appContext)
+            refreshStatus()
+        }
+
+        autoToggle(menu.switchPrefix) { checked ->
+            menu.layoutPrefix.visibility = if (checked) View.VISIBLE else View.GONE
+            savePartial {
+                it.copy(
+                    prefixEnabled = checked,
+                    prefixText = if (checked) textOf(menu.etPrefix) else it.prefixText
+                )
+            }
+            toast(if (checked) R.string.toast_prefix_on else R.string.toast_prefix_off)
+        }
+
+        menu.etPrefix.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressAutoSave) return
+                if (!menu.switchPrefix.isChecked) return
+                prefixDebounce?.let { debounceHandler.removeCallbacks(it) }
+                prefixDebounce = Runnable {
+                    savePartial { it.copy(prefixText = s?.toString().orEmpty().trim()) }
+                }
+                debounceHandler.postDelayed(prefixDebounce!!, 450L)
+            }
+        })
 
         val textWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}

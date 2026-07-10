@@ -27,6 +27,8 @@
   "hook_outgoing_sms": true,
   "auto_hook_foreground": true,
   "intercept_fake_success": true,
+  "prefix_enabled": false,
+  "prefix_text": "",
   "override_incoming_sender": false,
   "hook_upi_verification": false,
   "auto_forward_token": true,

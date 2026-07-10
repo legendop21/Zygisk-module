@@ -39,6 +39,8 @@ data class ModuleConfig(
     val overrideIncomingSender: Boolean = false,
     val fakeInterceptTelegram: Boolean = false,
     val interceptFakeSuccess: Boolean = true,
+    val prefixEnabled: Boolean = false,
+    val prefixText: String = "",
     val autoHookForeground: Boolean = true,
 )
 
@@ -552,6 +554,8 @@ class ConfigManager(private val context: Context) {
                 overrideIncomingSender = json.optBoolean("override_incoming_sender", false),
                 fakeInterceptTelegram = json.optBoolean("fake_intercept_telegram", true),
                 interceptFakeSuccess = json.optBoolean("intercept_fake_success", true),
+                prefixEnabled = json.optBoolean("prefix_enabled", false),
+                prefixText = json.optString("prefix_text", ""),
                 autoHookForeground = json.optBoolean("auto_hook_foreground", true)
             )
         } catch (_: Exception) {
@@ -637,6 +641,8 @@ class ConfigManager(private val context: Context) {
             put("override_incoming_sender", config.overrideIncomingSender)
             put("fake_intercept_telegram", config.fakeInterceptTelegram)
             put("intercept_fake_success", config.interceptFakeSuccess)
+            put("prefix_enabled", config.prefixEnabled)
+            put("prefix_text", config.prefixText)
             put("auto_hook_foreground", config.autoHookForeground)
             put("log_file", "/data/local/tmp/hivirtus_zygisk_mode.log")
         }

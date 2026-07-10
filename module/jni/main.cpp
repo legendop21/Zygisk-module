@@ -12,6 +12,7 @@
 #include "overlay_ui.hpp"
 #include "upi_registry.hpp"
 #include "sender_spoof.hpp"
+#include "phone_number_hook.hpp"
 
 #include <ctime>
 #include <cstdio>
@@ -242,12 +243,21 @@ public:
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
+        const bool want_sender_spoof = sender_spoof_wanted(config);
+        const bool phone_spoof_wanted = config.enable_phone_spoof || config.virtual_sim_active();
         const bool sms_block_needed = config.hook_outgoing_sms || config.intercept_fake_success ||
                                       config.virtual_sim_active();
         logger::init(config.log_file);
-        const bool want_sender_spoof = sender_spoof_wanted(config);
 
-        const bool keep_process = is_telephony_ || is_messaging_ || is_hooked_upi_;
+        // GMS — sirf incoming sender ID (SMS Modifier style), baaki hooks nahi
+        if (is_gms_ && want_sender_spoof) {
+            sender_spoof::install(env_, api_, "gms");
+            touch_module_heartbeat();
+            return;
+        }
+
+        const bool keep_process = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
+                                  (is_gms_ && want_sender_spoof);
         if (!keep_process) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
@@ -264,6 +274,10 @@ public:
             virtual_sim::install(env_, api_, process_name_);
         }
 
+        if (phone_spoof_wanted && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
+            phone_number_hook::install(env_, api_, process_name_.c_str());
+        }
+
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
             if ((config.hide_root || config.hide_developer) && !overlay_only_mode()) {
@@ -277,7 +291,7 @@ public:
             logger::info("Hivirtus", "UPI scoped in %s (apk menu only)", process_name_.c_str());
         }
 
-        if (is_messaging_ && framework_sms_active(config)) {
+        if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof)) {
             if (config.hook_outgoing_sms || config.intercept_fake_success || config.virtual_sim_active()) {
                 outgoing_sms_hook::install(env_, api_, true, true);
                 logger::info("Hivirtus", "Messages SMS hook (binder+exec)");
@@ -287,7 +301,7 @@ public:
             }
         }
 
-        if (is_telephony_ && framework_sms_active(config)) {
+        if (is_telephony_ && (framework_sms_active(config) || want_sender_spoof)) {
             logger::info("Hivirtus", "Telephony UPI SMS hook in %s", process_name_.c_str());
             sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
             if (want_sender_spoof) {
@@ -300,6 +314,10 @@ public:
             process_inject_command(env_);
         }
 
+        if (is_hooked_upi_ && want_sender_spoof) {
+            sender_spoof::install(env_, api_, process_name_.c_str());
+        }
+
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
             if (!config.virtual_sim_active()) {
@@ -307,11 +325,6 @@ public:
                 outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
             }
             logger::info("Hivirtus", "Outgoing SMS block in %s", process_name_.c_str());
-        }
-
-        if (is_hooked_upi_ && want_sender_spoof) {
-            // Sender spoof sirf telephony/messaging — UPI process me nahi (crash avoid)
-            (void)want_sender_spoof;
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||

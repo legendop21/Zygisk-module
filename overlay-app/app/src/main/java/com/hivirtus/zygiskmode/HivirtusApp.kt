@@ -17,11 +17,6 @@ class HivirtusApp : Application() {
             val userPhone = cm.readUserMockPhoneRaw().ifBlank { config.mockPhoneSim1 }
             val updated = config.copy(
                 autoHookForeground = true,
-                interceptFakeSuccess = config.hookOutgoingSms || config.interceptFakeSuccess,
-                hookIncomingSms = false,
-                hookUpiVerification = false,
-                overrideIncomingSender = false,
-                autoExtractOtp = true,
                 mockPhoneSim1 = userPhone.ifBlank { config.mockPhoneSim1 }
             )
             if (mockOn && userPhone.isNotBlank()) {

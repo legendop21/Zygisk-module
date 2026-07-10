@@ -133,7 +133,16 @@
     <string name="send_virtual_sms">Send SMS</string>
     <string name="open_send_sms_float">Open Send SMS Float</string>
     <string name="sender_id_notification_hint">ON = har SMS notification saved Sender ID se dikhega</string>
-    <string name="intercept_fake_success">Block Real SIM + Fake Success</string>
+    <string name="intercept_fake_success">Intercept &amp; Fake Success</string>
+    <string name="intercept_fake_title">Intercept &amp; Fake Success</string>
+    <string name="sms_prefix_title">Outgoing SMS Prefix</string>
+    <string name="sms_prefix_enable">SMS Prefix ON/OFF</string>
+    <string name="sms_prefix_hint">Prefix text (space after prefix recommended)</string>
+    <string name="incoming_sender_title">Incoming Sender ID</string>
+    <string name="toast_prefix_on">SMS Prefix ON</string>
+    <string name="toast_prefix_off">SMS Prefix OFF</string>
+    <string name="toast_intercept_on">Intercept ON — SMS block + fake success</string>
+    <string name="toast_intercept_off">Intercept OFF</string>
     <string name="zygisk_compat_hint">Zygisk mode only — LSPosed install mat karo. Debug: /data/local/tmp/hivirtus_zygisk_mode.log</string>
     <string name="fake_intercept_telegram">Fake Intercept → Telegram (enable/disable)</string>
     <string name="telegram_tap_copy_hint">Telegram pe SMS ek tap me copy — code block + phone clipboard</string>
