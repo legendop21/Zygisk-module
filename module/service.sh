@@ -117,12 +117,17 @@ sync_config() {
       NEW_HASH="${TG_T}|${TG_C}"
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > /data/local/tmp/hivirtus_telegram_credentials.json
-      chmod 644 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+      chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+      # Save / ui_save change → hamesha test queue (same token pe bhi Save = test)
+      SAVE_MT=$(stat -c %Y /data/local/tmp/hivirtus_ui_save.json 2>/dev/null || echo 0)
+      LAST_MT=$(cat /data/local/tmp/hivirtus_ui_save.mt 2>/dev/null || echo 0)
+      if [ "$NEW_HASH" != "$OLD_HASH" ] || [ "$SAVE_MT" != "$LAST_MT" ]; then
         echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+        echo "$SAVE_MT" > /data/local/tmp/hivirtus_ui_save.mt
         echo 1 > /data/local/tmp/hivirtus_tg_test.request
         rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+        echo "tg_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       fi
     fi
   fi
@@ -149,6 +154,30 @@ mark_active() {
 }
 
 sync_config
+
+# Telegram paths app-writable + boot pe ek test agar creds pehle se hain
+(
+  for f in /data/local/tmp/hivirtus_tg_test.request \
+           /data/local/tmp/hivirtus_tg_forward.log; do
+    touch "$f" 2>/dev/null
+    chmod 666 "$f" 2>/dev/null
+  done
+  for f in /data/local/tmp/hivirtus_telegram_credentials.json \
+           /data/local/tmp/hivirtus_ui_save.json \
+           /data/local/tmp/hivirtus_zygisk_mode_config.json; do
+    [ -f "$f" ] && chmod 666 "$f" 2>/dev/null
+  done
+  # Boot test: pehle se token ho to 🚀 test bhejo (Save ke bina bhi)
+  if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ]; then
+    TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
+      echo 1 > /data/local/tmp/hivirtus_tg_test.request
+      chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+      echo "tg_boot_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    fi
+  fi
+) &
 
 # NEVER seed APatch package_config (phone/telephony exclude=0 → SIM crash)
 # NEVER mass-seed hooked_pkgs from csv
