@@ -115,12 +115,12 @@
     const el = $("#statusLine");
     if (!el) return;
     if (note === "saved") {
-      el.textContent = "settings saved";
+      el.textContent = "saved · global (all apps)";
       el.style.color = "var(--green)";
       return;
     }
     if (note === "tg_saved") {
-      el.textContent = "saved · global (all apps) · TG test soon";
+      el.textContent = "saved · TG test only if token NEW";
       el.style.color = "var(--green)";
       return;
     }

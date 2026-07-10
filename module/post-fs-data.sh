@@ -47,7 +47,7 @@ chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
 # Boot marker — version from module.prop (purana v1.0.6 string hata diya)
 VER=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2)
-[ -z "$VER" ] && VER="v1.0.35"
+[ -z "$VER" ] && VER="v1.0.36"
 echo "module_boot_${VER}" > /data/local/tmp/hivirtus_overlay.debug
 chmod 666 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
 # Inject log: boot line likho, purani safe_inject lines mat mitao completely —

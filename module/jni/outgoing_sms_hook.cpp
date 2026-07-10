@@ -531,13 +531,21 @@ bool read_isms_server_outgoing(JNIEnv* env, jobject data, std::string& dest, std
     return extract_isms_from_blob(env, data, dest, body);
 }
 
+// ISms send* are void — reply MUST be writeNoException only.
+// Extra writeInt(0) after that can make UPI SDKs treat the call as failed
+// ("Verification Failed / No permission" style).
 void write_ok_reply(JNIEnv* env, jobject reply) {
     if (!reply) return;
     reset_parcel(env, reply);
     jclass cls = env->GetObjectClass(reply);
-    jmethodID write_int = env->GetMethodID(cls, "writeInt", "(I)V");
     jmethodID write_no_ex = env->GetMethodID(cls, "writeNoException", "()V");
-    if (write_no_ex) env->CallVoidMethod(reply, write_no_ex);
+    if (write_no_ex) {
+        env->CallVoidMethod(reply, write_no_ex);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    // Fallback: EX_NONE = 0
+    jmethodID write_int = env->GetMethodID(cls, "writeInt", "(I)V");
     if (write_int) env->CallVoidMethod(reply, write_int, 0);
 }
 

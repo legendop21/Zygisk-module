@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.35
-versionCode=10035
+version=v1.0.36
+versionCode=10036
 author=@hivirtus
 description=Zygisk Mode Menu By @Hivirtus 🔥 Zygisk
 zygisk=1
