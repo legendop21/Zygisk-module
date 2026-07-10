@@ -37,17 +37,38 @@ std::string resolve_phone() {
 }
 
 static jstring (*orig_get_line1)(JNIEnv*, jobject) = nullptr;
+static jstring (*orig_get_line1_sub)(JNIEnv*, jobject, jint) = nullptr;
 static jstring (*orig_get_msisdn)(JNIEnv*, jobject, jint) = nullptr;
+static jstring (*orig_get_subscriber)(JNIEnv*, jobject) = nullptr;
+static jstring (*orig_get_subscriber_sub)(JNIEnv*, jobject, jint) = nullptr;
+static jstring (*orig_get_iccid)(JNIEnv*, jobject) = nullptr;
 
-jstring hook_get_line1_number(JNIEnv* env, jobject thiz) {
+jstring spoof_phone_jstring(JNIEnv* env, jstring (*orig)(JNIEnv*, jobject), jobject thiz,
+                            const char* tag) {
     if (!spoof_active()) {
-        return orig_get_line1 ? orig_get_line1(env, thiz) : nullptr;
+        return orig ? orig(env, thiz) : nullptr;
     }
     const std::string phone = resolve_phone();
     if (phone.empty()) {
-        return orig_get_line1 ? orig_get_line1(env, thiz) : nullptr;
+        return orig ? orig(env, thiz) : nullptr;
     }
-    logger::info("PhoneHook", "getLine1Number -> %s", phone.c_str());
+    logger::info("PhoneHook", "%s -> %s", tag, phone.c_str());
+    return zygisk_utils::string_to_jstring(env, phone);
+}
+
+jstring hook_get_line1_number(JNIEnv* env, jobject thiz) {
+    return spoof_phone_jstring(env, orig_get_line1, thiz, "getLine1Number");
+}
+
+jstring hook_get_line1_number_sub(JNIEnv* env, jobject thiz, jint sub_id) {
+    if (!spoof_active()) {
+        return orig_get_line1_sub ? orig_get_line1_sub(env, thiz, sub_id) : nullptr;
+    }
+    const std::string phone = resolve_phone();
+    if (phone.empty()) {
+        return orig_get_line1_sub ? orig_get_line1_sub(env, thiz, sub_id) : nullptr;
+    }
+    logger::info("PhoneHook", "getLine1Number(%d) -> %s", sub_id, phone.c_str());
     return zygisk_utils::string_to_jstring(env, phone);
 }
 
@@ -63,27 +84,81 @@ jstring hook_get_msisdn(JNIEnv* env, jobject thiz, jint sub_id) {
     return zygisk_utils::string_to_jstring(env, phone);
 }
 
+jstring hook_get_subscriber_id(JNIEnv* env, jobject thiz) {
+    if (!spoof_active()) {
+        return orig_get_subscriber ? orig_get_subscriber(env, thiz) : nullptr;
+    }
+    // Keep real IMSI if no mock — only spoof when mock_imsi set; else pass-through
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.mock_imsi_sim1.empty()) {
+        return zygisk_utils::string_to_jstring(env, config.mock_imsi_sim1);
+    }
+    return orig_get_subscriber ? orig_get_subscriber(env, thiz) : nullptr;
+}
+
+jstring hook_get_subscriber_id_sub(JNIEnv* env, jobject thiz, jint sub_id) {
+    if (!spoof_active()) {
+        return orig_get_subscriber_sub ? orig_get_subscriber_sub(env, thiz, sub_id) : nullptr;
+    }
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.mock_imsi_sim1.empty()) {
+        return zygisk_utils::string_to_jstring(env, config.mock_imsi_sim1);
+    }
+    return orig_get_subscriber_sub ? orig_get_subscriber_sub(env, thiz, sub_id) : nullptr;
+}
+
+jstring hook_get_sim_serial(JNIEnv* env, jobject thiz) {
+    if (!spoof_active()) {
+        return orig_get_iccid ? orig_get_iccid(env, thiz) : nullptr;
+    }
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    if (!config.mock_iccid_sim1.empty()) {
+        return zygisk_utils::string_to_jstring(env, config.mock_iccid_sim1);
+    }
+    return orig_get_iccid ? orig_get_iccid(env, thiz) : nullptr;
+}
+
+void try_one_jni(JNIEnv* env, const char* cls, const char* name, const char* sig, void* hook,
+                 void** orig_out, const char* tag) {
+    if (!g_api || !env || !orig_out) return;
+    if (*orig_out) return;
+    JNINativeMethod methods[1];
+    methods[0].name = name;
+    methods[0].signature = sig;
+    methods[0].fnPtr = hook;
+    g_api->hookJniNativeMethods(env, cls, methods, 1);
+    if (methods[0].fnPtr && methods[0].fnPtr != hook) {
+        *orig_out = methods[0].fnPtr;
+        logger::info("PhoneHook", "%s hooked", tag);
+    } else {
+        logger::info("PhoneHook", "%s not native / skip", tag);
+    }
+}
+
 void try_hook_telephony_manager(JNIEnv* env) {
     if (!g_api || !env) return;
-
-    JNINativeMethod line1_methods[] = {
-        {"getLine1Number", "()Ljava/lang/String;",
-         reinterpret_cast<void*>(hook_get_line1_number)},
-    };
-    g_api->hookJniNativeMethods(env, "android/telephony/TelephonyManager", line1_methods, 1);
-    if (line1_methods[0].fnPtr) {
-        orig_get_line1 = reinterpret_cast<decltype(orig_get_line1)>(line1_methods[0].fnPtr);
-        logger::info("PhoneHook", "getLine1Number native hook installed");
-    }
-
-    JNINativeMethod msisdn_methods[] = {
-        {"getMsisdn", "(I)Ljava/lang/String;", reinterpret_cast<void*>(hook_get_msisdn)},
-    };
-    g_api->hookJniNativeMethods(env, "android/telephony/TelephonyManager", msisdn_methods, 1);
-    if (msisdn_methods[0].fnPtr) {
-        orig_get_msisdn = reinterpret_cast<decltype(orig_get_msisdn)>(msisdn_methods[0].fnPtr);
-        logger::info("PhoneHook", "getMsisdn native hook installed");
-    }
+    const char* tm = "android/telephony/TelephonyManager";
+    try_one_jni(env, tm, "getLine1Number", "()Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_line1_number),
+                reinterpret_cast<void**>(&orig_get_line1), "getLine1Number");
+    try_one_jni(env, tm, "getLine1Number", "(I)Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_line1_number_sub),
+                reinterpret_cast<void**>(&orig_get_line1_sub), "getLine1Number(sub)");
+    try_one_jni(env, tm, "getMsisdn", "(I)Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_msisdn),
+                reinterpret_cast<void**>(&orig_get_msisdn), "getMsisdn");
+    try_one_jni(env, tm, "getSubscriberId", "()Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_subscriber_id),
+                reinterpret_cast<void**>(&orig_get_subscriber), "getSubscriberId");
+    try_one_jni(env, tm, "getSubscriberId", "(I)Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_subscriber_id_sub),
+                reinterpret_cast<void**>(&orig_get_subscriber_sub), "getSubscriberId(sub)");
+    try_one_jni(env, tm, "getSimSerialNumber", "()Ljava/lang/String;",
+                reinterpret_cast<void*>(hook_get_sim_serial),
+                reinterpret_cast<void**>(&orig_get_iccid), "getSimSerialNumber");
 }
 
 void install_impl(JNIEnv* env, zygisk::Api* api, const char* tag) {

@@ -307,16 +307,7 @@ ${ONE_TAP}"
   printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}},{\"text\":\"📞 Copy To\",\"copy_text\":{\"text\":\"${ESC_TO}\"}}],[{\"text\":\"💬 Copy Message\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
-  if command -v curl >/dev/null 2>&1; then
-    curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-      -H "Content-Type: application/json" \
-      --data-binary "@${PAYLOAD}" > "$RESP" 2>/dev/null && SENT=1
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$RESP" --timeout=25 \
-      --header="Content-Type: application/json" \
-      --post-file="$PAYLOAD" \
-      "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" 2>/dev/null && SENT=1
-  fi
+  if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   # curl may return HTTP 200 with ok:false — verify
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
@@ -355,6 +346,32 @@ module_is_active() {
   return 1
 }
 
+tg_http_post() {
+  # $1 = payload file, $2 = response file, uses TG_TOKEN
+  local payload="$1"
+  local resp="$2"
+  local url="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
+    return $?
+  fi
+  for c in /system/bin/curl /system/xbin/curl /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+    if [ -x "$c" ]; then
+      if [ "$(basename "$c")" = "busybox" ]; then
+        "$c" wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
+      else
+        "$c" -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
+      fi
+      return $?
+    fi
+  done
+  if command -v wget >/dev/null 2>&1; then
+    wget -q -O "$resp" --timeout=25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
+    return $?
+  fi
+  return 1
+}
+
 # Save pe Telegram test — exact format user ne diya
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
@@ -378,38 +395,25 @@ Device: ${DEV}"
   printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
   RESP="/data/local/tmp/hivirtus_tg_test_response.txt"
   SENT=0
-  if command -v curl >/dev/null 2>&1; then
-    curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-      -H "Content-Type: application/json" \
-      --data-binary "@${PAYLOAD}" > "$RESP" 2>/dev/null && SENT=1
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$RESP" --timeout=25 \
-      --header="Content-Type: application/json" \
-      --post-file="$PAYLOAD" \
-      "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" 2>/dev/null && SENT=1
-  fi
+  if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
     rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD"
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
-    # Token galat / network fail — try once more next loop; after 3 fails drop request
     FAILS=$(cat /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null || echo 0)
     FAILS=$((FAILS + 1))
     echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
     if [ "$FAILS" -ge 3 ]; then
-      # Last attempt: send "not active" if we can, else drop
       TEXT2="🚀 @hivirtus Zygisk Mode Test
 not active
 
 Device: ${DEV}"
       ESC2=$(tg_json_escape "$TEXT2")
       printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC2}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
-      curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-        -H "Content-Type: application/json" \
-        --data-binary "@${PAYLOAD}" >/dev/null 2>&1 || true
+      tg_http_post "$PAYLOAD" "$RESP" || true
       rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
     fi
-    echo "tg_test_fail $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    echo "tg_test_fail $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
 }
 
