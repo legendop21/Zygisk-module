@@ -75,16 +75,14 @@ fi
 if [[ -d "$MODULE_DIR/system" ]]; then
   cp -r "$MODULE_DIR/system" "$OUTPUT_DIR/"
 fi
-if [[ -f "$ROOT_DIR/dist/overlay/overlay.dex" ]]; then
-  mkdir -p "$OUTPUT_DIR/overlay"
-  cp "$ROOT_DIR/dist/overlay/overlay.dex" "$OUTPUT_DIR/overlay/"
-elif [[ -f "$MODULE_DIR/overlay/overlay.dex" ]]; then
-  mkdir -p "$OUTPUT_DIR/overlay"
-  cp "$MODULE_DIR/overlay/overlay.dex" "$OUTPUT_DIR/overlay/"
-fi
+mkdir -p "$OUTPUT_DIR/overlay"
 if [[ -d "$MODULE_DIR/overlay/ui" ]]; then
   mkdir -p "$OUTPUT_DIR/overlay/ui"
   cp -r "$MODULE_DIR/overlay/ui/"* "$OUTPUT_DIR/overlay/ui/"
+fi
+rm -rf "$OUTPUT_DIR/overlay/classes" "$OUTPUT_DIR/overlay/sources.txt" "$OUTPUT_DIR/overlay/overlay.jar" "$OUTPUT_DIR/overlay/classes.dex"
+if [[ ! -f "$OUTPUT_DIR/overlay/overlay.dex" ]] && [[ -f "$MODULE_DIR/overlay/overlay.dex" ]]; then
+  cp "$MODULE_DIR/overlay/overlay.dex" "$OUTPUT_DIR/overlay/"
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"

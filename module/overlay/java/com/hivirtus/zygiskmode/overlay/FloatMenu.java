@@ -12,7 +12,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 /** HTML floating panel — modern UI, local file, no APK */
@@ -58,17 +57,9 @@ public final class FloatMenu {
                     webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
                 }
 
-                bridge = new JsBridge(new JsBridge.MenuActions() {
-                    @Override public void onClose() { hide(); }
-                    @Override public void onSaved() { /* config synced */ }
-                });
+                bridge = new JsBridge(new MenuBridgeActions(this));
                 webView.addJavascriptInterface(bridge, "VirtusBridge");
-                webView.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                        return !url.startsWith("file://");
-                    }
-                });
+                webView.setWebViewClient(new LocalWebViewClient());
 
                 webView.loadUrl("file://" + UI_INDEX);
                 root.addView(webView, new FrameLayout.LayoutParams(
