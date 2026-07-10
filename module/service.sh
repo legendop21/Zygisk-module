@@ -14,6 +14,7 @@ net.one97.paytm
 com.google.android.apps.nbu.paisa.user
 com.yespay.next
 com.yesbank.yespay
+com.yesbank.yespaynext
 com.snapmint.customerapp
 com.tataneu
 com.stashfin.android
@@ -199,7 +200,7 @@ enforce_sms_block() {
 
   for pkg in com.android.phone com.android.providers.telephony \
     com.google.android.apps.messaging com.android.mms com.android.mms.service \
-    com.samsung.android.messaging com.yespay.next com.yesbank.yespay \
+    com.samsung.android.messaging com.yespay.next com.yesbank.yespay com.yesbank.yespaynext \
     com.kreditbee.android com.groww.app com.nextbillion.groww \
     com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
     com.phonepe.app net.one97.paytm com.fampay.in $HOOKED; do

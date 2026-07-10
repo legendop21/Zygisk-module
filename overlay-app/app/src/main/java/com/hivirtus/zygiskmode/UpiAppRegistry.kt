@@ -116,8 +116,23 @@ object UpiAppRegistry {
         UpiApp("com.msf.axis", "Axis Alt", listOf("AXIS"), 30),
     )
 
+    /** Apps that get native Zygisk hooks — excludes food delivery / chat (crash). */
+    val NATIVE_HOOK_EXCLUDED: Set<String> = setOf(
+        "com.application.zomato",
+        "in.swiggy.android",
+        "com.olacabs.customer",
+        "com.whatsapp",
+        "com.meesho.supply",
+        "com.truecaller",
+        "com.flipkart.android",
+        "com.amazon.mShop.android.shopping",
+    )
+
+    fun nativeHookPackages(): List<UpiApp> =
+        ALL.filter { it.packageName !in NATIVE_HOOK_EXCLUDED }
+
     fun defaultHookMap(hookAll: Boolean = true): Map<String, Boolean> =
-        ALL.associate { it.packageName to hookAll }
+        nativeHookPackages().associate { it.packageName to hookAll }
 
     fun findByPackage(packageName: String): UpiApp? =
         ALL.firstOrNull { it.packageName == packageName }

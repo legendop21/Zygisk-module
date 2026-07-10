@@ -195,11 +195,19 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    // Groww/UPI — turant binder hook; fallback outgoing PLT if binder fails
+    // Banking apps (YesPay etc.) — PLT turant = crash; defer hook until UI ready
+    const int delay = upi_registry::hook_startup_delay_sec(process_name);
+    if (upi_registry::is_fragile_banking_app(process_name)) {
+        schedule_deferred_binder(api, delay);
+        logger::info("VirtualSim", "Deferred binder hook %ds for fragile %s", delay,
+                     process_name.c_str());
+        return;
+    }
+
     if (!install_binder_plt(api)) {
         schedule_deferred_binder(api, 0);
     } else if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
-        schedule_deferred_binder(api, 1);
+        schedule_deferred_binder(api, delay > 0 ? delay : 1);
     }
     logger::info("VirtualSim", "Virtual SIM binder active for %s", process_name.c_str());
 }

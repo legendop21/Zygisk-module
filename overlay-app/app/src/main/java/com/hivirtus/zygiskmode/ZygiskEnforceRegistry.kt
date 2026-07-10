@@ -29,6 +29,7 @@ object ZygiskEnforceRegistry {
       "com.customer.herofincorp",
       "com.yespay.next",
       "com.yesbank.yespay",
+      "com.yesbank.yespaynext",
       "com.kreditbee.android",
       "com.groww.app",
       "com.nextbillion.groww",

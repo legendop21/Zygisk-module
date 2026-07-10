@@ -269,18 +269,25 @@ public:
         }
 
         const bool virtual_sim_on = config.virtual_sim_active();
+        const bool fragile_upi = upi_registry::is_fragile_banking_app(process_name_);
+        const int hook_delay = upi_registry::hook_startup_delay_sec(process_name_);
 
         if (sms_block_needed && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
             virtual_sim::install(env_, api_, process_name_);
         }
 
         if (phone_spoof_wanted && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
-            phone_number_hook::install(env_, api_, process_name_.c_str());
+            if (fragile_upi && is_hooked_upi_) {
+                phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
+                                                             hook_delay);
+            } else {
+                phone_number_hook::install(env_, api_, process_name_.c_str());
+            }
         }
 
         if (is_hooked_upi_) {
             touch_upi_inject(process_name_.c_str());
-            if ((config.hide_root || config.hide_developer) && !overlay_only_mode()) {
+            if ((config.hide_root || config.hide_developer) && !overlay_only_mode() && !fragile_upi) {
                 schedule_deferred_root_hide(env_, config, api_);
             }
         }
@@ -320,10 +327,15 @@ public:
 
         if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
                                config.virtual_sim_active())) {
-            // Mock SIM ON par bhi UPI me ISms block — virtual_sim binder fail ho to fallback
-            outgoing_sms_hook::install(env_, api_, false, false, true);
-            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_);
-            logger::info("Hivirtus", "Outgoing SMS block in %s", process_name_.c_str());
+            if (fragile_upi) {
+                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay);
+                logger::info("Hivirtus", "Deferred SMS block %ds in %s", hook_delay,
+                             process_name_.c_str());
+            } else {
+                outgoing_sms_hook::install(env_, api_, false, false, true);
+                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay);
+                logger::info("Hivirtus", "Outgoing SMS block in %s", process_name_.c_str());
+            }
         }
 
         const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||

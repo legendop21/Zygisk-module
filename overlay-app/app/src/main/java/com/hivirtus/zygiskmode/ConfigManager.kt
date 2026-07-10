@@ -571,7 +571,7 @@ class ConfigManager(private val context: Context) {
         return try {
             val obj = json.getJSONObject("upi_app_timer_bonuses")
             val result = mutableMapOf<String, Int>()
-            UpiAppRegistry.ALL.forEach { app ->
+            UpiAppRegistry.nativeHookPackages().forEach { app ->
                 result[app.packageName] = obj.optInt(
                     app.packageName,
                     UpiAppRegistry.timerForPackage(app.packageName, emptyMap())
@@ -589,7 +589,7 @@ class ConfigManager(private val context: Context) {
         return try {
             val obj = json.getJSONObject("hooked_upi_apps")
             val result = mutableMapOf<String, Boolean>()
-            UpiAppRegistry.ALL.forEach { app ->
+            UpiAppRegistry.nativeHookPackages().forEach { app ->
                 result[app.packageName] = if (hookAll) {
                     obj.optBoolean(app.packageName, true)
                 } else {

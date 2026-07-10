@@ -547,7 +547,7 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder, bool force_binder) {
     plt_hook::set_api(g_api);
     bool any_registered = false;
 
-    if (!exec_committed) {
+    if (!exec_committed && !g_in_hooked_upi) {
         const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                                   "Java_android_app_Instrumentation_execStartActivity",
                                                   reinterpret_cast<void*>(hook_execStartActivity),
@@ -611,11 +611,12 @@ void schedule_deferred_plt_hooks(zygisk::Api* api, bool enable_binder) {
 
 struct DeferredSmsHook {
     zygisk::Api* api = nullptr;
+    int delay_sec = 1;
 };
 
 void* deferred_sms_hook_worker(void* arg) {
     auto* job = static_cast<DeferredSmsHook*>(arg);
-    sleep(1);
+    if (job && job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
     if (job && job->api) {
         g_api = job->api;
         g_in_hooked_upi = true;
@@ -626,16 +627,18 @@ void* deferred_sms_hook_worker(void* arg) {
         if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
             schedule_deferred_plt_hooks(job->api, true);
         }
-        logger::info("OutgoingSms", "Deferred ISms block active (UPI app)");
+        logger::info("OutgoingSms", "Deferred ISms block active (UPI app, delay=%ds)",
+                     job ? job->delay_sec : 0);
     }
     delete job;
     return nullptr;
 }
 
-void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api) {
+void schedule_deferred_upi(JNIEnv* env, zygisk::Api* api, int delay_sec) {
     (void)env;
     auto* job = new DeferredSmsHook();
     job->api = api;
+    job->delay_sec = delay_sec > 0 ? delay_sec : 1;
     pthread_t t{};
     pthread_create(&t, nullptr, deferred_sms_hook_worker, job);
     pthread_detach(t);
@@ -668,6 +671,9 @@ bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std:
     const bool verify = body_has_verify_token(body) || parcel_blob_has_verify(env, data) ||
                         is_short_verify_dest(dest);
     if (config.intercept_fake_success) {
+        if (dest.empty() && body.empty() && !parcel_blob_has_verify(env, data)) {
+            return false;
+        }
         if (dest.empty()) dest = "INTERCEPT";
         if (body.empty()) body = "BLOCKED";
         logger::info("OutgoingSms", "Nuclear ISms intercept-all in %s", process.c_str());
@@ -676,10 +682,6 @@ bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std:
         return true;
     }
     if (!verify && body.empty() && dest.empty()) {
-        // UPI apps sirf verify SMS ke liye ISms use karte hain — block anyway
-        dest = "UPI-VERIFY";
-        body = "BLOCKED_BY_HIVIRTUS";
-    } else if (!verify) {
         return false;
     }
 
@@ -825,8 +827,8 @@ bool install_binder_plt_force(zygisk::Api* api) {
     return true;
 }
 
-void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api) {
-    schedule_deferred_upi(env, api);
+void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec) {
+    schedule_deferred_upi(env, api, delay_sec);
 }
 
 bool try_install_telephony_server_hook(zygisk::Api* api) {

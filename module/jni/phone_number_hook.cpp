@@ -4,6 +4,8 @@
 #include "telephony_spoof.hpp"
 #include "zygisk_utils.hpp"
 
+#include <pthread.h>
+#include <unistd.h>
 #include <string>
 
 namespace phone_number_hook {
@@ -77,9 +79,7 @@ void try_hook_telephony_manager(JNIEnv* env) {
     }
 }
 
-}  // namespace
-
-void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
+void install_impl(JNIEnv* env, zygisk::Api* api, const char* tag) {
     g_api = api;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
@@ -98,6 +98,44 @@ void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
 
     try_hook_telephony_manager(env);
     logger::info("PhoneHook", "Fake phone active in %s (binder + native)", tag ? tag : "?");
+}
+
+struct DeferredPhoneHook {
+    JNIEnv* env = nullptr;
+    zygisk::Api* api = nullptr;
+    std::string tag;
+    int delay_sec = 1;
+};
+
+void* deferred_phone_hook_worker(void* arg) {
+    auto* job = static_cast<DeferredPhoneHook*>(arg);
+    if (job && job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
+    if (job && job->env && job->api) {
+        install_impl(job->env, job->api, job->tag.c_str());
+    }
+    delete job;
+    return nullptr;
+}
+
+void start_deferred_phone_hook(JNIEnv* env, zygisk::Api* api, const char* tag, int delay_sec) {
+    auto* job = new DeferredPhoneHook();
+    job->env = env;
+    job->api = api;
+    job->tag = tag ? tag : "";
+    job->delay_sec = delay_sec;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_phone_hook_worker, job);
+    pthread_detach(t);
+}
+
+}  // namespace
+
+void schedule_deferred_install(JNIEnv* env, zygisk::Api* api, const char* tag, int delay_sec) {
+    start_deferred_phone_hook(env, api, tag, delay_sec);
+}
+
+void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
+    install_impl(env, api, tag);
 }
 
 }  // namespace phone_number_hook

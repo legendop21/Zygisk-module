@@ -178,12 +178,57 @@ bool is_sms_hook_target(const std::string& package) {
         "com.whatsapp",
         "com.meesho.supply",
         "com.truecaller",
+        "com.flipkart.android",
+        "com.amazon.mShop.android.shopping",
         nullptr,
     };
     for (const char** p = kExcludeCrash; *p; ++p) {
         if (package == *p) return false;
     }
     return is_known_upi(package);
+}
+
+bool is_fragile_banking_app(const std::string& package) {
+    if (package.empty()) return false;
+    static const char* kFragileExact[] = {
+        "com.yespay.next",
+        "com.yesbank.yespay",
+        "com.yesbank.yespaynext",
+        "com.yesbank.mobile",
+        "com.csam.icici.bank.imobile",
+        "com.hdfcbank.payzapp",
+        "com.axis.mobile",
+        "com.sbi.lotusintouch",
+        "com.idfcfirstbank.mobile",
+        "com.kotak811mobilebankingapp",
+        "com.bankofbaroda.mpassbook",
+        "com.snapwork.hdfc",
+        "com.canarabank.mobility",
+        "com.unionbank.ebanking",
+        "com.indusind.indie",
+        "com.rbl.rblimobile",
+        "com.fedmobile",
+        "com.dbs.in.digitalbank",
+        nullptr,
+    };
+    for (const char** p = kFragileExact; *p; ++p) {
+        if (package == *p) return true;
+    }
+    if (package.find("yespay") != std::string::npos) return true;
+    if (package.find("yesbank") != std::string::npos) return true;
+    if (package.find("icici") != std::string::npos) return true;
+    if (package.find("hdfc") != std::string::npos) return true;
+    if (package.find("sbi") != std::string::npos) return true;
+    if (package.find("axis") != std::string::npos && package.find("acquiring") == std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+int hook_startup_delay_sec(const std::string& package) {
+    if (is_fragile_banking_app(package)) return 5;
+    if (package.find("bank") != std::string::npos) return 3;
+    return 1;
 }
 
 }  // namespace upi_registry

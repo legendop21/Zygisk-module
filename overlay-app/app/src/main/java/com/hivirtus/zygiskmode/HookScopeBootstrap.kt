@@ -9,7 +9,7 @@ object HookScopeBootstrap {
         val current = configManager.load()
         if (!current.hookAllUpiApps) return
 
-        val allHooked = UpiAppRegistry.ALL.associate { it.packageName to true }
+        val allHooked = UpiAppRegistry.nativeHookPackages().associate { it.packageName to true }
         val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
         val updated = current.copy(
             hookedUpiApps = allHooked,

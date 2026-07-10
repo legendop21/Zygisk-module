@@ -28,6 +28,8 @@ object OutgoingSmsGuard {
         "com.google.android.apps.nbu.paisa.user",
         "com.stashfin.android",
         "com.yespay.next",
+        "com.yesbank.yespay",
+        "com.yesbank.yespaynext",
         "com.herofincorp.diyjourneys",
         "com.herofincorp.simplycash",
         "com.customer.herofincorp",

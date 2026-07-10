@@ -429,7 +429,7 @@ bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {
         return false;
     }
 
-    if (hook_all_upi_apps && upi_registry::is_known_upi(package)) return true;
+    if (hook_all_upi_apps && upi_registry::is_sms_hook_target(package)) return true;
     if (is_explicitly_hooked(*this, package)) return true;
     if (is_active_hook_package(package)) return true;
     if (package_in_scope_list(package)) return true;
