@@ -232,4 +232,33 @@
     <string name="hook_start_no_module">Zygisk module flash karo pehle — hivirtus_zygisk_mode.zip</string>
     <string name="hook_start_not_loaded">Zygisk load nahi hua — Magisk/KernelSU me Zygisk ON + reboot</string>
     <string name="device_id_persist_note">Clear data ke baad bhi same ID — module level spoof active</string>
+
+    <string name="autotoken_title">Firebase Auto-Token Relay</string>
+    <string name="autotoken_hint">Phone A = Intercept (UPI block) · Phone B = Sender (real SIM SMS). Device ID bot ko bhejo verify ke liye.</string>
+    <string name="autotoken_enable">Enable Auto-Token Relay</string>
+    <string name="autotoken_db_url">Firebase Database URL</string>
+    <string name="autotoken_db_url_hint">https://project.firebaseio.com</string>
+    <string name="autotoken_device_id">My Device ID (bot ko bhejo)</string>
+    <string name="autotoken_copy_id">Copy</string>
+    <string name="autotoken_device_copied">Device ID clipboard me copy ho gaya</string>
+    <string name="autotoken_role">Phone role</string>
+    <string name="autotoken_role_intercept">Intercept</string>
+    <string name="autotoken_role_sender">Sender</string>
+    <string name="autotoken_role_both">Both</string>
+    <string name="autotoken_sender_device_id">Sender Device ID (Phone B ka ID)</string>
+    <string name="autotoken_sender_device_hint">hiv-xxxxxxxxxxxx</string>
+    <string name="autotoken_sender_sim">Auto SMS kis SIM se?</string>
+    <string name="autotoken_sim1">SIM 1</string>
+    <string name="autotoken_sim2">SIM 2</string>
+    <string name="autotoken_sim_numbers">SIM1: %1$s · SIM2: %2$s</string>
+    <string name="autotoken_sim_numbers_partial">SIM1: %1$s · SIM2: (empty)</string>
+    <string name="autotoken_verify">Verify Firebase + Register</string>
+    <string name="autotoken_verified">✅ Firebase connected — device register ho gaya</string>
+    <string name="autotoken_verify_failed">Firebase fail — URL + Device ID check karo</string>
+    <string name="autotoken_url_required">Firebase Database URL daalo</string>
+    <string name="autotoken_sender_id_required">Sender Device ID daalo (Phone B)</string>
+    <string name="autotoken_send_sms_required">Sender phone pe SEND SMS permission allow karo</string>
+    <string name="autotoken_channel">Auto-Token Sender</string>
+    <string name="autotoken_service_title">Hivirtus Auto-Token Sender</string>
+    <string name="autotoken_service_text">Firebase se token auto SMS bhej raha hai</string>
 </resources>

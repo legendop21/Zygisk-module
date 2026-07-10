@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
         android:name=".HivirtusApp"
@@ -56,6 +57,12 @@
 
         <service
             android:name=".OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".AutoTokenSenderService"
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />

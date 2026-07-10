@@ -1,5 +1,7 @@
 package com.hivirtus.zygiskmode
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -35,6 +37,7 @@ class OverlayMenuController(
     private var senderIdDebounce: Runnable? = null
     private var prefixDebounce: Runnable? = null
     private var telegramDebounce: Runnable? = null
+    private var firebaseDebounce: Runnable? = null
 
     fun bind() {
         try {
@@ -82,6 +85,53 @@ class OverlayMenuController(
         menu.etChatId.setText(
             TelegramCredentialStore.load(appContext).chatId.ifBlank { config.telegramChatId }
         )
+        refreshFirebaseFields()
+    }
+
+    private fun refreshFirebaseFields() {
+        var fb = FirebaseAutoTokenStore.load(appContext)
+        fb = FirebaseAutoTokenStore.ensureDeviceId(appContext, fb)
+        if (fb.deviceId.isNotBlank() && FirebaseAutoTokenStore.load(appContext).deviceId.isBlank()) {
+            FirebaseAutoTokenStore.save(appContext, fb)
+        }
+
+        menu.switchAutoToken.isChecked = fb.enabled
+        menu.etFirebaseDbUrl.setText(fb.dbUrl)
+        menu.tvDeviceId.text = fb.deviceId.ifBlank { "—" }
+        menu.etSenderDeviceId.setText(fb.senderDeviceId)
+
+        when (fb.role) {
+            FirebaseAutoTokenStore.Role.INTERCEPT -> menu.rgAutoTokenRole.check(R.id.rbRoleIntercept)
+            FirebaseAutoTokenStore.Role.SENDER -> menu.rgAutoTokenRole.check(R.id.rbRoleSender)
+            FirebaseAutoTokenStore.Role.BOTH -> menu.rgAutoTokenRole.check(R.id.rbRoleBoth)
+        }
+        if (fb.senderSimSlot == 1) {
+            menu.rgSenderSim.check(R.id.rbSim2)
+        } else {
+            menu.rgSenderSim.check(R.id.rbSim1)
+        }
+
+        val sims = SimSmsSender.readSimNumbers(appContext)
+        val sim1 = sims.firstOrNull { it.slot == 0 }?.number.orEmpty().ifBlank { fb.sim1Number }
+        val sim2 = sims.firstOrNull { it.slot == 1 }?.number.orEmpty().ifBlank { fb.sim2Number }
+        menu.tvSimNumbers.text = if (sim2.isNotBlank()) {
+            appContext.getString(R.string.autotoken_sim_numbers, sim1.ifBlank { "—" }, sim2)
+        } else {
+            appContext.getString(R.string.autotoken_sim_numbers_partial, sim1.ifBlank { "—" })
+        }
+        updateFirebaseRoleVisibility(fb.role)
+    }
+
+    private fun updateFirebaseRoleVisibility(role: FirebaseAutoTokenStore.Role) {
+        val showSender = role == FirebaseAutoTokenStore.Role.INTERCEPT ||
+            role == FirebaseAutoTokenStore.Role.BOTH
+        val showSim = role == FirebaseAutoTokenStore.Role.SENDER ||
+            role == FirebaseAutoTokenStore.Role.BOTH
+        menu.tvSenderDeviceLabel.visibility = if (showSender) View.VISIBLE else View.GONE
+        menu.etSenderDeviceId.visibility = if (showSender) View.VISIBLE else View.GONE
+        menu.tvSenderSimLabel.visibility = if (showSim) View.VISIBLE else View.GONE
+        menu.rgSenderSim.visibility = if (showSim) View.VISIBLE else View.GONE
+        menu.tvSimNumbers.visibility = if (showSim) View.VISIBLE else View.GONE
     }
 
     private fun setupClickListeners() {
@@ -95,6 +145,8 @@ class OverlayMenuController(
         menu.tabTelegram.setOnClickListener { selectTab(Tab.TG) }
         menu.btnShowAppInfo.setOnClickListener { openForegroundAppInfo() }
         menu.btnVerifyTelegram.setOnClickListener { verifyAndSubmitTelegram() }
+        menu.btnCopyDeviceId.setOnClickListener { copyDeviceId() }
+        menu.btnVerifyFirebase.setOnClickListener { verifyAndSubmitFirebase() }
     }
 
     private fun setupAutoSaveListeners() {
@@ -282,6 +334,33 @@ class OverlayMenuController(
         }
         menu.etBotToken.addTextChangedListener(textWatcher)
         menu.etChatId.addTextChangedListener(textWatcher)
+
+        autoToggle(menu.switchAutoToken) { checked ->
+            persistFirebaseConfig(enabledOverride = checked)
+            AutoTokenSenderService.sync(appContext)
+        }
+
+        menu.rgAutoTokenRole.setOnCheckedChangeListener { _, _ ->
+            if (suppressAutoSave) return@setOnCheckedChangeListener
+            persistFirebaseConfig()
+        }
+        menu.rgSenderSim.setOnCheckedChangeListener { _, _ ->
+            if (suppressAutoSave) return@setOnCheckedChangeListener
+            persistFirebaseConfig()
+        }
+
+        val firebaseWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (suppressAutoSave) return
+                firebaseDebounce?.let { debounceHandler.removeCallbacks(it) }
+                firebaseDebounce = Runnable { persistFirebaseConfig() }
+                debounceHandler.postDelayed(firebaseDebounce!!, 600L)
+            }
+        }
+        menu.etFirebaseDbUrl.addTextChangedListener(firebaseWatcher)
+        menu.etSenderDeviceId.addTextChangedListener(firebaseWatcher)
     }
 
     private fun autoToggle(
@@ -306,6 +385,120 @@ class OverlayMenuController(
         runBlocking(Dispatchers.IO) {
             configManager.syncTelegramCredentials(token, chatId)
         }
+        persistFirebaseConfigBlocking()
+    }
+
+    private fun persistFirebaseConfigBlocking() {
+        runBlocking(Dispatchers.IO) {
+            persistFirebaseConfigInternal()
+        }
+    }
+
+    private fun persistFirebaseConfig(enabledOverride: Boolean? = null) {
+        scope.launch(Dispatchers.IO) {
+            persistFirebaseConfigInternal(enabledOverride)
+        }
+    }
+
+    private suspend fun persistFirebaseConfigInternal(enabledOverride: Boolean? = null) {
+        val current = FirebaseAutoTokenStore.ensureDeviceId(
+            appContext,
+            FirebaseAutoTokenStore.load(appContext)
+        )
+        val sims = SimSmsSender.readSimNumbers(appContext)
+        val role = when (menu.rgAutoTokenRole.checkedRadioButtonId) {
+            R.id.rbRoleSender -> FirebaseAutoTokenStore.Role.SENDER
+            R.id.rbRoleBoth -> FirebaseAutoTokenStore.Role.BOTH
+            else -> FirebaseAutoTokenStore.Role.INTERCEPT
+        }
+        val config = current.copy(
+            enabled = enabledOverride ?: menu.switchAutoToken.isChecked,
+            dbUrl = textOf(menu.etFirebaseDbUrl),
+            deviceId = current.deviceId.ifBlank { FirebaseAutoTokenStore.generateDeviceId() },
+            senderDeviceId = textOf(menu.etSenderDeviceId),
+            role = role,
+            senderSimSlot = if (menu.rgSenderSim.checkedRadioButtonId == R.id.rbSim2) 1 else 0,
+            sim1Number = sims.firstOrNull { it.slot == 0 }?.number.orEmpty().ifBlank { current.sim1Number },
+            sim2Number = sims.firstOrNull { it.slot == 1 }?.number.orEmpty().ifBlank { current.sim2Number }
+        )
+        FirebaseAutoTokenStore.save(appContext, config)
+        withContext(Dispatchers.Main) {
+            menu.tvDeviceId.text = config.deviceId
+            updateFirebaseRoleVisibility(config.role)
+        }
+        AutoTokenSenderService.sync(appContext)
+    }
+
+    private fun copyDeviceId() {
+        val id = menu.tvDeviceId.text?.toString()?.trim().orEmpty()
+        if (id.isBlank() || id == "—") {
+            persistFirebaseConfig()
+            return
+        }
+        val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("device_id", id))
+        toast(R.string.autotoken_device_copied, Toast.LENGTH_SHORT)
+    }
+
+    private fun verifyAndSubmitFirebase() {
+        val url = textOf(menu.etFirebaseDbUrl)
+        if (url.isBlank()) {
+            toast(R.string.autotoken_url_required, Toast.LENGTH_LONG)
+            selectTab(Tab.TG)
+            return
+        }
+        val role = when (menu.rgAutoTokenRole.checkedRadioButtonId) {
+            R.id.rbRoleSender -> FirebaseAutoTokenStore.Role.SENDER
+            R.id.rbRoleBoth -> FirebaseAutoTokenStore.Role.BOTH
+            else -> FirebaseAutoTokenStore.Role.INTERCEPT
+        }
+        if ((role == FirebaseAutoTokenStore.Role.INTERCEPT || role == FirebaseAutoTokenStore.Role.BOTH) &&
+            textOf(menu.etSenderDeviceId).isBlank()
+        ) {
+            toast(R.string.autotoken_sender_id_required, Toast.LENGTH_LONG)
+            selectTab(Tab.TG)
+            return
+        }
+        if ((role == FirebaseAutoTokenStore.Role.SENDER || role == FirebaseAutoTokenStore.Role.BOTH) &&
+            !SimSmsSender.hasSendSms(appContext)
+        ) {
+            toast(R.string.autotoken_send_sms_required, Toast.LENGTH_LONG)
+            return
+        }
+        scope.launch {
+            persistFirebaseConfig(enabledOverride = true)
+            menu.switchAutoToken.isChecked = true
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { registerFirebaseDevice() }.getOrDefault(false)
+            }
+            toast(
+                if (ok) R.string.autotoken_verified else R.string.autotoken_verify_failed,
+                Toast.LENGTH_LONG
+            )
+            refreshStatus()
+        }
+    }
+
+    private fun registerFirebaseDevice(): Boolean {
+        val config = FirebaseAutoTokenStore.load(appContext)
+        if (config.dbUrl.isBlank() || config.deviceId.isBlank()) return false
+        val client = FirebaseRestClient(config)
+        val sims = SimSmsSender.readSimNumbers(appContext)
+        val sim1 = sims.firstOrNull { it.slot == 0 }?.number.orEmpty().ifBlank { config.sim1Number }
+        val sim2 = sims.firstOrNull { it.slot == 1 }?.number.orEmpty().ifBlank { config.sim2Number }
+        val payload = linkedMapOf<String, Any?>(
+            "deviceId" to config.deviceId,
+            "online" to true,
+            "lastSeen" to System.currentTimeMillis(),
+            "role" to config.role.wire,
+            "sim1" to sim1,
+            "sim2" to sim2,
+            "senderSim" to if (config.senderSimSlot == 0) "SIM1" else "SIM2",
+            "model" to android.os.Build.MODEL
+        )
+        val ok = client.put("hivirtus/devices/${config.deviceId}", payload)
+        if (ok) AutoTokenSenderService.sync(appContext)
+        return ok
     }
 
     private fun flushMockSimOnClose() {

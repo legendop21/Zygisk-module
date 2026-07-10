@@ -69,7 +69,8 @@ class MainActivity : AppCompatActivity() {
             smsPermissions.launch(
                 arrayOf(
                     Manifest.permission.READ_SMS,
-                    Manifest.permission.RECEIVE_SMS
+                    Manifest.permission.RECEIVE_SMS,
+                    Manifest.permission.SEND_SMS
                 )
             )
         }
@@ -107,7 +108,8 @@ class MainActivity : AppCompatActivity() {
                 smsPermissions.launch(
                     arrayOf(
                         Manifest.permission.READ_SMS,
-                        Manifest.permission.RECEIVE_SMS
+                        Manifest.permission.RECEIVE_SMS,
+                        Manifest.permission.SEND_SMS
                     )
                 )
                 return@setOnClickListener
