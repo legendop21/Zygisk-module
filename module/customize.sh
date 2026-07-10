@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.14.0  "
+ui_print "   Hivirtus Zygisk Mode v2.15.0  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -65,7 +65,7 @@ fi
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-ui_print "- Floating menu: embedded overlay.dex (no APK)"
+ui_print "- Floating menu: HTML WebView UI (embedded, no APK)"
 ui_print "- Size optimized: arm64-only default build"
 ui_print "- Enable Zygisk in root manager"
 ui_print "- Reboot to activate"

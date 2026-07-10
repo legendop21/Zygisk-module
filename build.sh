@@ -82,6 +82,10 @@ elif [[ -f "$MODULE_DIR/overlay/overlay.dex" ]]; then
   mkdir -p "$OUTPUT_DIR/overlay"
   cp "$MODULE_DIR/overlay/overlay.dex" "$OUTPUT_DIR/overlay/"
 fi
+if [[ -d "$MODULE_DIR/overlay/ui" ]]; then
+  mkdir -p "$OUTPUT_DIR/overlay/ui"
+  cp -r "$MODULE_DIR/overlay/ui/"* "$OUTPUT_DIR/overlay/ui/"
+fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [[ -f "$OUTPUT_DIR/uninstall.sh" ]] && chmod 755 "$OUTPUT_DIR/uninstall.sh"

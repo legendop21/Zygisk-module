@@ -1,54 +1,52 @@
-# Phase 2 — Floating Window Logic (Hinglish)
+# Phase 2 — Floating Window (HTML UI) — Hinglish
 
-## APK hata diya — ab kya chalta hai?
+## APK nahi — HTML hai UI
 
-Pehle: alag `overlay-app` APK sideload → permissions → Start button.
+Purana APK: Gradle app, permissions, 3MB+.
 
-Ab: **Zygisk SystemUI** mein inject → chhota `overlay.dex` load → bubble + menu.
-
+Ab:
 ```
-Reboot
-  → Zygisk module load
-  → com.android.systemui process
-  → float_overlay.cpp (native)
-  → overlay.dex load (InMemoryDexClassLoader)
-  → OverlayBootstrap.start()
-  → FloatBubble (side pe "H" logo)
-  → Tap → FloatMenu (local toggles)
+SystemUI (Zygisk inject)
+  → overlay.dex (~50KB Java shell)
+  → WebView load: file:///.../overlay/ui/index.html
+  → app.css + app.js (modern dark UI)
+  → VirtusBridge (Java) ↔ config.json
 ```
 
-## Files ka role
-
-| File | Kaam |
-|------|------|
-| `module/overlay/java/.../FloatBubble.java` | Draggable bubble — smooth, 48dp |
-| `FloatMenu.java` | Chhota menu — switches config.json edit karte hain |
-| `LocalConfig.java` | Sirf local JSON read/write |
-| `module/jni/dex_loader.cpp` | SystemUI mein dex load |
-| `module/jni/float_overlay.cpp` | Boot ke 4 sec baad UI start |
-
-## Config save kahan hoti hai?
+## UI files kahan hain?
 
 ```
-/data/adb/modules/hivirtus_zygisk_mode/config.json   ← master
-/data/local/tmp/hivirtus_zygisk_mode_config.json     ← runtime (hooks yahi padhte hain)
+/data/adb/modules/hivirtus_zygisk_mode/overlay/ui/
+  index.html   — structure + tabs
+  app.css      — dark theme, smooth toggles
+  app.js       — load/save logic
 ```
 
-Menu se SAVE dabao → dono files update → Zygisk hooks reload config.
+**Edit kar sakte ho** — phone pe root explorer se HTML/CSS change → reboot ya menu reload.
 
-## Shell se bina UI
+## Smooth kaise?
 
-```bash
-hivirtus-menu status
-hivirtus-menu toggle intercept_fake_success
-hivirtus-menu set inject_sender_id JK-AXISBK-S
+| Cheez | Detail |
+|-------|--------|
+| Hardware accel | WebView `FLAG_HARDWARE_ACCELERATED` |
+| Animations | CSS `cubic-bezier` — no janky bounce |
+| Chhota dex | Sirf WebView shell + bridge, UI HTML mein |
+| Local files | `file://` — network wait nahi |
+
+## Bridge API (HTML ↔ module)
+
+```javascript
+VirtusBridge.getConfig()      // JSON string
+VirtusBridge.saveConfig(json) // bool
+VirtusBridge.closeMenu()
 ```
 
-## Smooth kyun?
+Java: `JsBridge.java` → `LocalConfig.save()` → dono paths update.
 
-- Sirf 4 chhoti Java classes — koi Gradle APK nahi
-- Native bubble thread alag — UI lag nahi
-- `-Oz` compile + `llvm-strip` — `.so` chhota
+## Bubble
+
+Side pe **"H"** native bubble (48dp) — tap → HTML menu khulta hai.
+Bubble halka rakha taaki drag smooth rahe; asli UI HTML mein.
 
 ## Agla phase
 

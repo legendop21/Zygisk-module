@@ -15,7 +15,7 @@ Output: `hivirtus_zygisk_mode-v2.14.0.zip`
 | Part | Approx size |
 |------|-------------|
 | `zygisk/arm64-v8a.so` | ~800KB–1.2MB (stripped) |
-| `overlay/overlay.dex` | ~30–80KB |
+| `overlay/ui/*.html` | ~15KB | Modern menu UI |
 | Scripts + config | ~20KB |
 | **Total ZIP** | **~1–2MB** |
 

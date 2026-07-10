@@ -10,7 +10,7 @@
 ## Install steps
 
 1. `./build.sh` chalao (Mac/Linux + NDK)
-2. `hivirtus_zygisk_mode-v2.14.0.zip` milega (~1–2MB arm64)
+2. `hivirtus_zygisk_mode-v2.15.0.zip` milega (~1–2MB arm64)
 3. Magisk / KernelSU → Install from storage → ZIP select
 4. **Reboot**
 5. Root manager mein **Zygisk ON** karo
