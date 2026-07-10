@@ -152,6 +152,40 @@ bool overlay_only_mode() {
            access("/data/local/tmp/hivirtus_safe_mode", R_OK) == 0;
 }
 
+bool native_overlay_wanted() {
+    return access("/data/local/tmp/hivirtus_disable_native_overlay", R_OK) != 0;
+}
+
+struct DeferredOverlayJob {
+    JNIEnv* env = nullptr;
+    zygisk::Api* api = nullptr;
+    std::string pkg;
+    int delay_sec = 3;
+};
+
+void* deferred_overlay_worker(void* arg) {
+    auto* job = static_cast<DeferredOverlayJob*>(arg);
+    if (job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
+    if (job->env && job->api && native_overlay_wanted()) {
+        overlay_ui::install(job->env, job->api, job->pkg);
+        append_diag("/data/local/tmp/hivirtus_overlay.debug", "native_overlay_ready");
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_overlay_ui(JNIEnv* env, zygisk::Api* api, const std::string& pkg, int delay_sec) {
+    if (!native_overlay_wanted() || pkg.empty()) return;
+    auto* job = new DeferredOverlayJob();
+    job->env = env;
+    job->api = api;
+    job->pkg = pkg;
+    job->delay_sec = delay_sec;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_overlay_worker, job);
+    pthread_detach(t);
+}
+
 struct DeferredRootHide {
     JNIEnv* env = nullptr;
     ModuleConfig config{};
@@ -305,8 +339,18 @@ public:
 
         if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
             upi_hook::install(env_, api_, process_name_);
-            // Native overlay band — Activity PLT hooks se crash/heat; sirf Virtus APK menu
-            logger::info("Hivirtus", "UPI scoped in %s (apk menu only)", process_name_.c_str());
+            if (!fragile_upi) {
+                schedule_overlay_ui(env_, api_, process_name_, hook_delay > 0 ? hook_delay : 3);
+                logger::info("Hivirtus", "Native overlay scheduled in %s (%ds)", process_name_.c_str(),
+                             hook_delay > 0 ? hook_delay : 3);
+            } else {
+                logger::info("Hivirtus", "UPI scoped in %s (phone-only, use Messages for menu)",
+                             process_name_.c_str());
+            }
+        }
+
+        if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof) && native_overlay_wanted()) {
+            schedule_overlay_ui(env_, api_, process_name_, 2);
         }
 
         if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof)) {

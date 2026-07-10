@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODULE_DIR="$ROOT_DIR/module"
 OUTPUT_DIR="$ROOT_DIR/dist"
-ABI_LIST="${ABI_LIST:-arm64-v8a armeabi-v7a x86 x86_64}"
+# v2.68+: arm64-only default (~3MB zip). Multi-ABI: ABI_LIST="arm64-v8a armeabi-v7a" ./build.sh
+ABI_LIST="${ABI_LIST:-arm64-v8a}"
 
 # Auto-detect NDK (Mac: ~/Library/Android/sdk/ndk/...)
 if [[ -z "${ANDROID_NDK:-}" ]] || [[ ! -f "${ANDROID_NDK}/build/cmake/android.toolchain.cmake" ]]; then
@@ -73,12 +74,10 @@ chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-
 [ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
-OVERLAY_APK="$ROOT_DIR/overlay-app/app/build/outputs/apk/release/app-release.apk"
-if [ -f "$OVERLAY_APK" ]; then
-  cp "$OVERLAY_APK" "$OUTPUT_DIR/virtus-overlay.apk"
-  echo "==> Bundled virtus-overlay.apk (floating bubble + menu)"
-else
-  echo "==> WARNING: virtus-overlay.apk missing — build overlay-app first"
+# v2.68+: Native floating overlay only — no APK in zip
+if [ -d "$ROOT_DIR/docs" ]; then
+  cp -r "$ROOT_DIR/docs" "$OUTPUT_DIR/"
+  echo "==> Bundled docs/ (Hinglish phase guides)"
 fi
 
 ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
@@ -86,5 +85,6 @@ ZIP_NAME="hivirtus-zygisk-hook-$(grep '^version=' "$MODULE_DIR/module.prop" | cu
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"
 echo ""
-echo "==> Done. hivirtus-zygisk-hook ZIP — Zygisk se through run hoga."
-echo "    Zygisk ON → flash zip → reboot → UPI app → Hivirtus menu"
+echo "==> Done. hivirtus-zygisk-hook ZIP — native floating overlay (no APK)."
+echo "    Zygisk ON → flash zip → reboot → UPI app / Messages → gold V bubble"
+echo "    Docs: module/docs/README.md (Hinglish)"

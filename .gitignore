@@ -1,6 +1,7 @@
 # Build output
 /build/
 /dist/
+/.ndk/
 *.zip
 !releases/*.zip
 *.so

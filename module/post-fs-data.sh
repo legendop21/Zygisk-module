@@ -74,14 +74,16 @@ if [ -n "$REAL_LINE" ]; then
   chmod 644 "$MODDIR/real_phone.txt" 2>/dev/null
 fi
 
-echo "module_boot_v2.47.0" > /data/local/tmp/hivirtus_overlay.debug
+echo "module_boot_v2.68.0" > /data/local/tmp/hivirtus_overlay.debug
 chmod 644 /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
-echo "module_boot_v2.47.0" > /data/local/tmp/hivirtus_inject.log
+echo "module_boot_v2.68.0" > /data/local/tmp/hivirtus_inject.log
 chmod 644 /data/local/tmp/hivirtus_inject.log 2>/dev/null
 
-# APK module ke andar — boot pe auto install
-hivirtus_install_overlay_apk && echo "apk_post_fs_ok" >> /data/local/tmp/hivirtus_overlay.debug
-hivirtus_grant_overlay_permission
+# v2.68+: Native overlay only — legacy APK cleanup
+if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
+  pm uninstall com.hivirtus.zygiskmode 2>/dev/null || true
+fi
+hivirtus_boot_activate_overlay
 
 # Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
 HIDE_ROOT=$(read_bool "hide_root")

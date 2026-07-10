@@ -1,9 +1,10 @@
 #!/system/bin/sh
-# Hivirtus — normal Magisk/KernelSU module (hooks Zygisk pipeline se inject hote hain)
+# Hivirtus — Zygisk module (native floating overlay, APK-free v2.68+)
 
 ui_print "*******************************"
-ui_print "   Zygisk Mode Menu              "
-ui_print "        v2.36.1                 "
+ui_print "   Hivirtus Zygisk Hook          "
+ui_print "        v2.68.0                 "
+ui_print "  Native floating window (no APK)"
 ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
 ui_print "*******************************"
 
@@ -15,28 +16,21 @@ fi
 ui_print "- Install path: $MODPATH"
 
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
+[ -d "$MODPATH/docs" ] && set_perm_recursive "$MODPATH/docs" 0 0 0755 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
 [ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
-[ -f "$MODPATH/virtus-overlay.apk" ] && set_perm "$MODPATH/virtus-overlay.apk" 0 0 0644
 [ -f "$MODPATH/overlay_install.sh" ] && set_perm "$MODPATH/overlay_install.sh" 0 0 0755
 
-if [ -f "$MODPATH/virtus-overlay.apk" ]; then
-  ui_print "- Virtus APK module ke andar bundled"
-  ui_print "- Reboot ke baad auto-install + active"
-  . "$MODPATH/overlay_install.sh" 2>/dev/null
-  if command -v pm >/dev/null 2>&1; then
-    if hivirtus_install_overlay_apk 2>/dev/null; then
-      hivirtus_grant_overlay_permission 2>/dev/null
-      ui_print "- Virtus APK install OK (flash time)"
-    else
-      ui_print "- APK reboot pe install hoga"
-    fi
-  fi
-else
-  ui_print "! WARNING: virtus-overlay.apk missing in zip"
+. "$MODPATH/overlay_install.sh" 2>/dev/null
+hivirtus_boot_activate_overlay 2>/dev/null
+
+# Purana overlay APK optional cleanup
+if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
+  ui_print "- Removing legacy overlay APK..."
+  pm uninstall com.hivirtus.zygiskmode 2>/dev/null || true
 fi
 
 if [ ! -f "$MODPATH/zygisk/arm64-v8a.so" ] && [ ! -f "$MODPATH/zygisk/armeabi-v7a.so" ]; then
@@ -99,12 +93,12 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Zygisk mode Menu By Dev @Hivirtus @Liqdy @ClamFlat 🔥"
+ui_print "Hivirtus v2.68 — Native floating overlay"
 ui_print "  1) Zygisk ON → reboot"
 ui_print "  2) Ye zip flash → reboot"
-ui_print "  3) Virtus APK auto-install (module ke andar)"
-ui_print "  4) Overlay permission auto-grant (root)"
-ui_print "  5) UPI app kholo → bubble + menu"
+ui_print "  3) UPI app ya Google Messages kholo"
+ui_print "  4) Gold V bubble → tap → menu"
+ui_print "  5) Telegram: config.json me token + chat_id"
 ui_print ""
-ui_print "Agar zygote crash ho: HMA-OSS disable karke test karo"
+ui_print "Docs: $MODPATH/docs/README.md"
 ui_print "Config: $MODPATH/config.json"
