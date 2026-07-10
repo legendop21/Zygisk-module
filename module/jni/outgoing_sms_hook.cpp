@@ -1,5 +1,6 @@
 #include "outgoing_sms_hook.hpp"
 #include "config.hpp"
+#include "fake_sms_success.hpp"
 #include "logger.hpp"
 #include "sms_hook.hpp"
 #include "telephony_spoof.hpp"
@@ -95,19 +96,27 @@ void parcel_write_string(JNIEnv* env, jobject parcel, const std::string& value) 
     env->CallVoidMethod(parcel, write, zygisk_utils::string_to_jstring(env, value));
 }
 
-bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
+bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body,
+                        fake_sms_success::PendingIntents& intents) {
     if (!data) return false;
+
+    if (fake_sms_success::read_isms_send_with_intents(env, data, dest, body, intents)) {
+        return true;
+    }
+
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     if (iface.find("ISms") == std::string::npos) return false;
 
     jclass cls = env->GetObjectClass(data);
     jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
+    parcel_read_string(env, data);  // callingPackage
     env->CallIntMethod(data, read_int);  // subId
-    parcel_read_string(env, data);       // callingPackage / attribution
     dest = parcel_read_string(env, data);
     parcel_read_string(env, data);  // scAddr
     body = parcel_read_string(env, data);
+    intents.sent = nullptr;
+    intents.delivery = nullptr;
     return !dest.empty() && !body.empty();
 }
 
@@ -179,6 +188,9 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
     if (read_intent_sms(env, intent, dest, body)) {
         logger::info("OutgoingSms", "UPI compose intent dest=%s len=%zu", dest.c_str(), body.size());
         pipeline_outgoing(env, dest, body);
+        if (should_block_outgoing(config, body)) {
+            fake_sms_success::on_outgoing_blocked(env, dest, body, nullptr, nullptr);
+        }
     }
 
     if (!orig_execStartActivity) return nullptr;
@@ -199,10 +211,13 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         if (iface.find("ISms") != std::string::npos) {
             std::string dest;
             std::string body;
-            if (read_isms_outgoing(env, data, dest, body)) {
+            fake_sms_success::PendingIntents intents{};
+            if (read_isms_outgoing(env, data, dest, body, intents)) {
                 pipeline_outgoing(env, dest, body);
                 if (should_block_outgoing(config, body)) {
                     logger::info("OutgoingSms", "Blocked ISms send dest=%s", dest.c_str());
+                    fake_sms_success::on_outgoing_blocked(
+                        env, dest, body, intents.sent, intents.delivery);
                     write_ok_reply(env, reply);
                     return 0;
                 }

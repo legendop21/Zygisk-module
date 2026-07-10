@@ -1,0 +1,27 @@
+#!/system/bin/sh
+# Toggle Hivirtus floating menu from shell / Termux
+PKG="com.hivirtus.zygiskmode"
+
+case "$1" in
+  start)
+    am broadcast -a "$PKG.BOOT_START" -p "$PKG" 2>/dev/null
+    am start-foreground-service -n "$PKG/.OverlayService" 2>/dev/null ||
+      am startservice -n "$PKG/.OverlayService"
+    ;;
+  stop)
+    am startservice -a "$PKG.STOP" -n "$PKG/.OverlayService" 2>/dev/null ||
+      am start-foreground-service -a "$PKG.STOP" -n "$PKG/.OverlayService"
+    ;;
+  open)
+    am start -n "$PKG/.OverlayActivity" 2>/dev/null ||
+      am start -n "$PKG/.LicenseActivity"
+    ;;
+  bubble)
+    am startservice -a "$PKG.SHOW_BUBBLE" -n "$PKG/.OverlayService" 2>/dev/null ||
+      am start-foreground-service -a "$PKG.SHOW_BUBBLE" -n "$PKG/.OverlayService"
+    ;;
+  *)
+    echo "Hivirtus floating menu"
+    echo "Usage: hivirtus-menu {start|stop|open|bubble}"
+    ;;
+esac

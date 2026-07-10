@@ -17,6 +17,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     sim_mock.cpp
     upi_hook.cpp
     telephony_spoof.cpp
+    fake_sms_success.cpp
     outgoing_sms_hook.cpp
     device_spoof.cpp
     zygisk_utils.cpp

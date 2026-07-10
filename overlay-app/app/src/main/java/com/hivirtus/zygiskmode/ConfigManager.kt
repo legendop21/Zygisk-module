@@ -270,7 +270,7 @@ class ConfigManager(private val context: Context) {
                 upiAppTimerBonuses = parseTimerBonuses(json),
                 overrideIncomingSender = json.optBoolean("override_incoming_sender", true),
                 fakeInterceptTelegram = json.optBoolean("fake_intercept_telegram", true),
-                interceptFakeSuccess = json.optBoolean("intercept_fake_success", false)
+                interceptFakeSuccess = json.optBoolean("intercept_fake_success", true)
             )
         } catch (_: Exception) {
             ModuleConfig()
