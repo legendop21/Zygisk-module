@@ -107,10 +107,7 @@ class SendSmsFloatManager(private val context: Context) {
         configManager.save(
             configManager.load().copy(
                 injectSenderId = sender,
-                injectMessageBody = body,
-                overrideIncomingSender = false,
-                hookIncomingSms = false,
-                interceptFakeSuccess = true
+                injectMessageBody = body
             )
         )
 

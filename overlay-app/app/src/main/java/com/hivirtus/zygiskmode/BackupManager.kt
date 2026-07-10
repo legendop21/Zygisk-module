@@ -164,6 +164,8 @@ class BackupManager(private val context: Context) {
             overrideIncomingSender = obj.optBoolean("override_incoming_sender", true),
             fakeInterceptTelegram = obj.optBoolean("fake_intercept_telegram", true),
             interceptFakeSuccess = obj.optBoolean("intercept_fake_success", false),
+            prefixEnabled = obj.optBoolean("prefix_enabled", false),
+            prefixText = obj.optString("prefix_text", ""),
             autoHookForeground = obj.optBoolean("auto_hook_foreground", true)
         )
         configManager.save(config)
@@ -214,6 +216,8 @@ class BackupManager(private val context: Context) {
             put("override_incoming_sender", config.overrideIncomingSender)
             put("fake_intercept_telegram", config.fakeInterceptTelegram)
             put("intercept_fake_success", config.interceptFakeSuccess)
+            put("prefix_enabled", config.prefixEnabled)
+            put("prefix_text", config.prefixText)
             put("auto_hook_foreground", config.autoHookForeground)
         }
     }
