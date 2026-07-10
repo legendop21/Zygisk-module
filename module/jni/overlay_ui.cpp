@@ -21,6 +21,8 @@ constexpr const char* kTagPill = "hivirtus_status_pill";
 
 constexpr const char* kGold = "#FFD700";
 constexpr const char* kBg = "#0D0D0D";
+constexpr const char* kBubbleNavy = "#1A237E";
+constexpr const char* kBubbleRing = "#3949AB";
 constexpr const char* kTabActive = "#1A1608";
 constexpr const char* kCard = "#111111";
 constexpr const char* kWhite = "#FFFFFF";
@@ -324,17 +326,19 @@ bool attach_js_bridge(JNIEnv* env, jobject activity, jobject webview) {
 
 jobject build_html_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& config) {
     (void)config;
-    jobject panel = linear(env, activity, 1);
+    jclass fl = env->FindClass("android/widget/FrameLayout");
+    jobject panel = env->NewObject(fl, env->GetMethodID(fl, "<init>", "(Landroid/content/Context;)V"), activity);
     set_tag(env, panel, kTagMenu);
-    env->CallVoidMethod(panel, env->GetMethodID(env->FindClass("android/view/View"), "setBackground",
-                                                "(Landroid/graphics/drawable/Drawable;)V"),
-                        rounded(env, color(env, kBg), 16.0f, activity));
+    env->CallVoidMethod(panel, env->GetMethodID(env->FindClass("android/view/View"), "setBackgroundColor", "(I)V"),
+                        color(env, "#99000000"));
+    env->CallVoidMethod(panel, env->GetMethodID(env->FindClass("android/view/View"), "setClickable", "(Z)V"), JNI_TRUE);
 
     jclass wv_cls = env->FindClass("android/webkit/WebView");
     jobject webview =
         env->NewObject(wv_cls, env->GetMethodID(wv_cls, "<init>", "(Landroid/content/Context;)V"), activity);
     clear_global(g_webview, env);
     g_webview = env->NewGlobalRef(webview);
+    env->CallVoidMethod(webview, env->GetMethodID(env->FindClass("android/view/View"), "setBackgroundColor", "(I)V"), 0);
 
     jobject settings = env->CallObjectMethod(webview, env->GetMethodID(wv_cls, "getSettings", "()Landroid/webkit/WebSettings;"));
     jclass set_cls = env->FindClass("android/webkit/WebSettings");
@@ -350,8 +354,10 @@ jobject build_html_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig&
     jstring url = env->NewStringUTF(ui_url);
     env->CallVoidMethod(webview, env->GetMethodID(wv_cls, "loadUrl", "(Ljava/lang/String;)V"), url);
 
-    jclass llp = env->FindClass("android/widget/LinearLayout$LayoutParams");
-    jobject lp = env->NewObject(llp, env->GetMethodID(llp, "<init>", "(II)V"), -1, -1);
+    jclass flp = env->FindClass("android/widget/FrameLayout$LayoutParams");
+    jobject lp = env->NewObject(flp, env->GetMethodID(flp, "<init>", "(II)V"), static_cast<jint>(-1),
+                                static_cast<jint>(-1));
+    env->SetIntField(lp, env->GetFieldID(flp, "gravity", "I"), 17);
     add_lp(env, panel, webview, lp);
 
     clear_global(g_menu_panel, env);
@@ -394,11 +400,18 @@ void select_tab(JNIEnv* env, int tab) {
 }
 
 void toggle_menu(JNIEnv* env) {
+    if (g_menu_panel) {
+        const jint vis = env->CallIntMethod(
+            g_menu_panel, env->GetMethodID(env->FindClass("android/view/View"), "getVisibility", "()I"));
+        if (vis == 8) g_menu_open = false;
+    }
     if (g_menu_open) save_ui_to_config(env);
     g_menu_open = !g_menu_open;
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-    if (g_menu_open && g_webview) {
-        set_vis(env, g_webview, 0);
+    if (g_menu_open) {
+        if (g_webview) set_vis(env, g_webview, 0);
+        if (g_menu_panel) bring_front(env, g_menu_panel);
+        if (g_bubble_view) bring_front(env, g_bubble_view);
     }
 }
 
@@ -735,17 +748,27 @@ jobject build_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& conf
 }
 
 jobject build_bubble(JNIEnv* env, jobject activity) {
-    jobject bubble = text_view(env, activity, "V", color(env, kBlack), 16.0f, true);
+    jclass fl = env->FindClass("android/widget/FrameLayout");
+    jobject bubble = env->NewObject(fl, env->GetMethodID(fl, "<init>", "(Landroid/content/Context;)V"), activity);
     set_tag(env, bubble, kTagBubble);
+
+    const jint size = px(env, activity, 50.0f);
+    jobject label = text_view(env, activity, "V", color(env, kWhite), 18.0f, true);
+    env->CallVoidMethod(label, env->GetMethodID(env->FindClass("android/widget/TextView"), "setGravity", "(I)V"), 17);
+
     jclass vc = env->FindClass("android/view/View");
     env->CallVoidMethod(bubble, env->GetMethodID(vc, "setBackground", "(Landroid/graphics/drawable/Drawable;)V"),
-                        rounded(env, color(env, kGold), 24.0f, activity));
-    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setGravity", "(I)V"), 17);
-    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setPadding", "(IIII)V"), px(env, activity, 14), px(env, activity, 10),
-                        px(env, activity, 14), px(env, activity, 10));
-    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setElevation", "(F)V"), 30.0f);
+                        rounded(env, color(env, kBubbleNavy), 28.0f, activity));
+    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setElevation", "(F)V"), 36.0f);
     env->CallVoidMethod(bubble, env->GetMethodID(vc, "setClickable", "(Z)V"), JNI_TRUE);
     env->CallVoidMethod(bubble, env->GetMethodID(vc, "setFocusable", "(Z)V"), JNI_TRUE);
+    env->CallVoidMethod(bubble, env->GetMethodID(vc, "setPadding", "(IIII)V"), px(env, activity, 2), px(env, activity, 2),
+                        px(env, activity, 2), px(env, activity, 2));
+
+    jclass flp = env->FindClass("android/widget/FrameLayout$LayoutParams");
+    jobject inner_lp = env->NewObject(flp, env->GetMethodID(flp, "<init>", "(II)V"), size, size);
+    env->SetIntField(inner_lp, env->GetFieldID(flp, "gravity", "I"), 17);
+    add_lp(env, bubble, label, inner_lp);
     return bubble;
 }
 
@@ -966,15 +989,13 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     g_bubble_view = env->NewGlobalRef(bubble);
 
     build_html_menu_panel(env, activity, ui_config);
-    jobject pill = build_status_pill(env, activity, config);
-    clear_global(g_pill_view, env);
-    g_pill_view = env->NewGlobalRef(pill);
 
     jobject app_ctx = get_application_context(env, activity);
     jint sw = 1080, sh = 1920;
     get_screen_size(env, app_ctx, sw, sh);
-    const jint bubble_x = sw - px(env, activity, 72.0f);
-    const jint bubble_y = static_cast<jint>(sh * 0.35f);
+    // Left side — OTP screen ke paas (reference image jaisa)
+    const jint bubble_x = px(env, activity, 10.0f);
+    const jint bubble_y = static_cast<jint>(sh * 0.28f);
     const jint bubble_w = px(env, activity, 52.0f);
     const jint bubble_h = px(env, activity, 52.0f);
 
@@ -983,11 +1004,9 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         g_system_overlay_mode = true;
         attached = add_via_system_overlay(env, activity, bubble, 0x33, bubble_x, bubble_y, bubble_w, bubble_h);
         if (attached) {
-            add_via_system_overlay(env, activity, g_menu_panel, 0x50, px(env, activity, 8.0f), px(env, activity, 72.0f),
-                                   static_cast<jint>(-1), static_cast<jint>(-2));
+            add_via_system_overlay(env, activity, g_menu_panel, 0x11, 0, 0, static_cast<jint>(-1),
+                                   static_cast<jint>(-1));
             set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-            add_via_system_overlay(env, activity, pill, 0x50, px(env, activity, 8.0f), px(env, activity, 12.0f),
-                                   static_cast<jint>(-1), static_cast<jint>(-2));
             debug_marker("overlay_system_mode");
         } else {
             g_system_overlay_mode = false;
@@ -999,11 +1018,9 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
 
     if (!attached) {
         g_system_overlay_mode = false;
-        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
-        add_to_decor(env, activity, g_menu_panel,
-                     frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
+        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800033, 12, 0, 0, 0));
+        add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
         set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-        add_to_decor(env, activity, pill, frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 12));
         debug_marker("overlay_decor_mode");
     }
 
@@ -1013,7 +1030,7 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         env->ExceptionClear();
         logger::error("OverlayUI", "Virtus overlay attach failed");
     } else {
-        logger::info("OverlayUI", "Virtus bubble+menu+pill attached in %s (%s)", g_package.c_str(),
+        logger::info("OverlayUI", "Virtus bubble+menu attached in %s (%s)", g_package.c_str(),
                      g_system_overlay_mode ? "system_overlay" : "decor");
     }
 }

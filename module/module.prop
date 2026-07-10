@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.73.0
-versionCode=27300
+version=v2.74.0
+versionCode=27400
 author=@hivirtus
-description=Home screen + UPI floating menu. Launcher bubble, overlay auto-grant @Hivirtus
+description=Left floating bubble + full HTML menu on OTP/UPI screen. Reference UI style @Hivirtus
 zygisk=1
