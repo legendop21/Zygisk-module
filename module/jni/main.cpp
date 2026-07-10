@@ -124,6 +124,14 @@ public:
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
                                        access("/data/local/tmp/hivirtus_spoof_android_id.txt", R_OK) == 0;
         touch_module_heartbeat();
+        if (is_systemui_ || is_telephony_ || is_hooked_upi_) {
+            FILE* zf = fopen("/data/local/tmp/hivirtus_zygisk_active.flag", "w");
+            if (zf) {
+                fprintf(zf, "%ld\n", static_cast<long>(time(nullptr)));
+                fclose(zf);
+                chmod("/data/local/tmp/hivirtus_zygisk_active.flag", 0644);
+            }
+        }
         if (!needs_stay_loaded) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
         }

@@ -66,6 +66,7 @@ echo "==> Packaging Zygisk module zip (no APK)"
 cp "$MODULE_DIR/module.prop" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
+cp "$MODULE_DIR/start_overlay.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
@@ -86,6 +87,7 @@ if [[ ! -f "$OUTPUT_DIR/overlay/overlay.dex" ]] && [[ -f "$MODULE_DIR/overlay/ov
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
+[ -f "$OUTPUT_DIR/start_overlay.sh" ] && chmod 755 "$OUTPUT_DIR/start_overlay.sh"
 [[ -f "$OUTPUT_DIR/uninstall.sh" ]] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 [[ -f "$OUTPUT_DIR/system/bin/hivirtus-menu" ]] && chmod 755 "$OUTPUT_DIR/system/bin/hivirtus-menu"
 

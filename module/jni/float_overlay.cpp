@@ -18,8 +18,17 @@ void* delayed_start(void*) {
         logger::error("FloatOverlay", "AttachCurrentThread failed");
         return nullptr;
     }
-    sleep(4);
-    dex_loader::start_overlay(env);
+
+    const int delays[] = {5, 12, 25};
+    for (int delay : delays) {
+        sleep(delay);
+        if (dex_loader::start_overlay(env)) {
+            logger::info("FloatOverlay", "Bubble started after %ds", delay);
+            break;
+        }
+        logger::error("FloatOverlay", "Retry after %ds failed", delay);
+    }
+
     g_vm->DetachCurrentThread();
     return nullptr;
 }
@@ -32,7 +41,7 @@ void install(JNIEnv* env, zygisk::Api* api) {
         logger::error("FloatOverlay", "GetJavaVM failed");
         return;
     }
-    logger::info("FloatOverlay", "Scheduling embedded floating menu in SystemUI");
+    logger::info("FloatOverlay", "Scheduling overlay in SystemUI (Zygisk path)");
 
     pthread_t thread;
     pthread_create(&thread, nullptr, delayed_start, nullptr);

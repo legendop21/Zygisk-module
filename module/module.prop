@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Mode
-version=v2.15.0
-versionCode=47
+version=v2.15.1
+versionCode=48
 author=@hivirtus
 description=Zygisk Base Mode By @Hivirtus
 zygisk=1

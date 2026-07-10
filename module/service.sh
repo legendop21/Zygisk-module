@@ -1,12 +1,14 @@
 #!/system/bin/sh
-# Local config sync — APK path hata diya, sab module folder mein
+# Local config + overlay daemon (Zygisk stopped ho tab bhi bubble)
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
 DEVICE_CMD="/data/local/tmp/hivirtus_change_device_id.cmd"
-INJECT_RUNTIME="/data/local/tmp/hivirtus_inject.cmd"
 LOCAL_EDIT="$MODDIR/config.edit.json"
+ZYGISK_FLAG="/data/local/tmp/hivirtus_zygisk_active.flag"
+
+. "$MODDIR/start_overlay.sh"
 
 sync_local_config() {
   if [ -f "$LOCAL_EDIT" ]; then
@@ -29,6 +31,14 @@ apply_device_id() {
   chmod 644 /data/local/tmp/hivirtus_spoof_android_id.txt 2>/dev/null
 }
 
+check_zygisk_active() {
+  if [ -f "$ZYGISK_FLAG" ]; then
+    AGE=$(($(date +%s) - $(cat "$ZYGISK_FLAG" 2>/dev/null || echo 0)))
+    [ "$AGE" -lt 120 ] && return 0
+  fi
+  return 1
+}
+
 sync_local_config
 
 if [ -f "$CONFIG" ] && [ ! -f "$RUNTIME" ]; then
@@ -37,11 +47,22 @@ if [ -f "$CONFIG" ] && [ ! -f "$RUNTIME" ]; then
 fi
 
 apply_device_id
+grant_overlay_perms
 
 (
+  sleep 8
+  start_overlay_daemon
   while true; do
     sync_local_config
     apply_device_id
-    sleep 2
+    if ! pgrep -f "com.hivirtus.zygiskmode.overlay.OverlayDaemon" >/dev/null 2>&1; then
+      start_overlay_daemon
+    fi
+    if ! check_zygisk_active; then
+      echo "0" > /data/local/tmp/hivirtus_zygisk_stopped.flag
+    else
+      rm -f /data/local/tmp/hivirtus_zygisk_stopped.flag
+    fi
+    sleep 8
   done
 ) &
