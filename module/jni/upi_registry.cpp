@@ -138,12 +138,22 @@ bool is_module_own_app(const std::string& package) {
 
 bool is_denied_hook_package(const std::string& package) {
     if (package.empty()) return true;
-    static const char* kDenyExact[] = {
+
+    // Telephony + SMS apps — hook allowed (SMS block ke liye zaroori)
+    static const char* kAllowExact[] = {
         "com.android.phone",
         "com.android.providers.telephony",
         "com.google.android.apps.messaging",
         "com.android.mms",
+        "com.android.mms.service",
         "com.samsung.android.messaging",
+        nullptr,
+    };
+    for (const char** name = kAllowExact; *name; ++name) {
+        if (package == *name) return false;
+    }
+
+    static const char* kDenyExact[] = {
         "com.android.systemui",
         "com.android.settings",
         "com.android.shell",
@@ -161,6 +171,27 @@ bool is_denied_hook_package(const std::string& package) {
     if (package.find("launcher") != std::string::npos) return true;
     if (package.find("inputmethod") != std::string::npos) return true;
     return false;
+}
+
+bool is_whitelisted_hook_process(const std::string& package) {
+    if (package.empty()) return false;
+    if (package == "zygote" || package == "zygote64" || package == "system_server") return false;
+    if (is_module_own_app(package)) return false;
+    if (is_denied_hook_package(package)) return false;
+
+    static const char* kCore[] = {
+        "com.android.phone",
+        "com.android.providers.telephony",
+        "com.google.android.apps.messaging",
+        "com.android.mms",
+        "com.android.mms.service",
+        "com.samsung.android.messaging",
+        nullptr,
+    };
+    for (const char** name = kCore; *name; ++name) {
+        if (package == *name) return true;
+    }
+    return is_sms_hook_target(package);
 }
 
 bool is_hookable_user_app(const std::string& package) {

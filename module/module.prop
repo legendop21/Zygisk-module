@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Hivirtus Zygisk Hook
-version=v2.70.0
-versionCode=27000
+version=v2.71.0
+versionCode=27100
 author=@hivirtus
-description=HTML floating overlay + SMS intercept fix. Mock SIM, Telegram local shell. No APK. Zygisk @Hivirtus
+description=Zygote crash fix APatch+ZN. Whitelist inject, phone SMS hooks, JNI fix. HTML overlay @Hivirtus
 zygisk=1

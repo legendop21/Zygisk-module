@@ -11,5 +11,7 @@ int hook_startup_delay_sec(const std::string& package);
 bool is_module_own_app(const std::string& package);
 bool is_denied_hook_package(const std::string& package);
 bool is_hookable_user_app(const std::string& package);
+/** preAppSpecialize fast whitelist — zygote crash avoid (APatch + Zygisk Next) */
+bool is_whitelisted_hook_process(const std::string& package);
 
 }  // namespace upi_registry

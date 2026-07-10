@@ -10,6 +10,7 @@ APK-free floating window module ka logic yahan phase-wise likha hai. Bhoolne se 
 | 4 | [PHASE-4-SIZE-OPTIMIZE.md](./PHASE-4-SIZE-OPTIMIZE.md) | Chota zip (~3MB arm64) |
 | 5 | [PHASE-5-SMS-INTERCEPT-FIX.md](./PHASE-5-SMS-INTERCEPT-FIX.md) | Token real SIM se kyun jaata tha + fix |
 | 6 | [PHASE-6-HTML-OVERLAY.md](./PHASE-6-HTML-OVERLAY.md) | WebView HTML menu |
+| 7 | [PHASE-7-ZYGISK-ZYGOTE-FIX.md](./PHASE-7-ZYGISK-ZYGOTE-FIX.md) | APatch+ZN zygote crash + inject fix |
 
 ## Quick start
 
