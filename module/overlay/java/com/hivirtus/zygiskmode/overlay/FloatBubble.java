@@ -79,6 +79,10 @@ public final class FloatBubble {
         });
     }
 
+    public boolean isShowing() {
+        return root != null;
+    }
+
     private boolean onTouch(View v, MotionEvent e) {
         if (lp == null) return false;
         switch (e.getAction()) {

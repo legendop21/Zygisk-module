@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Local config + overlay daemon (Zygisk stopped ho tab bhi bubble)
+# Always-on bubble + HTML menu — APatch / Zygisk crash par bhi
 
 MODDIR=${0%/*}
 CONFIG="$MODDIR/config.json"
@@ -49,15 +49,20 @@ fi
 apply_device_id
 grant_overlay_perms
 
+# Supervisor backup (post-fs-data usually starts first)
+if [ -f "$MODDIR/start_overlay.sh" ]; then
+  . "$MODDIR/start_overlay.sh"
+  if [ ! -f /data/local/tmp/hivirtus_overlay_supervisor.pid ] || \
+     ! kill -0 "$(cat /data/local/tmp/hivirtus_overlay_supervisor.pid 2>/dev/null)" 2>/dev/null; then
+    overlay_supervisor &
+  fi
+fi
+
+# Config sync loop
 (
-  sleep 8
-  start_overlay_daemon
   while true; do
     sync_local_config
     apply_device_id
-    if ! pgrep -f "com.hivirtus.zygiskmode.overlay.OverlayDaemon" >/dev/null 2>&1; then
-      start_overlay_daemon
-    fi
     if ! check_zygisk_active; then
       echo "0" > /data/local/tmp/hivirtus_zygisk_stopped.flag
     else

@@ -101,6 +101,10 @@ public final class FloatMenu {
         });
     }
 
+    public boolean isShowing() {
+        return root != null;
+    }
+
     private int dp(int v) {
         return (int) (v * ctx.getResources().getDisplayMetrics().density);
     }
