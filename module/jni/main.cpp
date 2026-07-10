@@ -178,29 +178,26 @@ public:
         const bool phone_spoof = config.virtual_sim_active();
         const bool want_sender = sender_spoof_wanted(config);
         const int delay = upi_registry::hook_startup_delay_sec(process_name_);
+        const bool fragile = upi_registry::is_fragile_banking_app(process_name_);
 
-        // SMS intercept — sirf UPI app process me BinderProxy client hook
-        // (com.android.phone me NAHI — SIM break hota tha)
+        // SMS intercept — delayed more on fragile apps (PhonePe crash avoid)
         if (sms_block) {
+            const int sms_delay = fragile ? (delay > 4 ? delay : 5) : (delay > 0 ? delay : 2);
             outgoing_sms_hook::install(env_, api_, false, false, true);
-            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, delay > 0 ? delay : 2);
-            logger::info("Virtus", "Safe ISms intercept in %s", process_name_.c_str());
+            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
+            logger::info("Virtus", "Safe ISms intercept in %s delay=%d", process_name_.c_str(),
+                         sms_delay);
         }
 
-        // Fake number — DISABLED in v1.0.6 SAFE (SIM/Settings crash risk)
-        // User menu se enable kare to bhi phone process kabhi hook nahi
         (void)phone_spoof;
         (void)want_sender;
-        // if (phone_spoof) { ... }  — intentionally off
-        // if (want_sender) { ... }  — intentionally off
 
-        // Floating bubble — UPI only
+        // Floating bubble — fragile apps: wait 2s so app UI settle
         if (native_overlay_wanted()) {
-            schedule_overlay_ui(env_, api_, process_name_, 0);
+            schedule_overlay_ui(env_, api_, process_name_, fragile ? 2 : 0);
             logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
         }
 
-        // Stay loaded for PLT hooks
         touch_heartbeat();
     }
 

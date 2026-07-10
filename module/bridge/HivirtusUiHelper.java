@@ -17,13 +17,16 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.TextView;
 import android.widget.Switch;
-import android.widget.EditText;
-import android.widget.Button;
+import android.widget.TextView;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
@@ -328,8 +331,8 @@ public class HivirtusUiHelper {
     private static boolean addBubbleToParent(final Activity activity, ViewGroup root) {
         try {
             float d = activity.getResources().getDisplayMetrics().density;
-            int size = (int) (58 * d);
-            final TextView bubble = makeBubbleView(activity, size);
+            int size = (int) (60 * d);
+            final View bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
             FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -351,26 +354,50 @@ public class HivirtusUiHelper {
         }
     }
 
+    private static boolean isFragileApp(Context ctx) {
+        try {
+            String p = ctx.getPackageName();
+            if (p == null) return false;
+            String l = p.toLowerCase();
+            return l.contains("phonepe") || l.contains("paytm") || l.contains("paisa.user")
+                    || l.contains("yespay") || l.contains("payzapp") || l.contains("hdfc")
+                    || l.contains("icici") || l.contains("sbi.lotus") || l.contains("axis.mobile");
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     private static void scheduleMenuFill(final Activity activity, final FrameLayout menuHost) {
+        // Fragile UPI (PhonePe etc): native menu only — WebView crash karta hai
+        final boolean fragile = isFragileApp(activity);
         MAIN.postDelayed(new Runnable() {
             @Override
             public void run() {
                 try {
-                    fillMenuWebView(activity, menuHost);
+                    if (fragile) {
+                        fillMenuNative(activity, menuHost);
+                        writeDebug("ui_menu_native_fragile");
+                    } else {
+                        fillMenuWebView(activity, menuHost);
+                    }
                 } catch (Throwable t) {
-                    writeDebug("ui_webview_fail:" + safeMsg(t));
-                    fillMenuNative(activity, menuHost);
+                    writeDebug("ui_menu_fail:" + safeMsg(t));
+                    try {
+                        fillMenuNative(activity, menuHost);
+                    } catch (Throwable t2) {
+                        writeDebug("ui_native_fail:" + safeMsg(t2));
+                    }
                 }
             }
-        }, 300);
+        }, fragile ? 900 : 400);
     }
 
     private static boolean addBubbleSystemOverlay(final Activity activity) {
         try {
             if (sBubbleOverlay != null && sBubbleOverlay.getParent() != null) return true;
             float d = activity.getResources().getDisplayMetrics().density;
-            int size = (int) (58 * d);
-            final TextView bubble = makeBubbleView(activity, size);
+            int size = (int) (60 * d);
+            final View bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
             WindowManager wm = (WindowManager) activity.getApplicationContext()
                     .getSystemService(Context.WINDOW_SERVICE);
@@ -442,8 +469,8 @@ public class HivirtusUiHelper {
         try {
             if (sBubbleWm != null && sBubbleWm.getParent() != null) return true;
             float d = activity.getResources().getDisplayMetrics().density;
-            int size = (int) (58 * d);
-            final TextView bubble = makeBubbleView(activity, size);
+            int size = (int) (60 * d);
+            final View bubble = makeBubbleView(activity, size);
             final FrameLayout menuHost = makeMenuHost(activity);
             WindowManager wm = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
             sWm = wm;
@@ -496,8 +523,8 @@ public class HivirtusUiHelper {
             ViewGroup content = (ViewGroup) activity.findViewById(android.R.id.content);
             if (content == null) return;
             float d = activity.getResources().getDisplayMetrics().density;
-            int size = (int) (58 * d);
-            TextView bubble = makeBubbleView(activity, size);
+            int size = (int) (60 * d);
+            View bubble = makeBubbleView(activity, size);
             content.addView(bubble, bubbleLp(activity, size));
             writeDebug("ui_minimal_ok");
         } catch (Throwable t) {
@@ -505,22 +532,74 @@ public class HivirtusUiHelper {
         }
     }
 
-    private static TextView makeBubbleView(Context ctx, int size) {
-        TextView bubble = new TextView(ctx);
+    private static Bitmap sLogoBmp;
+
+    private static Bitmap loadLogoBitmap() {
+        if (sLogoBmp != null && !sLogoBmp.isRecycled()) return sLogoBmp;
+        String[] paths = {
+                "/data/local/tmp/hivirtus_ui/bubble_logo.png",
+                "/data/local/tmp/hivirtus_ui/bubble_logo_128.png",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo.png",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui/bubble_logo_128.png",
+        };
+        for (String path : paths) {
+            try {
+                File f = new File(path);
+                if (!f.canRead()) continue;
+                BitmapFactory.Options opts = new BitmapFactory.Options();
+                opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                Bitmap b = BitmapFactory.decodeFile(path, opts);
+                if (b != null) {
+                    sLogoBmp = b;
+                    writeDebug("ui_logo_ok:" + path);
+                    return sLogoBmp;
+                }
+            } catch (Throwable t) {
+                writeDebug("ui_logo_fail:" + path + ":" + safeMsg(t));
+            }
+        }
+        writeDebug("ui_logo_missing");
+        return null;
+    }
+
+    /** Madara logo bubble — face-centered circular ImageView (no "V") */
+    private static View makeBubbleView(Context ctx, int size) {
+        ImageView bubble = new ImageView(ctx);
         bubble.setTag(TAG_BUBBLE);
-        bubble.setText("V");
-        bubble.setTextSize(22f);
-        bubble.setGravity(Gravity.CENTER);
-        bubble.setElevation(48f);
         bubble.setClickable(true);
         bubble.setFocusable(true);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFFFFD700);
-        bg.setCornerRadius(size);
-        bg.setStroke((int) (2 * ctx.getResources().getDisplayMetrics().density), 0xFF1A1408);
-        bubble.setBackground(bg);
-        bubble.setTextColor(0xFF1A1408);
-        bubble.getPaint().setFakeBoldText(true);
+        bubble.setElevation(48f);
+        bubble.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        bubble.setAdjustViewBounds(false);
+        try {
+            bubble.setClipToOutline(true);
+            android.graphics.drawable.GradientDrawable clip =
+                    new android.graphics.drawable.GradientDrawable();
+            clip.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            clip.setColor(0xFF111111);
+            bubble.setBackground(clip);
+            bubble.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, android.graphics.Outline outline) {
+                    outline.setOval(0, 0, view.getWidth(), view.getHeight());
+                }
+            });
+        } catch (Throwable ignored) {}
+
+        Bitmap logo = loadLogoBitmap();
+        if (logo != null) {
+            bubble.setImageBitmap(logo);
+        } else {
+            // Fallback gold circle if logo missing
+            android.graphics.drawable.GradientDrawable bg =
+                    new android.graphics.drawable.GradientDrawable();
+            bg.setColor(0xFFFFD700);
+            bg.setCornerRadius(size);
+            bubble.setBackground(bg);
+            bubble.setImageDrawable(null);
+            // tiny text fallback via content description only
+            bubble.setContentDescription("V");
+        }
         return bubble;
     }
 

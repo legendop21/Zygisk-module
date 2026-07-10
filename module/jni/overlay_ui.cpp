@@ -1377,15 +1377,17 @@ bool force_java_bubble(JNIEnv* env) {
 void* overlay_keepalive_worker(void*) {
     JNIEnv* env = nullptr;
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
-    // Aggressive 60s: Java lifecycle + native decor/system overlay fallback
-    for (int i = 0; i < 200; ++i) {
-        usleep(i < 120 ? 250000 : 1000000);
-        try_install_activity_hooks();
-        // Java first (lifecycle + SYSTEM overlay)
-        if (!force_java_bubble(env)) {
-            force_native_bubble(env);
-        } else if (i % 8 == 0) {
-            // Periodic native reinforce
+    // Soft keepalive — PhonePe crash avoid (no double native+java spam)
+    bool java_ok = false;
+    for (int i = 0; i < 80; ++i) {
+        usleep(i < 40 ? 500000 : 1500000);
+        if (!java_ok) {
+            java_ok = force_java_bubble(env);
+        } else if (i % 10 == 0) {
+            force_java_bubble(env);  // light refresh only
+        }
+        // Native fallback ONLY if Java never worked (avoid double overlay crash)
+        if (!java_ok && i > 6 && i % 5 == 0) {
             force_native_bubble(env);
         }
         if (env->ExceptionCheck()) env->ExceptionClear();

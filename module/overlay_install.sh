@@ -228,6 +228,12 @@ hivirtus_boot_activate_overlay() {
     chmod 644 /data/local/tmp/hivirtus_ui/* 2>/dev/null
     echo "ui_copied" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
   fi
+  # Ensure Madara bubble logo readable
+  if [ -f "$MOD/ui/bubble_logo.png" ]; then
+    cp -f "$MOD/ui/bubble_logo.png" /data/local/tmp/hivirtus_ui/bubble_logo.png 2>/dev/null
+    chmod 644 /data/local/tmp/hivirtus_ui/bubble_logo.png 2>/dev/null
+    echo "logo_copied" >> /data/local/tmp/hivirtus_overlay.debug 2>/dev/null
+  fi
   # Overlay sirf UPI — system pkgs pe nahi
   hivirtus_grant_overlay_permission
 }

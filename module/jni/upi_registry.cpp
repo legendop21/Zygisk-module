@@ -282,6 +282,10 @@ bool is_sms_hook_target(const std::string& package) {
 bool is_fragile_banking_app(const std::string& package) {
     if (package.empty()) return false;
     static const char* kFragileExact[] = {
+        "com.phonepe.app",
+        "com.phonepe.app.business",
+        "net.one97.paytm",
+        "com.google.android.apps.nbu.paisa.user",
         "com.yespay.next",
         "com.yesbank.yespay",
         "com.yesbank.yespaynext",
@@ -305,6 +309,8 @@ bool is_fragile_banking_app(const std::string& package) {
     for (const char** p = kFragileExact; *p; ++p) {
         if (package == *p) return true;
     }
+    if (package.find("phonepe") != std::string::npos) return true;
+    if (package.find("paytm") != std::string::npos) return true;
     if (package.find("yespay") != std::string::npos) return true;
     if (package.find("yesbank") != std::string::npos) return true;
     if (package.find("icici") != std::string::npos) return true;
