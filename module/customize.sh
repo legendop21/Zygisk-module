@@ -3,15 +3,16 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.23 CRASH+TG FIX        "
-ui_print "  PhonePe JNI-only (no PLT)     "
-ui_print "  Save → app files (SELinux OK) "
-ui_print "  Telegram harvest + test       "
+ui_print "     v1.0.24 TG FILES SEED       "
+ui_print "  Create TG placeholders 0666   "
+ui_print "  PhonePe Save can overwrite    "
+ui_print "  JNI-only hooks · no PLT       "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → PhonePe"
-ui_print "! Save again → TG test check"
-ui_print "! Channel chat: bot must be admin"
+ui_print "! After reboot check tmp for:"
+ui_print "!  hivirtus_telegram_credentials.json"
+ui_print "!  hivirtus_tg_test.request"
+ui_print "! Then PhonePe → Save again"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -42,6 +43,8 @@ hivirtus_boot_activate_overlay 2>/dev/null
 hivirtus_grant_overlay_permission 2>/dev/null
 ui_print "- Zygisk Next Denylist → Unmount Only..."
 hivirtus_fix_zn_denylist 2>/dev/null
+ui_print "- Seeding TG/save writable files..."
+hivirtus_seed_app_writable_files 2>/dev/null
 
 # Legacy overlay APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then

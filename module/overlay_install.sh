@@ -238,6 +238,44 @@ hivirtus_boot_activate_overlay() {
   hivirtus_grant_overlay_permission
 }
 
+# PhonePe/GPay cannot CREATE files in /data/local/tmp (SELinux).
+# Root creates empty 0666 placeholders → app can OVERWRITE → TG Save works.
+hivirtus_seed_app_writable_files() {
+  local f
+  for f in \
+    /data/local/tmp/hivirtus_ui_save.json \
+    /data/local/tmp/hivirtus_telegram_credentials.json \
+    /data/local/tmp/hivirtus_tg_test.request \
+    /data/local/tmp/hivirtus_tg_forward.log \
+    /data/local/tmp/hivirtus_tg_last_response.txt \
+    /data/local/tmp/hivirtus_tg_test_response.txt \
+    /data/local/tmp/hivirtus_tg_test_payload.json \
+    /data/local/tmp/hivirtus_save_ok.flag \
+    /data/local/tmp/hivirtus_hook_status.txt \
+    /data/local/tmp/hivirtus_spoof_phone.txt \
+    /data/local/tmp/hivirtus_sender_id.txt
+  do
+    if [ ! -f "$f" ]; then
+      case "$f" in
+        *ui_save.json|*zygisk_mode_config.json) echo '{}' > "$f" 2>/dev/null ;;
+        *telegram_credentials.json) echo '{}' > "$f" 2>/dev/null ;;
+        *) : > "$f" 2>/dev/null ;;
+      esac
+    fi
+    chmod 666 "$f" 2>/dev/null
+    chown root:root "$f" 2>/dev/null || true
+  done
+  # Also ensure runtime config is writable for merge
+  if [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ]; then
+    chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+  else
+    echo '{}' > /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_zygisk_mode_config.json 2>/dev/null
+  fi
+  echo "tg_files_seeded $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+}
+
 # Zygisk Next Enforced denylist blocks Virtus in UPI/banking apps.
 # Unmount Only (just_umount) = hide mounts + still allow Zygisk inject.
 hivirtus_fix_zn_denylist() {

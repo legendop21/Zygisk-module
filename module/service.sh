@@ -218,21 +218,12 @@ sync_config
 
 # Telegram paths app-writable + boot pe ek test agar creds pehle se hain
 (
-  for f in /data/local/tmp/hivirtus_tg_test.request \
-           /data/local/tmp/hivirtus_tg_forward.log; do
-    touch "$f" 2>/dev/null
-    chmod 666 "$f" 2>/dev/null
-  done
-  for f in /data/local/tmp/hivirtus_telegram_credentials.json \
-           /data/local/tmp/hivirtus_ui_save.json \
-           /data/local/tmp/hivirtus_zygisk_mode_config.json; do
-    [ -f "$f" ] && chmod 666 "$f" 2>/dev/null
-  done
+  hivirtus_seed_app_writable_files
   # Boot test: pehle se token ho to 🚀 test bhejo (Save ke bina bhi)
   if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ]; then
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
+    if [ -n "$TG_T" ] && [ -n "$TG_C" ] && [ "$TG_T" != "{" ] && [ ${#TG_T} -gt 10 ]; then
       echo 1 > /data/local/tmp/hivirtus_tg_test.request
       chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
       echo "tg_boot_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
@@ -571,6 +562,7 @@ rewrite_inbox_sender_id() {
     send_tg_test_if_requested
     forward_blocked_telegram
     rewrite_inbox_sender_id
+    hivirtus_seed_app_writable_files 2>/dev/null
     sleep 1
   done
 ) &
