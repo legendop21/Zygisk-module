@@ -194,10 +194,15 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
         return;
     }
 
-    // Banking UPI — hooks only in com.android.phone (crash fix)
+    // Fragile banking — sirf ISms block (spoof PLT skip)
     if (upi_registry::is_fragile_banking_app(process_name)) {
-        logger::info("VirtualSim", "Skip in-app hooks for fragile %s (phone process only)",
-                     process_name.c_str());
+        if (sms_block) {
+            const int delay = upi_registry::hook_startup_delay_sec(process_name);
+            if (!install_binder_plt(api)) {
+                schedule_deferred_binder(api, delay > 0 ? delay : 1);
+            }
+            logger::info("VirtualSim", "Fragile ISms block in %s", process_name.c_str());
+        }
         return;
     }
 

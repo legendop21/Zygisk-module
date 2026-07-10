@@ -74,7 +74,57 @@ chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-
 [ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
-# v2.68+: Native floating overlay only — no APK in zip
+# v2.70+: HTML WebView UI + bridge.dex
+if [ -d "$MODULE_DIR/ui" ]; then
+  cp -r "$MODULE_DIR/ui" "$OUTPUT_DIR/"
+  echo "==> Bundled ui/ (HTML overlay)"
+fi
+
+build_bridge_dex() {
+  local jar="${ANDROID_JAR:-$ROOT_DIR/.ndk/android.jar}"
+  local src="$MODULE_DIR/bridge/HivirtusJsBridge.java"
+  local out="$ROOT_DIR/build/bridge"
+  [ -f "$src" ] || return 0
+
+  if [ ! -f "$jar" ]; then
+    mkdir -p "$ROOT_DIR/.ndk"
+    if [ ! -f "$ROOT_DIR/.ndk/platform.zip" ]; then
+      echo "==> Downloading android.jar for bridge.dex..."
+      curl -fsSL -o "$ROOT_DIR/.ndk/platform.zip" \
+        "https://dl.google.com/android/repository/platform-34-ext7_r03.zip" || return 0
+    fi
+    unzip -qo -j "$ROOT_DIR/.ndk/platform.zip" "android-34/android.jar" -d "$ROOT_DIR/.ndk" 2>/dev/null || true
+    [ -f "$ROOT_DIR/.ndk/android.jar" ] || unzip -qo -j "$ROOT_DIR/.ndk/platform.zip" "android.jar" -d "$ROOT_DIR/.ndk" 2>/dev/null || true
+    jar="$ROOT_DIR/.ndk/android.jar"
+  fi
+  [ -f "$jar" ] || { echo "==> WARNING: android.jar missing — bridge.dex skip"; return 0; }
+
+  command -v javac >/dev/null 2>&1 || { echo "==> WARNING: javac missing — bridge.dex skip"; return 0; }
+
+  mkdir -p "$out"
+  javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" "$src" 2>/dev/null || return 0
+
+  if command -v d8 >/dev/null 2>&1; then
+    d8 --output "$ROOT_DIR/build" "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+  elif [ -x "${ANDROID_SDK_ROOT:-$ROOT_DIR/.android/sdk}/build-tools/34.0.0/d8" ]; then
+    "${ANDROID_SDK_ROOT:-$ROOT_DIR/.android/sdk}/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" \
+      "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+  elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/build-tools/34.0.0/d8" ]; then
+    "$ANDROID_HOME/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+  else
+    echo "==> WARNING: d8 missing — bridge.dex skip (HTML read-only)"
+    return 0
+  fi
+  if [ -f "$ROOT_DIR/build/classes.dex" ]; then
+    mv -f "$ROOT_DIR/build/classes.dex" "$ROOT_DIR/build/bridge.dex"
+  fi
+  echo "==> Built bridge.dex (WebView JS bridge)"
+}
+build_bridge_dex
+if [ -f "$ROOT_DIR/build/bridge.dex" ]; then
+  cp "$ROOT_DIR/build/bridge.dex" "$OUTPUT_DIR/bridge.dex"
+fi
+
 if [ -d "$ROOT_DIR/docs" ]; then
   cp -r "$ROOT_DIR/docs" "$OUTPUT_DIR/"
   echo "==> Bundled docs/ (Hinglish phase guides)"

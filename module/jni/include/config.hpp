@@ -75,6 +75,8 @@ public:
     ModuleConfig& mutable_config() { return config_; }
     void reload();
     void persist_runtime();
+    /** HTML overlay Save → /data/local/tmp/hivirtus_ui_save.json */
+    bool apply_ui_save_file();
 
 private:
     ConfigManager() = default;

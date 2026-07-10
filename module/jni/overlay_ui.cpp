@@ -49,6 +49,7 @@ jobject g_panel_system = nullptr;
 jobject g_panel_message = nullptr;
 jobject g_panel_telegram = nullptr;
 jobject g_menu_panel = nullptr;
+jobject g_webview = nullptr;
 jobject g_tab_system = nullptr;
 jobject g_tab_message = nullptr;
 jobject g_tab_telegram = nullptr;
@@ -265,31 +266,98 @@ Rect view_rect(JNIEnv* env, jobject view) {
 }
 
 void save_ui_to_config(JNIEnv* env) {
+    ConfigManager::instance().apply_ui_save_file();
     auto& mgr = ConfigManager::instance();
     mgr.reload();
-    auto& c = mgr.mutable_config();
-    if (g_sw_hide_dev) c.hide_developer = switch_checked(env, g_sw_hide_dev);
-    if (g_sw_hide_root) {
-        c.hide_root = switch_checked(env, g_sw_hide_root);
-        if (c.hide_root) {
-            c.hide_magisk = c.hide_kernelsu = c.hide_apatch = c.hide_sukisu = c.hide_all_root_apps = true;
-        }
-    }
-    if (g_sw_incoming) c.hook_incoming_sms = switch_checked(env, g_sw_incoming);
-    if (g_sw_outgoing) {
-        c.hook_outgoing_sms = switch_checked(env, g_sw_outgoing);
-        c.intercept_fake_success = c.hook_outgoing_sms;
-    }
-    if (g_et_token) c.telegram_bot_token = edittext_get(env, g_et_token);
-    if (g_et_chat) c.telegram_chat_id = edittext_get(env, g_et_chat);
-    c.auto_hook_foreground = true;
-    mgr.persist_runtime();
+    const auto& c = mgr.get();
     update_pill_label(env, c);
+    (void)env;
+}
+
+bool attach_js_bridge(JNIEnv* env, jobject activity, jobject webview) {
+    const char* dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+    if (access(dex_path, R_OK) != 0) return false;
+
+    jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
+    if (!dex_cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+    jmethodID dex_ctor = env->GetMethodID(dex_cls, "<init>",
+                                          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+                                          "Ljava/lang/ClassLoader;)V");
+    jstring dex_j = env->NewStringUTF(dex_path);
+    jstring opt_j = env->NewStringUTF("/data/local/tmp");
+    jclass act_cls = env->GetObjectClass(activity);
+    jobject parent_loader =
+        env->CallObjectMethod(activity, env->GetMethodID(act_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
+    jobject dex_loader = env->NewObject(dex_cls, dex_ctor, dex_j, opt_j, nullptr, parent_loader);
+    if (!dex_loader || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+
+    jclass loader_cls = env->FindClass("java/lang/ClassLoader");
+    jstring bridge_name = env->NewStringUTF("com.hivirtus.zygisk.HivirtusJsBridge");
+    jclass bridge_cls = (jclass)env->CallObjectMethod(
+        dex_loader, env->GetMethodID(loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"),
+        bridge_name);
+    if (!bridge_cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+
+    jmethodID attach_mid = env->GetStaticMethodID(bridge_cls, "attach", "(Landroid/webkit/WebView;)V");
+    if (!attach_mid) return false;
+    env->CallStaticVoidMethod(bridge_cls, attach_mid, webview);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+    logger::info("OverlayUI", "HTML bridge.dex attached");
+    return true;
+}
+
+jobject build_html_menu_panel(JNIEnv* env, jobject activity, const ModuleConfig& config) {
+    (void)config;
+    jobject panel = linear(env, activity, 1);
+    set_tag(env, panel, kTagMenu);
+    env->CallVoidMethod(panel, env->GetMethodID(env->FindClass("android/view/View"), "setBackground",
+                                                "(Landroid/graphics/drawable/Drawable;)V"),
+                        rounded(env, color(env, kBg), 16.0f, activity));
+
+    jclass wv_cls = env->FindClass("android/webkit/WebView");
+    jobject webview =
+        env->NewObject(wv_cls, env->GetMethodID(wv_cls, "<init>", "(Landroid/content/Context;)V"), activity);
+    clear_global(g_webview, env);
+    g_webview = env->NewGlobalRef(webview);
+
+    jobject settings = env->CallObjectMethod(webview, env->GetMethodID(wv_cls, "getSettings", "()Landroid/webkit/WebSettings;"));
+    jclass set_cls = env->FindClass("android/webkit/WebSettings");
+    env->CallVoidMethod(settings, env->GetMethodID(set_cls, "setJavaScriptEnabled", "(Z)V"), JNI_TRUE);
+    env->CallVoidMethod(settings, env->GetMethodID(set_cls, "setDomStorageEnabled", "(Z)V"), JNI_TRUE);
+    env->CallVoidMethod(settings, env->GetMethodID(set_cls, "setAllowFileAccess", "(Z)V"), JNI_TRUE);
+
+    if (!attach_js_bridge(env, activity, webview)) {
+        logger::info("OverlayUI", "bridge.dex missing — HTML read-only fallback");
+    }
+
+    const char* ui_url = "file:///data/adb/modules/hivirtus_zygisk_mode/ui/index.html";
+    jstring url = env->NewStringUTF(ui_url);
+    env->CallVoidMethod(webview, env->GetMethodID(wv_cls, "loadUrl", "(Ljava/lang/String;)V"), url);
+
+    jclass llp = env->FindClass("android/widget/LinearLayout$LayoutParams");
+    jobject lp = env->NewObject(llp, env->GetMethodID(llp, "<init>", "(II)V"), -1, -1);
+    add_lp(env, panel, webview, lp);
+
+    clear_global(g_menu_panel, env);
+    g_menu_panel = env->NewGlobalRef(panel);
+    return panel;
 }
 
 void update_pill_label(JNIEnv* env, const ModuleConfig& config) {
     if (!g_pill_label) return;
-    const char* txt = config.hook_incoming_sms ? "Hook Incoming SMS: ON" : "Hook Incoming SMS: OFF";
+    const char* txt = config.intercept_fake_success ? "SMS Intercept: ON" : "SMS Intercept: OFF";
     env->CallVoidMethod(g_pill_label, env->GetMethodID(env->FindClass("android/widget/TextView"), "setText",
                                                        "(Ljava/lang/CharSequence;)V"),
                         env->NewStringUTF(txt));
@@ -322,8 +390,12 @@ void select_tab(JNIEnv* env, int tab) {
 }
 
 void toggle_menu(JNIEnv* env) {
+    if (g_menu_open) save_ui_to_config(env);
     g_menu_open = !g_menu_open;
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+    if (g_menu_open && g_webview) {
+        set_vis(env, g_webview, 0);
+    }
 }
 
 jobject get_decor(JNIEnv* env, jobject activity) {
@@ -771,7 +843,7 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     jobject bubble = build_bubble(env, activity);
     add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800035, 0, 16, 16, 0));
 
-    build_menu_panel(env, activity, ui_config);
+    build_html_menu_panel(env, activity, ui_config);
     add_to_decor(env, activity, g_menu_panel,
                  frame_lp(env, activity, -1, -2, 0x50, 8, 0, 8, 72));
     set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);

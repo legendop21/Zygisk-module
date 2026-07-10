@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Hivirtus Zygisk Hook          "
-ui_print "        v2.69.0                 "
+ui_print "        v2.70.0                 "
 ui_print "  Native floating window (no APK)"
 ui_print "  @Hivirtus @Liqdy @ClamFlat 🔥 "
 ui_print "*******************************"
@@ -16,7 +16,9 @@ fi
 ui_print "- Install path: $MODPATH"
 
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
+[ -d "$MODPATH/ui" ] && set_perm_recursive "$MODPATH/ui" 0 0 0755 0644
 [ -d "$MODPATH/docs" ] && set_perm_recursive "$MODPATH/docs" 0 0 0755 0644
+[ -f "$MODPATH/bridge.dex" ] && set_perm "$MODPATH/bridge.dex" 0 0 0644
 [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
 [ -f "$MODPATH/customize.sh" ] && set_perm "$MODPATH/customize.sh" 0 0 0755

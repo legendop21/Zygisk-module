@@ -283,11 +283,22 @@ public:
                                       config.virtual_sim_active();
         logger::init(config.log_file);
 
-        // Banking UPI — zero in-app hooks; com.android.phone blocks SMS + spoofs number
+        // Fragile banking — sirf SMS block hooks (crashy UPI hooks / overlay skip)
         if (is_hooked_upi_ && upi_registry::is_fragile_banking_app(process_name_)) {
             touch_upi_inject(process_name_.c_str());
             touch_module_heartbeat();
-            logger::info("Hivirtus", "Phone-only mode for %s (no in-app hooks)", process_name_.c_str());
+            mark_zygisk_native_active();
+            const int hook_delay = upi_registry::hook_startup_delay_sec(process_name_);
+            if (sms_block_needed) {
+                virtual_sim::install(env_, api_, process_name_);
+                outgoing_sms_hook::install(env_, api_, false, false, true);
+                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay > 0 ? hook_delay : 2);
+                logger::info("Hivirtus", "Fragile SMS-only hooks in %s (delay=%ds)",
+                             process_name_.c_str(), hook_delay > 0 ? hook_delay : 2);
+            } else {
+                logger::info("Hivirtus", "Fragile banking %s — SMS block off in config",
+                             process_name_.c_str());
+            }
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }

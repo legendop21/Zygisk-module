@@ -2,6 +2,7 @@
 /build/
 /dist/
 /.ndk/
+/.android/
 *.zip
 !releases/*.zip
 *.so

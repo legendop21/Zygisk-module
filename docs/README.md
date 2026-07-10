@@ -8,6 +8,8 @@ APK-free floating window module ka logic yahan phase-wise likha hai. Bhoolne se 
 | 2 | [PHASE-2-NATIVE-OVERLAY.md](./PHASE-2-NATIVE-OVERLAY.md) | Floating bubble/menu kaise kaam karta hai |
 | 3 | [PHASE-3-LOCAL-SHELL.md](./PHASE-3-LOCAL-SHELL.md) | Bina APK — Telegram, SMS block, config |
 | 4 | [PHASE-4-SIZE-OPTIMIZE.md](./PHASE-4-SIZE-OPTIMIZE.md) | Chota zip (~3MB arm64) |
+| 5 | [PHASE-5-SMS-INTERCEPT-FIX.md](./PHASE-5-SMS-INTERCEPT-FIX.md) | Token real SIM se kyun jaata tha + fix |
+| 6 | [PHASE-6-HTML-OVERLAY.md](./PHASE-6-HTML-OVERLAY.md) | WebView HTML menu |
 
 ## Quick start
 

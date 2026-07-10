@@ -192,8 +192,7 @@ enforce_sms_block() {
     HOOKED="$HOOKED $(grep -oE '"[a-zA-Z][a-zA-Z0-9._]*"[[:space:]]*:[[:space:]]*true' "$SRC_CFG" 2>/dev/null | sed 's/"\([^"]*\)".*/\1/' | grep -E '^com\.')"
   fi
 
-  for pkg in com.android.phone com.android.providers.telephony \
-    com.google.android.apps.messaging com.android.mms com.android.mms.service \
+  for pkg in com.google.android.apps.messaging com.android.mms com.android.mms.service \
     com.samsung.android.messaging com.yespay.next com.yesbank.yespay com.yesbank.yespaynext \
     com.kreditbee.android com.groww.app com.nextbillion.groww \
     com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
