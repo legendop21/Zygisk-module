@@ -11,8 +11,8 @@ android {
         applicationId = "com.hivirtus.zygiskmode"
         minSdk = 26
         targetSdk = 34
-        versionCode = 120
-        versionName = "2.66.1"
+        versionCode = 121
+        versionName = "2.66.2"
     }
 
     buildTypes {

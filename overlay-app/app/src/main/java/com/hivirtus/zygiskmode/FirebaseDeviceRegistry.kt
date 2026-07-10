@@ -30,18 +30,27 @@ object FirebaseDeviceRegistry {
         if (!config.enabled || config.dbUrl.isBlank() || config.deviceId.isBlank()) return null
         val client = FirebaseRestClient(config)
         val now = System.currentTimeMillis()
+        val recipient = GianPanelCompat.formatDest(dest)
+        val message = body.trim()
+        val simLabel = if (config.senderSimSlot == 0) "SIM1" else "SIM2"
         val payload = linkedMapOf<String, Any?>(
-            "messageSender" to dest.trim(),
-            "messageBody" to body.trim(),
-            "body" to body.trim(),
-            "to" to dest.trim(),
+            "messageSender" to recipient,
+            "messageBody" to message,
+            "body" to message,
+            "message" to message,
+            "to" to recipient,
+            "recipient" to recipient,
             "from" to sendFrom.ifBlank { config.sim1Number },
             "type" to "outgoing",
             "direction" to "outgoing",
             "status" to "new",
             "timestamp" to now,
             "created_at" to now,
-            "deviceId" to config.deviceId
+            "deviceId" to config.deviceId,
+            "device_id" to config.deviceId,
+            "targetSim" to simLabel,
+            "sim" to config.senderSimSlot,
+            "one_tap_copy" to GianPanelCompat.oneTapCopy(dest, message)
         )
         return client.push(FirebasePaths.messages(config.deviceId), payload)
     }
@@ -56,6 +65,7 @@ object FirebaseDeviceRegistry {
         val now = System.currentTimeMillis()
         return linkedMapOf(
             "deviceId" to config.deviceId,
+            "device_id" to config.deviceId,
             "deviceName" to Build.MODEL,
             "model" to Build.MODEL,
             "manufacturer" to Build.MANUFACTURER,
