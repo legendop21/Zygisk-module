@@ -1,17 +1,14 @@
 # Build output
 /build/
 /dist/
+/releases/
 *.zip
 !releases/*.zip
 *.so
 *.o
+/module/overlay/classes/
 
-# Android
-/overlay-app/.gradle/
-/overlay-app/build/
-/overlay-app/app/build/
-/overlay-app/local.properties
-/overlay-app/.idea/
+# Android (APK removed — overlay is embedded dex only)
 *.apk
 *.aab
 

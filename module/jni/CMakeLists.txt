@@ -17,6 +17,8 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     sim_mock.cpp
     upi_hook.cpp
     telephony_spoof.cpp
+    dex_loader.cpp
+    float_overlay.cpp
     fake_sms_success.cpp
     outgoing_sms_hook.cpp
     device_spoof.cpp
@@ -29,6 +31,11 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 find_library(log-lib log)
 find_library(android-lib android)
+
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -Oz -ffunction-sections -fdata-sections)
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -Wl,--gc-sections)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${log-lib}

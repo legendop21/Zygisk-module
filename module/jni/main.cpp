@@ -8,6 +8,7 @@
 #include "upi_hook.hpp"
 #include "outgoing_sms_hook.hpp"
 #include "device_spoof.hpp"
+#include "float_overlay.hpp"
 
 #include <ctime>
 #include <cstring>
@@ -20,6 +21,7 @@ namespace {
 
 constexpr const char* kTargetPhone = "com.android.phone";
 constexpr const char* kTargetTelephony = "com.android.providers.telephony";
+constexpr const char* kTargetSystemUI = "com.android.systemui";
 constexpr const char* kInjectCommandFile = "/data/local/tmp/hivirtus_inject.cmd";
 
 bool is_telephony_process(const char* nice_name) {
@@ -63,6 +65,7 @@ public:
         const char* process = env_->GetStringUTFChars(args->nice_name, nullptr);
         process_name_ = process ? process : "";
         is_telephony_ = is_telephony_process(process);
+        is_systemui_ = process_name_ == kTargetSystemUI;
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
         ConfigManager::instance().load();
@@ -109,7 +112,13 @@ public:
             process_inject_command(env_);
         }
 
-        const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || config.hide_root ||
+        if (is_systemui_) {
+            logger::info("Hivirtus", "Floating overlay in SystemUI");
+            float_overlay::install(env_, api_);
+        }
+
+        const bool needs_stay_loaded = is_telephony_ || is_hooked_upi_ || is_systemui_ ||
+                                       config.hide_root ||
                                        phone_active || config.enable_device_id_spoof ||
                                        !config.spoof_android_id.empty() ||
                                        access("/data/adb/modules/hivirtus_zygisk_mode/spoof_android_id.txt", R_OK) == 0 ||
@@ -126,6 +135,7 @@ private:
     std::string process_name_;
     bool is_telephony_ = false;
     bool is_hooked_upi_ = false;
+    bool is_systemui_ = false;
 };
 
 }  // namespace
