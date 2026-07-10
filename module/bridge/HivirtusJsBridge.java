@@ -20,9 +20,8 @@ public class HivirtusJsBridge {
     private static final String MODULE_CFG = "/data/adb/modules/hivirtus_zygisk_mode/config.json";
     private static final String SPOOF_PHONE = "/data/local/tmp/hivirtus_spoof_phone.txt";
     private static final String SENDER_ID_FILE = "/data/local/tmp/hivirtus_sender_id.txt";
-    private static final String TG_CREDS = "/data/local/tmp/hivirtus_telegram_credentials.json";
-    private static final String TG_TEST_REQ = "/data/local/tmp/hivirtus_tg_test.request";
-    private static final String SAVE_OK_FLAG = "/data/local/tmp/hivirtus_save_ok.flag";
+  private static final String TG_CREDS = "/data/local/tmp/hivirtus_telegram_credentials.json";
+  private static final String SAVE_OK_FLAG = "/data/local/tmp/hivirtus_save_ok.flag";
 
     private static Context appCtx;
 
@@ -108,11 +107,11 @@ public class HivirtusJsBridge {
                         + "\",\n  \"telegram_chat_id\": \"" + tgChat.replace("\"", "")
                         + "\"\n}\n";
                 wrote += writeEverywhere(TG_CREDS, "hivirtus_telegram_credentials.json", creds);
-                wrote += writeEverywhere(TG_TEST_REQ, "hivirtus_tg_test.request", "1\n");
+                // Do NOT write tg_test.request — service.sh queues ONE test only when
+                // token|chat hash changes (Save/harvest pe spam band).
             }
-
             if (wrote > 0) {
-                writeEverywhere(SAVE_OK_FLAG, "hivirtus_save_ok.flag", "1\n");
+                writeUtf8(SAVE_OK_FLAG, "1\n");
             }
         } catch (Exception e) {
             writeEverywhere(SAVE_TMP, "hivirtus_ui_save.json", json);

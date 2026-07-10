@@ -116,12 +116,6 @@ bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_native_overlay", R_OK) != 0;
 }
 
-bool sender_spoof_wanted(const ModuleConfig& config) {
-    if (!config.override_incoming_sender) return false;
-    const std::string& id = config.inject_sender_id;
-    return !id.empty() && id != "AD-TEST-S";
-}
-
 bool is_yespay(const std::string& pkg) {
     return pkg.find("yespay") != std::string::npos || pkg.find("yesbank") != std::string::npos;
 }
@@ -279,7 +273,6 @@ public:
 
         const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
                                  live.enable_sim1_mock;
-        const bool want_sender = sender_spoof_wanted(live);
         const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
         const bool yespay = is_yespay(pkg_);
 
@@ -309,9 +302,8 @@ public:
             phone_number_hook::install(env_, api_, pkg_.c_str());
         }
 
-        if (want_sender) {
-            sender_spoof::install(env_, api_, pkg_.c_str());
-        }
+        // SMSTweaks: always arm SmsMessage sender hooks in UPI (active when ID saved)
+        sender_spoof::install(env_, api_, pkg_.c_str());
 
         // Overlay after hooks so SMS path ready first
         if (native_overlay_wanted()) {

@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.29 REAL SIM BLOCK     "
-ui_print "  Intent+ISms+diag multi-path   "
-ui_print "  A16 code_cache status/JSON    "
+ui_print "     v1.0.30 SMSTWEAKS + NO SPAM"
+ui_print "  Sender ID inbox rewrite       "
+ui_print "  TG test = 1x per token only   "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 ui_print "! Flash → reboot → Force-stop Hero"
-ui_print "! SEND SMS → Messages me You: NA"
-ui_print "! Check code_cache/hivirtus/ JSON"
+ui_print "! Sender ID = incoming rewrite"
+ui_print "! TG test sirf pehli baar / naya token"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -118,9 +118,15 @@ if [ -n "$OLD_TG_TOKEN" ] && [ -n "$OLD_TG_CHAT" ]; then
   printf '%s\n' "{\"telegram_bot_token\":\"${OLD_TG_TOKEN}\",\"telegram_chat_id\":\"${OLD_TG_CHAT}\"}" \
     > /data/local/tmp/hivirtus_telegram_credentials.json
   chmod 644 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-  ui_print "- Telegram creds preserved — boot pe test jayega"
-  echo 1 > /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-  chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+  ui_print "- Telegram creds preserved"
+  # Kill spam leftovers from older builds; boot sends 1x only if hash not yet sent
+  rm -f /data/local/tmp/hivirtus_tg_test.request \
+        /sdcard/Documents/hivirtus_tg_test.request \
+        /sdcard/Download/hivirtus_tg_test.request 2>/dev/null
+  rm -f /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
+  # Mark current creds as already-tested so reflash doesn't spam again
+  echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
+  echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null
 else
   ui_print "- Telegram empty — bubble → Token+Chat → Save"
 fi

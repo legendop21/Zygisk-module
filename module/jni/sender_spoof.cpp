@@ -22,19 +22,27 @@ bool is_placeholder(const std::string& id) {
 }
 
 std::string read_sender_file() {
-    char buf[128] = {};
-    FILE* f = fopen("/data/local/tmp/hivirtus_sender_id.txt", "r");
-    if (!f) return {};
-    if (!fgets(buf, sizeof(buf), f)) {
+    const char* paths[] = {
+        "/data/local/tmp/hivirtus_sender_id.txt",
+        "/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt",
+        nullptr,
+    };
+    for (const char** p = paths; *p; ++p) {
+        char buf[128] = {};
+        FILE* f = fopen(*p, "r");
+        if (!f) continue;
+        if (!fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            continue;
+        }
         fclose(f);
-        return {};
+        std::string id = buf;
+        while (!id.empty() && (id.back() == '\n' || id.back() == '\r' || id.back() == ' ')) {
+            id.pop_back();
+        }
+        if (!is_placeholder(id)) return id;
     }
-    fclose(f);
-    std::string id = buf;
-    while (!id.empty() && (id.back() == '\n' || id.back() == '\r' || id.back() == ' ')) {
-        id.pop_back();
-    }
-    return id;
+    return {};
 }
 
 /** SMSTweaks style — jo sender ID save kiya, wahi har incoming pe dikhe */
@@ -113,11 +121,15 @@ void install_sms_message_hooks(JNIEnv* env) {
 
 void persist_sender_file(const std::string& id) {
     if (is_placeholder(id)) return;
-    FILE* f = fopen("/data/local/tmp/hivirtus_sender_id.txt", "w");
-    if (!f) return;
-    fprintf(f, "%s\n", id.c_str());
-    fclose(f);
-    chmod("/data/local/tmp/hivirtus_sender_id.txt", 0644);
+    auto write_one = [&](const char* path, mode_t mode) {
+        FILE* f = fopen(path, "w");
+        if (!f) return;
+        fprintf(f, "%s\n", id.c_str());
+        fclose(f);
+        chmod(path, mode);
+    };
+    write_one("/data/local/tmp/hivirtus_sender_id.txt", 0666);
+    write_one("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt", 0644);
 }
 
 }  // namespace
