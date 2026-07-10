@@ -22,9 +22,9 @@ if ndk_valid "${ANDROID_NDK_HOME:-}"; then
   exit 0
 fi
 
-# sdk.dir from overlay-app/local.properties
+# Optional local.properties at repo root
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOCAL_PROPS="$ROOT_DIR/overlay-app/local.properties"
+LOCAL_PROPS="$ROOT_DIR/local.properties"
 if [[ -f "$LOCAL_PROPS" ]]; then
   SDK_DIR=$(grep -E '^sdk\.dir=' "$LOCAL_PROPS" | cut -d= -f2- | tr -d '\r')
   SDK_DIR="${SDK_DIR//\\:/:}"   # escape fix

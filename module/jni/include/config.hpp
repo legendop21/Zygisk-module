@@ -43,7 +43,7 @@ struct ModuleConfig {
     int upi_timer_bonus_seconds = 20;
     bool override_incoming_sender = true;
     bool fake_intercept_telegram = true;
-    bool intercept_fake_success = false;
+    bool intercept_fake_success = true;
 
     bool is_upi_app_hooked(const std::string& package) const;
     int timer_bonus_for_package(const std::string& package) const;
