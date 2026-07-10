@@ -156,6 +156,8 @@ sync_config
 # Boot: repair SIM/settings + safe overlay only
 MODDIR="$MODDIR" hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission &
+# Keep Denylist Unmount Only so UPI apps still get Virtus inject
+hivirtus_fix_zn_denylist 2>/dev/null &
 
 # Keep bridge.dex + UI readable for app uid (SELinux-safe path)
 (

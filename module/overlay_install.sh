@@ -237,3 +237,35 @@ hivirtus_boot_activate_overlay() {
   # Overlay sirf UPI — system pkgs pe nahi
   hivirtus_grant_overlay_permission
 }
+
+# Zygisk Next Enforced denylist blocks Virtus in UPI/banking apps.
+# Unmount Only (just_umount) = hide mounts + still allow Zygisk inject.
+hivirtus_fix_zn_denylist() {
+  local znctl=""
+  for c in \
+    /data/adb/modules/zygisksu/bin/znctl \
+    /data/adb/modules/zygisksu/bin/zygiskd \
+    /data/adb/modules/zygisksu/bin/zygiskd64 \
+    /data/adb/zygisksu/bin/znctl
+  do
+    [ -x "$c" ] && znctl="$c" && break
+  done
+  if [ -z "$znctl" ] && command -v znctl >/dev/null 2>&1; then
+    znctl="$(command -v znctl)"
+  fi
+  if [ -n "$znctl" ]; then
+    "$znctl" enforce-denylist just_umount \
+      >/data/local/tmp/hivirtus_zn_denylist.txt 2>&1 || true
+    echo "zn_denylist=just_umount via $znctl" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+    echo "OK: Zygisk Next Denylist → Unmount Only (reboot if still Enforced)" \
+      > /data/local/tmp/hivirtus_zn_hint.txt
+  else
+    echo "zn_denylist=NO_ZNCTL" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+    echo "FIX: Zygisk Next → Denylist Policy → Unmount Only (NOT Enforced) → reboot" \
+      > /data/local/tmp/hivirtus_zn_hint.txt
+    echo "HINT: ZygiskNext Denylist must be Unmount Only (Enforced blocks inject)" \
+      >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+  fi
+  chmod 644 /data/local/tmp/hivirtus_zn_hint.txt 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_inject.log 2>/dev/null
+}

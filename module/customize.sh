@@ -3,12 +3,15 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.18 CRASH-SAFE          "
+ui_print "     v1.0.19 INJECT FIX          "
+ui_print "  Denylist → Unmount Only       "
 ui_print "  No early hooks · YesPay OK    "
 ui_print "  Deferred SMS · soft overlay   "
-ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
+ui_print "! Zygisk Next: Denylist Policy"
+ui_print "!   MUST be Unmount Only"
+ui_print "!   (Enforced = no UPI inject)"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -37,6 +40,8 @@ ui_print "- Repairing SIM/Settings safety..."
 hivirtus_repair_sim_settings 2>/dev/null
 hivirtus_boot_activate_overlay 2>/dev/null
 hivirtus_grant_overlay_permission 2>/dev/null
+ui_print "- Zygisk Next Denylist → Unmount Only..."
+hivirtus_fix_zn_denylist 2>/dev/null
 
 # Legacy overlay APK cleanup
 if command -v pm >/dev/null 2>&1 && pm path com.hivirtus.zygiskmode >/dev/null 2>&1; then
