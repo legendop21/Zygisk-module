@@ -257,6 +257,14 @@ void install_system_properties_hooks(JNIEnv* env) {
 
 }  // namespace
 
+bool digits_at_least_10(const std::string& value) {
+    size_t digits = 0;
+    for (char c : value) {
+        if (std::isdigit(static_cast<unsigned char>(c))) digits++;
+    }
+    return digits >= 10;
+}
+
 void install(JNIEnv* env,
              zygisk::Api* api,
              bool sim1_enabled,
@@ -268,15 +276,20 @@ void install(JNIEnv* env,
     g_api = api;
     g_sim1 = sim1_enabled;
     g_sim2 = sim2_enabled;
-    g_phone_spoof = phone_spoof_enabled || sim1_enabled || sim2_enabled;
     g_country_iso = country_iso.empty() ? "in" : country_iso;
     g_phone_sim1 = phone_sim1;
     g_phone_sim2 = phone_sim2;
 
+    const std::string phone = active_phone();
+    if (!digits_at_least_10(phone)) {
+        logger::info("SimMock", "Skip phone spoof — mock number not set (real SIM safe)");
+        return;
+    }
+
+    g_phone_spoof = phone_spoof_enabled || sim1_enabled || sim2_enabled;
     if (!g_phone_spoof) return;
 
-    const std::string phone = active_phone();
-    if (!phone.empty()) write_spoof_status(phone);
+    write_spoof_status(phone);
 
     install_system_properties_hooks(env);
 

@@ -29,6 +29,8 @@ struct ModuleConfig {
     std::string mock_iccid_sim1;
     std::string mock_iccid_sim2;
 
+    bool has_mock_phone_configured() const;
+    std::string resolve_mock_phone() const;
     bool virtual_sim_active() const;
 
     bool hook_incoming_sms = true;

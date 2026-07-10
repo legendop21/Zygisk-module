@@ -344,6 +344,13 @@ bool ConfigManager::load() {
         };
     }
 
+    if (!config_.has_mock_phone_configured()) {
+        config_.enable_virtual_sim = false;
+        config_.enable_sim1_mock = false;
+        config_.enable_phone_spoof = false;
+        config_.enable_sim2_mock = false;
+    }
+
     loaded_ = true;
     return true;
 }
@@ -399,9 +406,22 @@ void ConfigManager::persist_runtime() {
     chmod(path.c_str(), 0644);
 }
 
-bool ModuleConfig::virtual_sim_active() const {
-    if (enable_virtual_sim || enable_phone_spoof || enable_sim1_mock || enable_sim2_mock) {
-        return true;
+bool ModuleConfig::has_mock_phone_configured() const {
+    const std::string phone = resolve_mock_phone();
+    size_t digits = 0;
+    for (char c : phone) {
+        if (c >= '0' && c <= '9') digits++;
+    }
+    return digits >= 10;
+}
+
+std::string ModuleConfig::resolve_mock_phone() const {
+    if (!mock_phone_sim1.empty()) {
+        size_t digits = 0;
+        for (char c : mock_phone_sim1) {
+            if (c >= '0' && c <= '9') digits++;
+        }
+        if (digits >= 10) return mock_phone_sim1;
     }
     char buf[96] = {};
     FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
@@ -411,15 +431,16 @@ bool ModuleConfig::virtual_sim_active() const {
             fclose(f);
             std::string phone = buf;
             if (!phone.empty() && phone.back() == '\n') phone.pop_back();
-            size_t digits = 0;
-            for (char c : phone) {
-                if (c >= '0' && c <= '9') digits++;
-            }
-            return digits >= 10;
+            return phone;
         }
         fclose(f);
     }
-    return false;
+    return {};
+}
+
+bool ModuleConfig::virtual_sim_active() const {
+    if (!has_mock_phone_configured()) return false;
+    return enable_virtual_sim || enable_phone_spoof || enable_sim1_mock || enable_sim2_mock;
 }
 
 bool ModuleConfig::is_upi_app_hooked(const std::string& package) const {

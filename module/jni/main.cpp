@@ -244,10 +244,19 @@ public:
         const auto& config = ConfigManager::instance().get();
         is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
         const bool want_sender_spoof = sender_spoof_wanted(config);
-        const bool phone_spoof_wanted = config.enable_phone_spoof || config.virtual_sim_active();
+        const bool phone_spoof_wanted = config.virtual_sim_active();
         const bool sms_block_needed = config.hook_outgoing_sms || config.intercept_fake_success ||
                                       config.virtual_sim_active();
         logger::init(config.log_file);
+
+        // Banking UPI — zero in-app hooks; com.android.phone blocks SMS + spoofs number
+        if (is_hooked_upi_ && upi_registry::is_fragile_banking_app(process_name_)) {
+            touch_upi_inject(process_name_.c_str());
+            touch_module_heartbeat();
+            logger::info("Hivirtus", "Phone-only mode for %s (no in-app hooks)", process_name_.c_str());
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
 
         // GMS — sirf incoming sender ID (SMS Modifier style), baaki hooks nahi
         if (is_gms_ && want_sender_spoof) {
@@ -272,12 +281,14 @@ public:
         const bool fragile_upi = upi_registry::is_fragile_banking_app(process_name_);
         const int hook_delay = upi_registry::hook_startup_delay_sec(process_name_);
 
-        if (sms_block_needed && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
+        if (sms_block_needed && (is_telephony_ || is_messaging_ ||
+                                 (is_hooked_upi_ && !fragile_upi))) {
             virtual_sim::install(env_, api_, process_name_);
         }
 
-        if (phone_spoof_wanted && (is_hooked_upi_ || is_telephony_ || is_messaging_)) {
-            if (fragile_upi && is_hooked_upi_) {
+        if (phone_spoof_wanted && (is_telephony_ || is_messaging_ ||
+                                   (is_hooked_upi_ && !fragile_upi))) {
+            if (is_hooked_upi_) {
                 phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
                                                              hook_delay);
             } else {

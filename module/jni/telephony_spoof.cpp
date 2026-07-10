@@ -631,10 +631,9 @@ bool phone_spoof_enabled() {
     if (cached_at == 0 || now - cached_at >= 2) {
         ConfigManager::instance().reload();
         const auto& cfg = ConfigManager::instance().get();
-        cached = cfg.virtual_sim_active() || cfg.enable_phone_spoof;
-        if (!cached && !read_runtime_phone_file().empty()) {
-            cached = true;
-        }
+        cached = cfg.has_mock_phone_configured() &&
+                 (cfg.enable_virtual_sim || cfg.enable_phone_spoof || cfg.enable_sim1_mock ||
+                  cfg.enable_sim2_mock);
         cached_at = now;
     }
     return cached;

@@ -101,6 +101,7 @@ void schedule_deferred_binder(zygisk::Api* api, int delay_sec) {
 void write_status(const ModuleConfig& config) {
     FILE* f = fopen("/data/local/tmp/hivirtus_virtual_sim.json", "w");
     if (!f) return;
+    const std::string phone = config.resolve_mock_phone();
     fprintf(f,
             "{\n"
             "  \"active\": true,\n"
@@ -109,8 +110,8 @@ void write_status(const ModuleConfig& config) {
             "  \"sim2\": { \"enabled\": %s, \"phone\": \"%s\", \"operator\": \"%s\", "
             "\"numeric\": \"%s\", \"imsi\": \"%s\", \"iccid\": \"%s\" }\n"
             "}\n",
-            (config.enable_sim1_mock || config.enable_phone_spoof) ? "true" : "false",
-            config.mock_phone_sim1.c_str(), config.mock_operator_name_sim1.c_str(),
+            config.enable_sim1_mock ? "true" : "false",
+            phone.c_str(), config.mock_operator_name_sim1.c_str(),
             config.mock_operator_numeric_sim1.c_str(), config.mock_imsi_sim1.c_str(),
             config.mock_iccid_sim1.c_str(),
             config.enable_sim2_mock ? "true" : "false", config.mock_phone_sim2.c_str(),
@@ -124,13 +125,35 @@ bool is_telephony_process(const std::string& process) {
     return process == "com.android.phone" || process == "com.android.providers.telephony";
 }
 
-bool is_gms_process(const std::string& process) {
-    return process == "com.google.android.gms" || process == "com.google.android.gms.persistent";
-}
-
 bool is_messaging_process(const std::string& process) {
     return process == "com.google.android.apps.messaging" || process == "com.android.mms" ||
            process == "com.android.mms.service" || process == "com.samsung.android.messaging";
+}
+
+void install_telephony_stack(JNIEnv* env, zygisk::Api* api, const ModuleConfig& config,
+                             const std::string& phone_sim1, bool spoof_on, bool sms_block) {
+    if (spoof_on) {
+        write_status(config);
+        sim_mock::install(env,
+                          api,
+                          config.enable_sim1_mock || config.enable_phone_spoof,
+                          config.enable_sim2_mock,
+                          config.mock_country_iso,
+                          true,
+                          phone_sim1,
+                          config.mock_phone_sim2);
+    }
+    if (sms_block) {
+        if (!install_binder_plt(api)) {
+            schedule_deferred_binder(api, 0);
+        }
+        outgoing_sms_hook::install_telephony_server_hook(api);
+        logger::info("VirtualSim", "Telephony ISms server block active");
+    } else if (spoof_on) {
+        if (!install_binder_plt(api)) {
+            schedule_deferred_binder(api, 0);
+        }
+    }
 }
 
 }  // namespace
@@ -142,68 +165,43 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& process_name) {
     const bool spoof_on = config.virtual_sim_active();
     if (!spoof_on && !sms_block) return;
 
-    // UPI / telephony / Messages — ISms block + optional SIM spoof
     const bool telephony_proc = is_telephony_process(process_name);
     const bool messaging_proc = is_messaging_process(process_name);
     const bool upi_proc = upi_registry::is_sms_hook_target(process_name) ||
                           config.is_upi_app_hooked(process_name);
     if (!telephony_proc && !messaging_proc && !upi_proc) return;
 
-    std::string phone_sim1 = config.mock_phone_sim1;
-    if (phone_sim1.empty()) {
-        char buf[96] = {};
-        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
-        if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
-        if (f) {
-            if (fgets(buf, sizeof(buf), f)) phone_sim1 = buf;
-            fclose(f);
-            if (!phone_sim1.empty() && phone_sim1.back() == '\n') phone_sim1.pop_back();
-        }
-    }
+    const std::string phone_sim1 = config.resolve_mock_phone();
 
     g_api = api;
     g_process = process_name;
 
-    if (spoof_on && telephony_proc) {
-        write_status(config);
-        sim_mock::install(env,
-                          api,
-                          config.enable_sim1_mock || config.enable_phone_spoof || spoof_on,
-                          config.enable_sim2_mock,
-                          config.mock_country_iso,
-                          true,
-                          phone_sim1,
-                          config.mock_phone_sim2);
-    }
-
-    if (is_telephony_process(process_name)) {
-        if (!install_binder_plt(api)) {
-            schedule_deferred_binder(api, 0);
-        }
-        outgoing_sms_hook::install_telephony_server_hook(api);
-        logger::info("VirtualSim", "Dual virtual SIM + ISms server block in telephony (%s)",
-                     process_name.c_str());
+    if (telephony_proc) {
+        install_telephony_stack(env, api, config, phone_sim1, spoof_on, sms_block);
+        logger::info("VirtualSim", "Telephony stack spoof=%d sms_block=%d phone=%s",
+                     spoof_on ? 1 : 0, sms_block ? 1 : 0,
+                     phone_sim1.empty() ? "none" : phone_sim1.c_str());
         return;
     }
 
     if (messaging_proc) {
-        if (!install_binder_plt(api)) {
-            schedule_deferred_binder(api, 0);
+        if (sms_block || spoof_on) {
+            if (!install_binder_plt(api)) {
+                schedule_deferred_binder(api, 0);
+            }
         }
-        logger::info("VirtualSim", "Messages binder hook (ISms block + SIM) in %s",
-                     process_name.c_str());
+        logger::info("VirtualSim", "Messages binder hook in %s", process_name.c_str());
         return;
     }
 
-    // Banking apps (YesPay etc.) — PLT turant = crash; defer hook until UI ready
-    const int delay = upi_registry::hook_startup_delay_sec(process_name);
+    // Banking UPI — hooks only in com.android.phone (crash fix)
     if (upi_registry::is_fragile_banking_app(process_name)) {
-        schedule_deferred_binder(api, delay);
-        logger::info("VirtualSim", "Deferred binder hook %ds for fragile %s", delay,
+        logger::info("VirtualSim", "Skip in-app hooks for fragile %s (phone process only)",
                      process_name.c_str());
         return;
     }
 
+    const int delay = upi_registry::hook_startup_delay_sec(process_name);
     if (!install_binder_plt(api)) {
         schedule_deferred_binder(api, 0);
     } else if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {

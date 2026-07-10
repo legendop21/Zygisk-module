@@ -26,7 +26,9 @@ object HookEngine {
         val display = UpiAppRegistry.displayNameFor(targetPkg)
         val current = configManager.load()
         val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
-        val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
+        val mockReady = phone.count { it.isDigit() } >= 10
+        val mockOn = mockReady &&
+            (current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof)
 
         val hooked = if (mergeSelection) {
             current.hookedUpiApps.toMutableMap()
@@ -59,7 +61,7 @@ object HookEngine {
             return ActiveHookManager.HookResult(false, targetPkg, display, "Config save fail")
         }
 
-        if (mockOn) configManager.writeSpoofPhoneSync(phone)
+        if (mockReady) configManager.writeSpoofPhoneSync(phone)
         TelephonyInjectHelper.wakeTelephonyPipeline()
         SmsStackRefresher.refreshAfterSenderIdChange()
         ActiveHookManager.forceStopOnce(targetPkg)
@@ -90,7 +92,9 @@ object HookEngine {
 
         val current = configManager.load()
         val phone = configManager.readSpoofPhone().ifBlank { current.mockPhoneSim1 }
-        val mockOn = current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof
+        val mockReady = phone.count { it.isDigit() } >= 10
+        val mockOn = mockReady &&
+            (current.enableVirtualSim || current.enableSim1Mock || current.enablePhoneSpoof)
 
         val senderId = current.injectSenderId.trim()
         val hasSenderId = senderId.isNotBlank() && !senderId.equals("AD-TEST-S", ignoreCase = true)
@@ -114,7 +118,7 @@ object HookEngine {
 
         if (!configManager.saveAndFlushSync(updated)) return 0
 
-        if (mockOn) configManager.writeSpoofPhoneSync(phone)
+        if (mockReady) configManager.writeSpoofPhoneSync(phone)
         TelephonyInjectHelper.wakeTelephonyPipeline()
         SmsStackRefresher.refreshAfterSenderIdChange()
         ActiveHookManager.clearRestartCache()
