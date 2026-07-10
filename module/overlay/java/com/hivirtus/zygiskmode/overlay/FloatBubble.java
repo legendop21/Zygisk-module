@@ -3,18 +3,20 @@ package com.hivirtus.zygiskmode.overlay;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.util.Log;
 import android.view.WindowManager;
-import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Lightweight draggable bubble — smooth, chhota, APK nahi */
+/** Reference-style floating bubble — left side, dark blue, shield icon */
 public final class FloatBubble {
 
     public interface OnTapListener { void onTap(); }
@@ -22,7 +24,7 @@ public final class FloatBubble {
     private final Context ctx;
     private final OnTapListener onTap;
     private WindowManager wm;
-    private FrameLayout root;
+    private LinearLayout root;
     private WindowManager.LayoutParams lp;
     private float downX, downY;
     private int startX, startY;
@@ -38,31 +40,55 @@ public final class FloatBubble {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
                 wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-                root = new FrameLayout(ctx);
-                TextView logo = new TextView(ctx);
-                logo.setText("H");
-                logo.setTextColor(Color.WHITE);
-                logo.setTextSize(16f);
-                logo.setGravity(Gravity.CENTER);
-                int dp = (int) (ctx.getResources().getDisplayMetrics().density * 48);
+                float density = ctx.getResources().getDisplayMetrics().density;
+                int bubble = (int) (52 * density);
+                int pad = (int) (6 * density);
+
+                root = new LinearLayout(ctx);
+                root.setOrientation(LinearLayout.VERTICAL);
+                root.setGravity(Gravity.CENTER_HORIZONTAL);
+                root.setPadding(pad, pad, pad, pad);
+
                 GradientDrawable bg = new GradientDrawable();
                 bg.setShape(GradientDrawable.OVAL);
-                bg.setColors(new int[]{0xFF6C5CE7, 0xFF00CEC9});
-                logo.setBackground(bg);
-                FrameLayout.LayoutParams inner = new FrameLayout.LayoutParams(dp, dp);
-                root.addView(logo, inner);
+                bg.setColor(0xFF1A3A6B);
+                bg.setStroke((int) (2 * density), 0xFF4A7FD4);
+                root.setBackground(bg);
 
+                TextView icon = new TextView(ctx);
+                icon.setText("\u26E8");
+                icon.setTextColor(Color.WHITE);
+                icon.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+                icon.setGravity(Gravity.CENTER);
+                root.addView(icon, new LinearLayout.LayoutParams(bubble - pad * 2, bubble - pad * 2));
+
+                TextView label = new TextView(ctx);
+                label.setText("OTP");
+                label.setTextColor(0xFFBBD4FF);
+                label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
+                label.setTypeface(Typeface.DEFAULT_BOLD);
+                label.setGravity(Gravity.CENTER);
+                LinearLayout.LayoutParams lpLabel = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                lpLabel.topMargin = (int) (-4 * density);
+                root.addView(label, lpLabel);
+
+                int totalH = bubble + (int) (12 * density);
                 lp = new WindowManager.LayoutParams(
-                        dp, dp, OverlayUtil.primaryOverlayType(),
+                        bubble, totalH,
+                        OverlayUtil.primaryOverlayType(),
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT);
                 lp.gravity = Gravity.TOP | Gravity.START;
-                lp.x = ctx.getResources().getDisplayMetrics().widthPixels - dp - 24;
-                lp.y = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.32f);
+                lp.x = (int) (8 * density);
+                lp.y = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.38f);
 
                 root.setOnTouchListener(this::onTouch);
                 OverlayUtil.addView(wm, root, lp);
+                Log.i("VirtusOverlay", "Bubble shown left-side");
             } catch (Throwable t) {
                 Log.e("VirtusOverlay", "FloatBubble show failed: " + t.getMessage(), t);
             }
@@ -113,8 +139,9 @@ public final class FloatBubble {
     private void snapEdge() {
         int w = ctx.getResources().getDisplayMetrics().widthPixels;
         int half = w / 2;
-        int dp = (int) (ctx.getResources().getDisplayMetrics().density * 48);
-        lp.x = (lp.x + dp / 2 < half) ? 12 : w - dp - 12;
+        float density = ctx.getResources().getDisplayMetrics().density;
+        int bubble = (int) (52 * density);
+        lp.x = (lp.x + bubble / 2 < half) ? (int) (8 * density) : w - bubble - (int) (8 * density);
         try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
     }
 }
