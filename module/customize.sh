@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.31 REAL SIM HARD BLOCK"
-ui_print "  Intent+AM+ISms+appops SEND_SMS"
-ui_print "  TG harvest code_cache JSON    "
+ui_print "     v1.0.32 HOOK STATUS FIX    "
+ui_print "  A16: status → tmp via harvest "
+ui_print "  + real SIM hard block         "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
 ui_print "! Flash → reboot → Force-stop Hero"
-ui_print "! SEND → Messages me You: NA"
-ui_print "! Telegram pe intercept aana chahiye"
+ui_print "! Check: hivirtus_hook_status.txt"
+ui_print "! Path: /data/local/tmp/ OR code_cache"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"

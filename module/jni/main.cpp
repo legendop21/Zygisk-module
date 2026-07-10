@@ -347,8 +347,16 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
                       "cp -f /data/local/tmp/hivirtus_ui_save.json '" + dest + "/ui_save.json' 2>/dev/null; "
                       "cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json '" + dest + "/config.json' 2>/dev/null; "
                       "cp -f /data/local/tmp/hivirtus_bridge.dex '" + dest + "/bridge.dex' 2>/dev/null; "
+                      // Seed writable hook_status so postSpecialize can append (A16)
+                      "touch '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' 2>/dev/null; "
+                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> '" + dest + "/hook_status.txt'; "
+                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> /data/local/tmp/hivirtus_hook_status.txt; "
+                      "echo \"$(date +%s) companion_seed:" + pkg + "\" >> " + std::string(mod) + "/hook_status.txt; "
+                      "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' "
+                      "/data/local/tmp/hivirtus_hook_status.txt 2>/dev/null; "
                       "chmod -R 755 '" + dest + "' 2>/dev/null; "
                       "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* '" + dest + "/config.json' 2>/dev/null; "
+                      "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' 2>/dev/null; "
                       "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' 2>/dev/null; "
                       "restorecon -R '" + dest + "' 2>/dev/null; true";
     system(cmd.c_str());

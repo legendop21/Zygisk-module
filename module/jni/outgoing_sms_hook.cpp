@@ -75,22 +75,45 @@ void write_diag_multi(const char* name, const char* content) {
 }
 
 void write_hook_status(const char* msg) {
-    char line[256];
+    char line[320];
     snprintf(line, sizeof(line), "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
     auto append_one = [&](const char* path) {
         FILE* f = fopen(path, "a");
+        if (!f) {
+            // Create if missing
+            f = fopen(path, "w");
+            if (!f) return;
+        }
+        fputs(line, f);
+        fclose(f);
+        chmod(path, 0666);
+    };
+    auto write_latest = [&](const char* path) {
+        FILE* f = fopen(path, "w");
         if (!f) return;
         fputs(line, f);
         fclose(f);
         chmod(path, 0666);
     };
+
+    // Root-seeded tmp (companion) + module + app code_cache
     append_one("/data/local/tmp/hivirtus_hook_status.txt");
+    write_latest("/data/local/tmp/hivirtus_hook_status_latest.txt");
     append_one("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
+    write_latest("/data/adb/modules/hivirtus_zygisk_mode/hook_status_latest.txt");
+
     if (!g_upi_pkg.empty()) {
         ensure_pkg_diag_dir();
         std::string p = "/data/user/0/" + g_upi_pkg + "/code_cache/hivirtus/hook_status.txt";
         append_one(p.c_str());
+        p = "/data/user/0/" + g_upi_pkg + "/code_cache/hivirtus/hook_status_latest.txt";
+        write_latest(p.c_str());
         p = "/data/data/" + g_upi_pkg + "/code_cache/hivirtus/hook_status.txt";
+        append_one(p.c_str());
+        // filesDir fallback (often writable when code_cache odd)
+        p = "/data/user/0/" + g_upi_pkg + "/files/hivirtus_hook_status.txt";
+        append_one(p.c_str());
+        p = "/data/data/" + g_upi_pkg + "/files/hivirtus_hook_status.txt";
         append_one(p.c_str());
     }
 }

