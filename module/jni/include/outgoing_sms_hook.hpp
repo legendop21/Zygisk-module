@@ -6,7 +6,10 @@
 
 namespace outgoing_sms_hook {
 
-void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi = false);
+void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi);
+
+/** UPI process — fragile apps (PhonePe/YesPay) get JNI-only BinderProxy (no PLT). */
+void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name);
 
 /** Deferred ISms block inside UPI app (KreditBee direct send). */
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec = 1);

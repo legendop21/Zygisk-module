@@ -269,7 +269,7 @@ public:
         // Zygisk Api valid ONLY during postSpecialize. Deferred api hooks = no-op.
         // Install SMS/phone/sender NOW; defer only overlay UI.
         if (sms_block) {
-            outgoing_sms_hook::install(env_, api_, false, false, true);
+            outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
                         ("isms_now:" + pkg_).c_str());
         }

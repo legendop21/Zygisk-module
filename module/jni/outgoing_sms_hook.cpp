@@ -841,6 +841,33 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
     }
 }
 
+void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
+    if (!env || !api) return;
+    g_api = api;
+    g_in_hooked_upi = true;
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+    const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
+    if (!sms_block && !config.virtual_sim_active()) return;
+
+    const std::string pkg = package_name ? package_name : "";
+    const bool fragile = upi_registry::is_fragile_banking_app(pkg);
+
+    // PhonePe/YesPay: PLT BinderProxy = crash. JNI hook only.
+    if (fragile) {
+        const bool ok = register_binder_proxy_jni(env);
+        write_hook_status(ok ? "jni_only_ok" : "jni_only_fail");
+        logger::info("OutgoingSms", "Fragile UPI JNI-only hook pkg=%s ok=%d", pkg.c_str(), ok ? 1 : 0);
+        return;
+    }
+
+    install_plt_hooks(env, true, true);
+    if (!orig_BinderProxy_transact) {
+        register_binder_proxy_jni(env);
+    }
+    write_hook_status(orig_BinderProxy_transact ? "upi_hook_ok" : "upi_hook_fail");
+}
+
 bool install_binder_plt_force(zygisk::Api* api) {
     if (!api) return false;
     g_api = api;

