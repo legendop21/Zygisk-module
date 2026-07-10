@@ -7,6 +7,7 @@ import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -66,9 +67,7 @@ public final class FloatMenu {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
 
-                int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        : WindowManager.LayoutParams.TYPE_PHONE;
+                int type = OverlayUtil.primaryOverlayType();
 
                 WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                         w, h, type,
@@ -79,8 +78,10 @@ public final class FloatMenu {
                 lp.dimAmount = 0.5f;
                 lp.gravity = Gravity.CENTER;
 
-                wm.addView(root, lp);
-            } catch (Exception ignored) {}
+                OverlayUtil.addView(wm, root, lp);
+            } catch (Throwable t) {
+                Log.e("VirtusOverlay", "FloatMenu show failed: " + t.getMessage(), t);
+            }
         });
     }
 

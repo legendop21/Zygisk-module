@@ -4,12 +4,12 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.util.Log;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -52,12 +52,8 @@ public final class FloatBubble {
                 FrameLayout.LayoutParams inner = new FrameLayout.LayoutParams(dp, dp);
                 root.addView(logo, inner);
 
-                int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        : WindowManager.LayoutParams.TYPE_PHONE;
-
                 lp = new WindowManager.LayoutParams(
-                        dp, dp, type,
+                        dp, dp, OverlayUtil.primaryOverlayType(),
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                         PixelFormat.TRANSLUCENT);
@@ -66,8 +62,10 @@ public final class FloatBubble {
                 lp.y = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.32f);
 
                 root.setOnTouchListener(this::onTouch);
-                wm.addView(root, lp);
-            } catch (Exception ignored) {}
+                OverlayUtil.addView(wm, root, lp);
+            } catch (Throwable t) {
+                Log.e("VirtusOverlay", "FloatBubble show failed: " + t.getMessage(), t);
+            }
         });
     }
 
