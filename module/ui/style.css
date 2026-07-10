@@ -46,7 +46,7 @@ body {
   padding: 14px 14px 10px;
   border-radius: 18px;
   background: var(--bg);
-  border: 1px solid rgba(212, 175, 55, 0.28);
+  border: 1px solid rgba(108, 99, 255, 0.22);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55);
   overflow: hidden;
   animation: rise 0.28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -76,11 +76,22 @@ body {
   place-items: center;
   font-weight: 700;
   font-size: 17px;
-  box-shadow: 0 8px 20px rgba(26, 35, 126, 0.4);
+  box-shadow: 0 8px 20px rgba(108, 99, 255, 0.4);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mark-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 8px 20px rgba(108, 99, 255, 0.35);
+  flex-shrink: 0;
 }
 
 .name { font-weight: 700; font-size: 18px; letter-spacing: 0.02em; }
-.sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.sub { color: var(--green); font-size: 12px; margin-top: 2px; }
 
 .icon-btn {
   border: 1px solid var(--line);

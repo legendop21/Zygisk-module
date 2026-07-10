@@ -3,8 +3,8 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.10                    "
-ui_print "  Embedded Madara logo bubble   "
+ui_print "     v1.0.11                    "
+ui_print "  Purple Virtus SMSTweaks UI    "
 ui_print "  Madara logo · crash-safe      "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "

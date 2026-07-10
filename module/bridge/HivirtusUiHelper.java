@@ -348,7 +348,7 @@ public class HivirtusUiHelper {
         }
     }
 
-    /** Crash-safe menu open — native only, never WebView */
+    /** Prefer purple Virtus HTML UI; native purple fallback if WebView crashes */
     private static void safeOpenMenu(final Activity activity, final FrameLayout menuHost) {
         try {
             MAIN.post(new Runnable() {
@@ -356,13 +356,23 @@ public class HivirtusUiHelper {
                 public void run() {
                     try {
                         if (menuHost.getChildCount() == 0) {
-                            fillMenuNative(activity, menuHost);
+                            try {
+                                fillMenuWebView(activity, menuHost);
+                            } catch (Throwable t) {
+                                writeDebug("ui_webview_fail");
+                                menuHost.removeAllViews();
+                                fillMenuNative(activity, menuHost);
+                            }
+                            if (menuHost.getChildCount() == 0) {
+                                fillMenuNative(activity, menuHost);
+                            }
                         }
                         toggleMenu(menuHost);
                     } catch (Throwable t) {
                         writeDebug("ui_tap_fail:" + safeMsg(t));
                         try {
-                            fillMenuFallback(activity, menuHost);
+                            menuHost.removeAllViews();
+                            fillMenuNative(activity, menuHost);
                             menuOpen = true;
                             menuHost.setVisibility(View.VISIBLE);
                         } catch (Throwable ignored) {}
@@ -721,61 +731,203 @@ public class HivirtusUiHelper {
                 html = html.replace("<script src=\"app.js\"></script>",
                         "<script>" + js + "</script>");
             }
+            // Madara logo in header (embedded)
+            try {
+                byte[] png = LogoAsset.png();
+                if (png != null) {
+                    String b64 = android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP);
+                    String img = "<img class=\"mark-img\" alt=\"logo\" src=\"data:image/png;base64," + b64 + "\" />";
+                    html = html.replace("<span class=\"mark\" id=\"brandMark\">V</span>", img);
+                    html = html.replace("<span class=\"mark\">V</span>", img);
+                }
+            } catch (Throwable ignored) {}
             web.loadDataWithBaseURL("file://" + base, html, "text/html", "utf-8", null);
             addCenteredChild(menuHost, web);
             writeDebug("ui_webview_ok_centered");
             return;
         }
 
-        web.loadDataWithBaseURL(null, EMBEDDED_MENU_HTML, "text/html", "utf-8", null);
+        // Full purple Virtus embedded HTML if files missing
+        String embedded = EMBEDDED_MENU_HTML;
+        try {
+            byte[] png = LogoAsset.png();
+            if (png != null) {
+                String b64 = android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP);
+                String img = "<img class=mark-img alt=logo src=\"data:image/png;base64," + b64 + "\" />";
+                embedded = embedded.replace("<span class=mark>V</span>", img);
+            }
+        } catch (Throwable ignored) {}
+        web.loadDataWithBaseURL(null, embedded, "text/html", "utf-8", null);
         addCenteredChild(menuHost, web);
         writeDebug("ui_webview_ok_embedded_centered");
     }
 
-    /** Native menu — WebView crash pe bhi test possible */
+    private static GradientDrawable roundBg(int color, float radiusPx) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(radiusPx);
+        return g;
+    }
+
+    /** Purple Virtus-style native fallback (same look as HTML) */
     private static void fillMenuNative(final Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         try {
-            float d = activity.getResources().getDisplayMetrics().density;
-            ScrollView scroll = new ScrollView(activity);
-            scroll.setBackgroundColor(0xFF090B12);
-            LinearLayout col = new LinearLayout(activity);
-            col.setOrientation(LinearLayout.VERTICAL);
-            int pad = (int) (20 * d);
-            col.setPadding(pad, pad, pad, pad);
+            final float d = activity.getResources().getDisplayMetrics().density;
+            int pad = (int) (14 * d);
+            int gap = (int) (10 * d);
 
-            TextView title = new TextView(activity);
-            title.setText("Virtus Zygisk Mode");
-            title.setTextColor(0xFFFFD700);
-            title.setTextSize(20f);
-            title.setPadding(0, 0, 0, pad);
-            col.addView(title);
+            LinearLayout shell = new LinearLayout(activity);
+            shell.setOrientation(LinearLayout.VERTICAL);
+            shell.setPadding(pad, pad, pad, pad);
+            shell.setBackground(roundBg(0xFF090B12, 18 * d));
 
+            // Header
+            LinearLayout header = new LinearLayout(activity);
+            header.setOrientation(LinearLayout.HORIZONTAL);
+            header.setGravity(Gravity.CENTER_VERTICAL);
+
+            ImageView logo = new ImageView(activity);
+            int logoSz = (int) (40 * d);
+            Bitmap bmp = loadLogoBitmap();
+            if (bmp != null) logo.setImageBitmap(bmp);
+            logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try {
+                logo.setClipToOutline(true);
+                logo.setBackground(roundBg(0xFF1A237E, logoSz));
+                logo.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                    @Override
+                    public void getOutline(View view, android.graphics.Outline outline) {
+                        outline.setOval(0, 0, view.getWidth(), view.getHeight());
+                    }
+                });
+            } catch (Throwable ignored) {}
+            LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSz, logoSz);
+            logoLp.rightMargin = (int) (12 * d);
+            header.addView(logo, logoLp);
+
+            LinearLayout titles = new LinearLayout(activity);
+            titles.setOrientation(LinearLayout.VERTICAL);
+            TextView name = new TextView(activity);
+            name.setText("Virtus");
+            name.setTextColor(Color.WHITE);
+            name.setTextSize(18f);
+            name.getPaint().setFakeBoldText(true);
             TextView sub = new TextView(activity);
-            sub.setText("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\nTap V / outside to close.");
-            sub.setTextColor(0xFFB8A882);
-            sub.setTextSize(13f);
-            col.addView(sub);
+            sub.setText("Intercept + spoof ready");
+            sub.setTextColor(0xFF00C896);
+            sub.setTextSize(12f);
+            titles.addView(name);
+            titles.addView(sub);
+            header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1f));
 
-            final Switch swIntercept = new Switch(activity);
-            swIntercept.setText("SMS Intercept + Fake Success");
-            swIntercept.setTextColor(Color.WHITE);
-            swIntercept.setChecked(true);
-            col.addView(swIntercept);
+            TextView close = new TextView(activity);
+            close.setText("✕");
+            close.setTextColor(0xFF4A5068);
+            close.setTextSize(16f);
+            close.setPadding((int) (10 * d), (int) (8 * d), (int) (10 * d), (int) (8 * d));
+            close.setBackground(roundBg(0xFF13151F, 12 * d));
+            close.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    menuOpen = false;
+                    menuHost.setVisibility(View.GONE);
+                }
+            });
+            header.addView(close);
+            shell.addView(header);
 
+            // Tabs row (visual)
+            LinearLayout tabs = new LinearLayout(activity);
+            tabs.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams tabsLp = new LinearLayout.LayoutParams(-1, -2);
+            tabsLp.topMargin = (int) (14 * d);
+            tabsLp.bottomMargin = gap;
+            String[] tabNames = {"Basic", "Advanced", "Telegram"};
+            for (int i = 0; i < tabNames.length; i++) {
+                TextView tab = new TextView(activity);
+                tab.setText(tabNames[i]);
+                tab.setGravity(Gravity.CENTER);
+                tab.setTextSize(12f);
+                tab.getPaint().setFakeBoldText(true);
+                tab.setPadding(0, (int) (10 * d), 0, (int) (10 * d));
+                if (i == 0) {
+                    tab.setTextColor(Color.WHITE);
+                    tab.setBackground(roundBg(0xFF6C63FF, 12 * d));
+                } else {
+                    tab.setTextColor(0xFF4A5068);
+                    tab.setBackground(roundBg(0x00000000, 12 * d));
+                }
+                LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+                tlp.rightMargin = i < 2 ? (int) (6 * d) : 0;
+                tabs.addView(tab, tlp);
+            }
+            shell.addView(tabs, tabsLp);
+
+            ScrollView scroll = new ScrollView(activity);
+            LinearLayout cards = new LinearLayout(activity);
+            cards.setOrientation(LinearLayout.VERTICAL);
+
+            // Card: Fake phone
+            LinearLayout card1 = new LinearLayout(activity);
+            card1.setOrientation(LinearLayout.VERTICAL);
+            card1.setPadding(pad, pad, pad, pad);
+            card1.setBackground(roundBg(0xFF13151F, 14 * d));
+            LinearLayout row1 = new LinearLayout(activity);
+            row1.setOrientation(LinearLayout.HORIZONTAL);
+            row1.setGravity(Gravity.CENTER_VERTICAL);
+            TextView c1t = new TextView(activity);
+            c1t.setText("📱  Fake Phone Number\nOverride number shown to apps");
+            c1t.setTextColor(Color.WHITE);
+            c1t.setTextSize(13f);
             final Switch swFake = new Switch(activity);
-            swFake.setText("Fake Phone Number");
-            swFake.setTextColor(Color.WHITE);
-            col.addView(swFake);
-
+            try { swFake.setChecked(false); } catch (Throwable ignored) {}
+            row1.addView(c1t, new LinearLayout.LayoutParams(0, -2, 1f));
+            row1.addView(swFake);
+            card1.addView(row1);
             final EditText etPhone = new EditText(activity);
-            etPhone.setHint("+91XXXXXXXXXX");
+            etPhone.setHint("+91 XXXXX XXXXX");
             etPhone.setTextColor(Color.WHITE);
-            etPhone.setHintTextColor(0xFF888888);
-            col.addView(etPhone);
+            etPhone.setHintTextColor(0xFF4A5068);
+            etPhone.setBackground(roundBg(0xFF090B12, 10 * d));
+            etPhone.setPadding(pad, pad, pad, pad);
+            LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(-1, -2);
+            etLp.topMargin = gap;
+            card1.addView(etPhone, etLp);
+            cards.addView(card1);
+
+            // Card: SMS intercept
+            LinearLayout card2 = new LinearLayout(activity);
+            card2.setOrientation(LinearLayout.VERTICAL);
+            card2.setPadding(pad, pad, pad, pad);
+            card2.setBackground(roundBg(0xFF13151F, 14 * d));
+            LinearLayout.LayoutParams c2lp = new LinearLayout.LayoutParams(-1, -2);
+            c2lp.topMargin = gap;
+            LinearLayout row2 = new LinearLayout(activity);
+            row2.setOrientation(LinearLayout.HORIZONTAL);
+            row2.setGravity(Gravity.CENTER_VERTICAL);
+            TextView c2t = new TextView(activity);
+            c2t.setText("✉️  SMS Intercept + Fake Success\nBlock OTP SMS & fake success");
+            c2t.setTextColor(Color.WHITE);
+            c2t.setTextSize(13f);
+            final Switch swIntercept = new Switch(activity);
+            try { swIntercept.setChecked(true); } catch (Throwable ignored) {}
+            row2.addView(c2t, new LinearLayout.LayoutParams(0, -2, 1f));
+            row2.addView(swIntercept);
+            card2.addView(row2);
+            cards.addView(card2, c2lp);
+
+            scroll.addView(cards);
+            LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(-1, 0, 1f);
+            shell.addView(scroll, scrollLp);
 
             Button save = new Button(activity);
-            save.setText("Save");
+            save.setText("Save Settings");
+            save.setAllCaps(false);
+            save.setTextColor(Color.WHITE);
+            save.setBackground(roundBg(0xFF6C63FF, 14 * d));
+            LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(-1, (int) (48 * d));
+            saveLp.topMargin = (int) (12 * d);
             save.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -797,10 +949,18 @@ public class HivirtusUiHelper {
                     }
                 }
             });
-            col.addView(save);
+            shell.addView(save, saveLp);
 
-            scroll.addView(col);
-            addCenteredChild(menuHost, scroll);
+            TextView credit = new TextView(activity);
+            credit.setText("Virtus Zygisk Mode — @Hivirtus 🔥 Zygisk");
+            credit.setTextColor(0xFF4A5068);
+            credit.setTextSize(11f);
+            credit.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(-1, -2);
+            crLp.topMargin = (int) (8 * d);
+            shell.addView(credit, crLp);
+
+            addCenteredChild(menuHost, shell);
             writeDebug("ui_native_menu_ok_centered");
         } catch (Throwable t) {
             fillMenuFallback(activity, menuHost);
@@ -810,11 +970,11 @@ public class HivirtusUiHelper {
     private static void fillMenuFallback(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         TextView tv = new TextView(activity);
-        tv.setText("Virtus Zygisk Mode\n\nTap V / outside to close.\nSDK " + Build.VERSION.SDK_INT);
+        tv.setText("Virtus Zygisk Mode\n\nTap logo / outside to close.\n@Hivirtus");
         tv.setTextColor(Color.WHITE);
         tv.setTextSize(16f);
         tv.setPadding(48, 48, 48, 48);
-        tv.setBackgroundColor(0xFF090B12);
+        tv.setBackground(roundBg(0xFF090B12, 18));
         addCenteredChild(menuHost, tv);
         writeDebug("ui_fallback_menu_centered");
     }
@@ -822,24 +982,42 @@ public class HivirtusUiHelper {
     private static final String EMBEDDED_MENU_HTML =
             "<!DOCTYPE html><html><head><meta charset=utf-8>"
             + "<meta name=viewport content='width=device-width,initial-scale=1'>"
-            + "<style>body{margin:0;background:#090B12;color:#fff;font-family:sans-serif;padding:20px}"
-            + "h1{color:#FFD700;font-size:22px}label{display:block;margin:14px 0}"
-            + "input,button{width:100%;padding:12px;margin-top:6px;border-radius:8px;border:0}"
-            + "button{background:#FFD700;color:#111;font-weight:700}</style></head><body>"
-            + "<h1>Virtus Zygisk Mode</h1><p id=s>Loading…</p>"
-            + "<label><input type=checkbox id=swI checked> SMS Intercept + Fake Success</label>"
-            + "<label><input type=checkbox id=swF> Fake Phone Number</label>"
-            + "<input id=phone placeholder='+91XXXXXXXXXX'>"
-            + "<button id=save>Save</button>"
-            + "<script>(function(){var H=window.Hivirtus;var s=document.getElementById('s');"
-            + "try{s.textContent=H?'Bridge OK — ready to test':'Bridge missing — still OK';}catch(e){s.textContent='OK'};"
+            + "<style>"
+            + "*{box-sizing:border-box;margin:0;padding:0}"
+            + "body{height:100%;background:#090b12;color:#eaeaea;font-family:sans-serif;padding:14px}"
+            + ".shell{height:100%;display:flex;flex-direction:column}"
+            + ".top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}"
+            + ".name{font-weight:700;font-size:18px}.sub{color:#00c896;font-size:12px}"
+            + ".brand{display:flex;gap:12px;align-items:center}"
+            + ".mark,.mark-img{width:40px;height:40px;border-radius:50%;object-fit:cover;display:grid;place-items:center;"
+            + "background:linear-gradient(145deg,#5c6bc0,#1a237e);color:#fff;font-weight:700;box-shadow:0 8px 20px rgba(108,99,255,.4)}"
+            + ".tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}"
+            + ".tab{padding:10px;border-radius:12px;border:1px solid #1c1f2e;background:transparent;color:#4a5068;font-weight:600}"
+            + ".tab.on{background:#6c63ff;border-color:#6c63ff;color:#fff}"
+            + ".card{background:#13151f;border-radius:14px;padding:14px;margin-bottom:10px}"
+            + "h3{font-size:14px;margin-bottom:4px}p{color:#4a5068;font-size:12px}"
+            + "input[type=text],input[type=tel]{width:100%;margin-top:10px;padding:12px;border-radius:10px;border:0;background:#090b12;color:#fff}"
+            + ".row{display:flex;align-items:center;justify-content:space-between;gap:10px}"
+            + ".primary{margin-top:auto;width:100%;padding:14px;border:0;border-radius:14px;background:#6c63ff;color:#fff;font-weight:700}"
+            + ".credit{display:block;text-align:center;margin-top:8px;color:#4a5068;font-size:11px}"
+            + "</style></head><body><div class=shell>"
+            + "<div class=top><div class=brand><span class=mark>V</span>"
+            + "<div><div class=name>Virtus</div><div class=sub>Intercept + spoof ready</div></div></div></div>"
+            + "<div class=tabs><button class='tab on'>Basic</button><button class=tab>Advanced</button><button class=tab>Telegram</button></div>"
+            + "<div class=card><div class=row><div><h3>Fake Phone Number</h3><p>Override number shown to apps</p></div>"
+            + "<input type=checkbox id=swF></div><input type=tel id=phone placeholder='+91 XXXXX XXXXX'></div>"
+            + "<div class=card><div class=row><div><h3>SMS Intercept + Fake Success</h3><p>Block OTP SMS & fake success</p></div>"
+            + "<input type=checkbox id=swI checked></div></div>"
+            + "<button class=primary id=save>Save Settings</button>"
+            + "<span class=credit>Virtus Zygisk Mode — @Hivirtus 🔥 Zygisk</span></div>"
+            + "<script>(function(){var H=window.Hivirtus;"
             + "document.getElementById('save').onclick=function(){var j=JSON.stringify({"
             + "hook_outgoing_sms:document.getElementById('swI').checked,"
             + "intercept_fake_success:document.getElementById('swI').checked,"
             + "enable_sim1_mock:document.getElementById('swF').checked,"
             + "enable_phone_spoof:document.getElementById('swF').checked,"
             + "mock_phone_sim1:document.getElementById('phone').value||''});"
-            + "try{if(H)H.saveConfig(j);s.textContent='Saved';}catch(e){s.textContent='Save fail'};};})();</script>"
+            + "try{if(H)H.saveConfig(j);}catch(e){}};})();</script>"
             + "</body></html>";
 
     private static String safeMsg(Throwable t) {
@@ -851,7 +1029,7 @@ public class HivirtusUiHelper {
         if (msg == null) return;
         if (!(msg.startsWith("ui_bubble_ok") || msg.startsWith("ui_tap") || msg.startsWith("ui_menu")
                 || msg.startsWith("ui_logo") || msg.startsWith("ui_env") || msg.startsWith("ui_fail")
-                || msg.startsWith("ui_add") || msg.startsWith("ui_native"))) {
+                || msg.startsWith("ui_add") || msg.startsWith("ui_native") || msg.startsWith("ui_webview"))) {
             return;
         }
         try {
