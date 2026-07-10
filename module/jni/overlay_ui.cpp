@@ -1136,13 +1136,92 @@ void schedule_plt_hooks() {
     pthread_detach(t);
 }
 
+jobject load_bridge_class(JNIEnv* env, jobject activity, const char* class_name) {
+    const char* dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+    if (access(dex_path, R_OK) != 0 || !activity) return nullptr;
+    jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
+    if (!dex_cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    jmethodID dex_ctor = env->GetMethodID(dex_cls, "<init>",
+                                          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+                                          "Ljava/lang/ClassLoader;)V");
+    jstring dex_j = env->NewStringUTF(dex_path);
+    jstring opt_j = env->NewStringUTF("/data/local/tmp");
+    jobject parent_loader = env->CallObjectMethod(
+        activity, env->GetMethodID(env->GetObjectClass(activity), "getClassLoader", "()Ljava/lang/ClassLoader;"));
+    jobject dex_loader = env->NewObject(dex_cls, dex_ctor, dex_j, opt_j, nullptr, parent_loader);
+    if (!dex_loader || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    jclass loader_cls = env->FindClass("java/lang/ClassLoader");
+    jstring name = env->NewStringUTF(class_name);
+    jobject cls = env->CallObjectMethod(
+        dex_loader, env->GetMethodID(loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;"), name);
+    if (!cls || env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    return cls;
+}
+
+bool force_java_bubble(JNIEnv* env) {
+    jobject activity = get_top_resumed_activity(env);
+    if (!activity) {
+        // Fallback: Application context poll
+        jclass at = env->FindClass("android/app/ActivityThread");
+        if (!at) return false;
+        jmethodID cur = env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;");
+        jobject app = cur ? env->CallStaticObjectMethod(at, cur) : nullptr;
+        if (!app || env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return false;
+        }
+        jclass helper = (jclass)load_bridge_class(env, app, "com.hivirtus.zygisk.HivirtusUiHelper");
+        if (!helper) return false;
+        jmethodID poll = env->GetStaticMethodID(helper, "poll", "(Landroid/content/Context;)V");
+        if (!poll) return false;
+        env->CallStaticVoidMethod(helper, poll, app);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return false;
+        }
+        debug_marker("ui_helper_poll_called");
+        return true;
+    }
+
+    jclass helper = (jclass)load_bridge_class(env, activity, "com.hivirtus.zygisk.HivirtusUiHelper");
+    if (!helper) {
+        env->DeleteLocalRef(activity);
+        return false;
+    }
+    jmethodID schedule = env->GetStaticMethodID(helper, "schedule", "(Landroid/app/Activity;)V");
+    if (!schedule) {
+        env->DeleteLocalRef(activity);
+        return false;
+    }
+    env->CallStaticVoidMethod(helper, schedule, activity);
+    const bool ok = !env->ExceptionCheck();
+    if (!ok) env->ExceptionClear();
+    else debug_marker("ui_helper_schedule_called");
+    env->DeleteLocalRef(activity);
+    return ok;
+}
+
 void* overlay_keepalive_worker(void*) {
     JNIEnv* env = nullptr;
     if (!g_vm || g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return nullptr;
-    for (int i = 0; i < 1200; ++i) {
+    for (int i = 0; i < 120; ++i) {  // ~60s
         usleep(500000);
-        // Sirf PLT hooks retry — UI attach main thread (onResume) se hota hai
         try_install_activity_hooks();
+        // Android 14+: PLT Activity hooks missing — Java helper force bubble
+        if (!g_overlay_attached && !g_bubble_view) {
+            force_java_bubble(env);
+        } else if (i % 4 == 0) {
+            force_java_bubble(env);  // re-assert if activity recreated
+        }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     g_vm->DetachCurrentThread();

@@ -82,9 +82,9 @@ fi
 
 build_bridge_dex() {
   local jar="${ANDROID_JAR:-$ROOT_DIR/.ndk/android.jar}"
-  local src="$MODULE_DIR/bridge/HivirtusJsBridge.java"
+  local src_dir="$MODULE_DIR/bridge"
   local out="$ROOT_DIR/build/bridge"
-  [ -f "$src" ] || return 0
+  [ -f "$src_dir/HivirtusJsBridge.java" ] || return 0
 
   if [ ! -f "$jar" ]; then
     mkdir -p "$ROOT_DIR/.ndk"
@@ -102,23 +102,27 @@ build_bridge_dex() {
   command -v javac >/dev/null 2>&1 || { echo "==> WARNING: javac missing — bridge.dex skip"; return 0; }
 
   mkdir -p "$out"
-  javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" "$src" 2>/dev/null || return 0
+  javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" \
+    "$src_dir/HivirtusJsBridge.java" "$src_dir/HivirtusUiHelper.java" || return 0
+
+  local classes=()
+  while IFS= read -r -d '' f; do classes+=("$f"); done < <(find "$out" -name '*.class' -print0)
+  [ ${#classes[@]} -gt 0 ] || return 0
 
   if command -v d8 >/dev/null 2>&1; then
-    d8 --output "$ROOT_DIR/build" "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+    d8 --output "$ROOT_DIR/build" "${classes[@]}"
   elif [ -x "${ANDROID_SDK_ROOT:-$ROOT_DIR/.android/sdk}/build-tools/34.0.0/d8" ]; then
-    "${ANDROID_SDK_ROOT:-$ROOT_DIR/.android/sdk}/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" \
-      "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+    "${ANDROID_SDK_ROOT:-$ROOT_DIR/.android/sdk}/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" "${classes[@]}"
   elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/build-tools/34.0.0/d8" ]; then
-    "$ANDROID_HOME/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" "$out/com/hivirtus/zygisk/HivirtusJsBridge.class"
+    "$ANDROID_HOME/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" "${classes[@]}"
   else
-    echo "==> WARNING: d8 missing — bridge.dex skip (HTML read-only)"
+    echo "==> WARNING: d8 missing — bridge.dex skip"
     return 0
   fi
   if [ -f "$ROOT_DIR/build/classes.dex" ]; then
     mv -f "$ROOT_DIR/build/classes.dex" "$ROOT_DIR/build/bridge.dex"
   fi
-  echo "==> Built bridge.dex (WebView JS bridge)"
+  echo "==> Built bridge.dex (JS bridge + UiHelper force-bubble)"
 }
 build_bridge_dex
 if [ -f "$ROOT_DIR/build/bridge.dex" ]; then

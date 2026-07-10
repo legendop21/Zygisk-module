@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.1
-versionCode=10001
+version=v1.0.2
+versionCode=10002
 author=@hivirtus
-description=SAFE fix: no phone/SIM hooks. UPI-only inject + floating bubble. No crash. 32+64.
+description=Force bubble via Java helper (Android 14). Safe UPI-only. No phone/SIM crash. 32+64.
 zygisk=1

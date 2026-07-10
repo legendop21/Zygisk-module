@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "        v1.0.1 SAFE              "
+ui_print "        v1.0.2                  "
 ui_print "  Floating menu · SMS intercept "
 ui_print "  No LSPosed · 32+64 Zygisk     "
 ui_print "  @Hivirtus                     "
