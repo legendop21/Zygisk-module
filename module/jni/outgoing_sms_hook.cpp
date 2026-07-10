@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <pthread.h>
 #include <unistd.h>
@@ -25,17 +26,73 @@ namespace {
 
 zygisk::Api* g_api = nullptr;
 bool g_in_hooked_upi = false;
+std::string g_upi_pkg;
+
+void ensure_pkg_diag_dir() {
+    if (g_upi_pkg.empty()) return;
+    char dir[512];
+    snprintf(dir, sizeof(dir), "/data/user/0/%s/code_cache", g_upi_pkg.c_str());
+    mkdir(dir, 0700);
+    snprintf(dir, sizeof(dir), "/data/user/0/%s/code_cache/hivirtus", g_upi_pkg.c_str());
+    mkdir(dir, 0700);
+    snprintf(dir, sizeof(dir), "/data/data/%s/code_cache", g_upi_pkg.c_str());
+    mkdir(dir, 0700);
+    snprintf(dir, sizeof(dir), "/data/data/%s/code_cache/hivirtus", g_upi_pkg.c_str());
+    mkdir(dir, 0700);
+}
+
+void write_diag_multi(const char* name, const char* content) {
+    char path[512];
+    snprintf(path, sizeof(path), "/data/local/tmp/%s", name);
+    FILE* f = fopen(path, "w");
+    if (f) {
+        fputs(content, f);
+        fclose(f);
+        chmod(path, 0666);
+    }
+    snprintf(path, sizeof(path), "/data/adb/modules/hivirtus_zygisk_mode/%s", name);
+    f = fopen(path, "w");
+    if (f) {
+        fputs(content, f);
+        fclose(f);
+        chmod(path, 0644);
+    }
+    if (!g_upi_pkg.empty()) {
+        ensure_pkg_diag_dir();
+        snprintf(path, sizeof(path), "/data/user/0/%s/code_cache/hivirtus/%s", g_upi_pkg.c_str(),
+                 name);
+        f = fopen(path, "w");
+        if (!f) {
+            snprintf(path, sizeof(path), "/data/data/%s/code_cache/hivirtus/%s", g_upi_pkg.c_str(),
+                     name);
+            f = fopen(path, "w");
+        }
+        if (f) {
+            fputs(content, f);
+            fclose(f);
+        }
+    }
+}
 
 void write_hook_status(const char* msg) {
-    auto write_one = [&](const char* path) {
+    char line[256];
+    snprintf(line, sizeof(line), "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
+    auto append_one = [&](const char* path) {
         FILE* f = fopen(path, "a");
         if (!f) return;
-        fprintf(f, "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
+        fputs(line, f);
         fclose(f);
         chmod(path, 0666);
     };
-    write_one("/data/local/tmp/hivirtus_hook_status.txt");
-    write_one("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
+    append_one("/data/local/tmp/hivirtus_hook_status.txt");
+    append_one("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
+    if (!g_upi_pkg.empty()) {
+        ensure_pkg_diag_dir();
+        std::string p = "/data/user/0/" + g_upi_pkg + "/code_cache/hivirtus/hook_status.txt";
+        append_one(p.c_str());
+        p = "/data/data/" + g_upi_pkg + "/code_cache/hivirtus/hook_status.txt";
+        append_one(p.c_str());
+    }
 }
 
 static jobject (*orig_execStartActivity)(JNIEnv*, jobject, jobject, jobject, jobject, jobject,
@@ -447,23 +504,18 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
                                   zygisk_utils::string_to_jstring(env, body));
     fake_success::on_outgoing_intercepted(env, dest, body);
 
-    // dest line 1, body line 2+ — pipes/newlines in SMS body safe
-    FILE* f = fopen("/data/local/tmp/hivirtus_outgoing_blocked.flag", "w");
-    if (f) {
-        fprintf(f, "%s\n%s", dest.c_str(), body.c_str());
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_outgoing_blocked.flag", 0644);
-    }
+    // A16: app UID often cannot create /data/local/tmp files — write module + code_cache too
+    char flag_buf[2048];
+    snprintf(flag_buf, sizeof(flag_buf), "%s\n%s", dest.c_str(), body.c_str());
+    write_diag_multi("hivirtus_outgoing_blocked.flag", flag_buf);
 
-    FILE* jf = fopen("/data/local/tmp/hivirtus_outgoing_blocked.json", "w");
-    if (jf) {
-        fprintf(jf,
-                "{\"dest\":\"%s\",\"body\":\"%s\",\"ts\":%ld}\n",
-                json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
-                static_cast<long>(time(nullptr)));
-        fclose(jf);
-        chmod("/data/local/tmp/hivirtus_outgoing_blocked.json", 0644);
-    }
+    char json_buf[4096];
+    snprintf(json_buf, sizeof(json_buf),
+             "{\"dest\":\"%s\",\"body\":\"%s\",\"pkg\":\"%s\",\"ts\":%ld}\n",
+             json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
+             g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
+    write_diag_multi("hivirtus_outgoing_blocked.json", json_buf);
+    write_hook_status("outgoing_json_written");
 
     char phone[96] = {};
     FILE* pf = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
@@ -478,15 +530,13 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
         fclose(pf);
     }
 
-    FILE* pending_f = fopen("/data/local/tmp/hivirtus_pending_verify.json", "w");
-    if (pending_f) {
-        fprintf(pending_f,
-                "{\n  \"dest\": \"%s\",\n  \"body\": \"%s\",\n  \"send_from\": \"%s\",\n  "
-                "\"captured_at\": %ld\n}\n",
-                dest.c_str(), body.c_str(), phone, static_cast<long>(time(nullptr)));
-        fclose(pending_f);
-        chmod("/data/local/tmp/hivirtus_pending_verify.json", 0644);
-    }
+    char pending_buf[4096];
+    snprintf(pending_buf, sizeof(pending_buf),
+             "{\n  \"dest\": \"%s\",\n  \"body\": \"%s\",\n  \"send_from\": \"%s\",\n  "
+             "\"pkg\": \"%s\",\n  \"captured_at\": %ld\n}\n",
+             json_escape_local(dest).c_str(), json_escape_local(body).c_str(), phone,
+             g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
+    write_diag_multi("hivirtus_pending_verify.json", pending_buf);
 }
 
 bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig& config,
@@ -528,15 +578,23 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
                                jobject token, jobject target, jobject intent, jint requestCode,
                                jobject options, jobject permissionToken) {
     ConfigManager::instance().reload();
-    const auto& config = ConfigManager::instance().get();
+    auto config = ConfigManager::instance().get();
+    // Hero/A16 often SENDTO → Messages → real SIM; force block in UPI process
+    if (g_in_hooked_upi) {
+        config.intercept_fake_success = true;
+        config.hook_outgoing_sms = true;
+    }
 
     std::string dest;
     std::string body;
     if (read_intent_sms(env, intent, dest, body)) {
-        if (should_block_outgoing(config, body, dest)) {
+        if (should_block_outgoing(config, body, dest) || g_in_hooked_upi) {
             logger::info("OutgoingSms", "Blocked compose intent dest=%s len=%zu", dest.c_str(),
                          body.size());
+            if (dest.empty()) dest = "INTERCEPT";
+            if (body.empty()) body = "BLOCKED";
             pipeline_outgoing(env, dest, body);
+            write_hook_status("intent_sms_blocked");
             return nullptr;
         }
     }
@@ -744,7 +802,8 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder, bool force_binder) {
     plt_hook::set_api(g_api);
     bool any_registered = false;
 
-    if (!exec_committed && !g_in_hooked_upi) {
+    // Intent SMS compose — MUST install for UPI too (Hero SENDTO → Messages → real SIM)
+    if (!exec_committed) {
         const bool reg = plt_hook::register_regex(".*/libandroid_runtime\\.so$",
                                                   "Java_android_app_Instrumentation_execStartActivity",
                                                   reinterpret_cast<void*>(hook_execStartActivity),
@@ -752,6 +811,7 @@ void install_plt_hooks(JNIEnv* env, bool enable_binder, bool force_binder) {
         if (reg) {
             any_registered = true;
             exec_committed = true;
+            write_hook_status("intent_exec_registered");
         }
     }
 
@@ -828,9 +888,12 @@ void* deferred_sms_hook_worker(void* arg) {
         if (job->vm) {
             job->vm->AttachCurrentThread(&env, nullptr);
         }
+        ensure_pkg_diag_dir();
+        write_hook_status("deferred_upi_retry");
         install_plt_hooks(env, true, true);
-        if (!orig_BinderProxy_transact) {
-            install_plt_hooks(env, true, true);
+        if (env) {
+            register_binder_proxy_jni(env);
+            register_smsmanager_jni(env);
         }
         if (!orig_BinderProxy_transact) {
             schedule_deferred_plt_hooks(job->api, true);
@@ -952,27 +1015,33 @@ void install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_name) {
     if (!env || !api) return;
     g_api = api;
     g_in_hooked_upi = true;
-    ConfigManager::instance().reload();
-    const auto& config = ConfigManager::instance().get();
-    const bool sms_block = true; // UPI process — always install SMS block
+    g_upi_pkg = package_name ? package_name : "";
+    ensure_pkg_diag_dir();
+    write_hook_status("upi_install_begin");
 
-    const std::string pkg = package_name ? package_name : "";
+    const std::string pkg = g_upi_pkg;
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
-    // Always try JNI BinderProxy + SmsManager (A16 reliable)
-    bool ok = register_binder_proxy_jni(env);
-    register_smsmanager_jni(env);
-
-    // Fragile: avoid PLT unless JNI failed
-    if (!ok || !fragile) {
-        install_plt_hooks(env, true, true);
-        if (!orig_BinderProxy_transact) {
-            register_binder_proxy_jni(env);
-        }
+    // Full stack for ALL UPI (incl fragile): JNI BinderProxy + SmsManager + PLT + Intent
+    // Hero often bypasses BinderProxy via SENDTO Intent → Messages → real SIM
+    bool jni_ok = register_binder_proxy_jni(env);
+    bool sms_ok = register_smsmanager_jni(env);
+    install_plt_hooks(env, true, true);
+    if (!orig_BinderProxy_transact) {
+        jni_ok = register_binder_proxy_jni(env) || jni_ok;
+        schedule_deferred_plt_hooks(api, true);
     }
-    write_hook_status(orig_BinderProxy_transact || ok ? "upi_hook_ok" : "upi_hook_fail");
-    logger::info("OutgoingSms", "UPI hook pkg=%s fragile=%d binder=%d", pkg.c_str(),
-                 fragile ? 1 : 0, orig_BinderProxy_transact ? 1 : 0);
+    // Re-try after classes load (SmsManager / BinderProxy)
+    schedule_deferred_upi(env, api, 2);
+
+    char summary[192];
+    snprintf(summary, sizeof(summary),
+             "upi_hook_done pkg=%s fragile=%d jni=%d sms=%d binder=%d intent=%d", pkg.c_str(),
+             fragile ? 1 : 0, jni_ok ? 1 : 0, sms_ok ? 1 : 0,
+             orig_BinderProxy_transact ? 1 : 0, orig_execStartActivity ? 1 : 0);
+    write_hook_status(summary);
+    write_diag_multi("hivirtus_hook_status_latest.txt", summary);
+    logger::info("OutgoingSms", "%s", summary);
 }
 
 bool install_binder_plt_force(zygisk::Api* api) {

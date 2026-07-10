@@ -263,11 +263,11 @@ public:
 
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
+        // Registry already filtered sms_hook_target above. Do NOT skip on config —
+        // A16 often cannot read config → is_upi_app_hooked false → empty hook_status.
         if (!config.is_upi_app_hooked(pkg_)) {
             append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("skip_config_off:" + pkg_).c_str());
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
+                        ("warn_config_off_force:" + pkg_).c_str());
         }
 
         logger::init(config.log_file);
@@ -277,38 +277,46 @@ public:
         ConfigManager::instance().reload();
         const auto& live = ConfigManager::instance().get();
 
-        const bool sms_block = live.hook_outgoing_sms || live.intercept_fake_success;
         const bool phone_spoof = live.virtual_sim_active() || live.enable_phone_spoof ||
                                  live.enable_sim1_mock;
         const bool want_sender = sender_spoof_wanted(live);
         const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
         const bool yespay = is_yespay(pkg_);
 
-        // Overlay FIRST — SMS PLT crash se pehle bubble schedule
-        if (native_overlay_wanted()) {
-            const int ov = yespay ? 2 : (fragile ? 2 : 1);
-            schedule_overlay_ui(env_, api_, pkg_, ov);
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("overlay_sched:" + pkg_ + " d=" + std::to_string(ov)).c_str());
-        }
-
-        // Zygisk Api valid ONLY during postSpecialize. Deferred api hooks = no-op.
-        if (sms_block) {
-            outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("isms_now:" + pkg_).c_str());
+        // ALWAYS install SMS hooks for UPI targets — config unread on A16 pe skip mat karo
+        outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+        // Status app-writable path pe (tmp A16 pe fail)
+        {
+            std::string base = "/data/user/0/" + pkg_ + "/code_cache/hivirtus";
+            mkdir(("/data/user/0/" + pkg_ + "/code_cache").c_str(), 0700);
+            mkdir(base.c_str(), 0700);
+            std::string st = base + "/post_hooks.txt";
+            FILE* sf = fopen(st.c_str(), "w");
+            if (!sf) {
+                base = "/data/data/" + pkg_ + "/code_cache/hivirtus";
+                mkdir(("/data/data/" + pkg_ + "/code_cache").c_str(), 0700);
+                mkdir(base.c_str(), 0700);
+                st = base + "/post_hooks.txt";
+                sf = fopen(st.c_str(), "w");
+            }
+            if (sf) {
+                fprintf(sf, "isms_installed:%s\n", pkg_.c_str());
+                fclose(sf);
+            }
         }
 
         if (phone_spoof) {
             phone_number_hook::install(env_, api_, pkg_.c_str());
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("phone_now:" + pkg_).c_str());
         }
 
         if (want_sender) {
             sender_spoof::install(env_, api_, pkg_.c_str());
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("sender_now:" + pkg_).c_str());
+        }
+
+        // Overlay after hooks so SMS path ready first
+        if (native_overlay_wanted()) {
+            const int ov = yespay ? 2 : (fragile ? 2 : 1);
+            schedule_overlay_ui(env_, api_, pkg_, ov);
         }
 
         touch_heartbeat();
