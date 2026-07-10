@@ -1,14 +1,7 @@
 #include "zygisk.hpp"
 #include "config.hpp"
 #include "logger.hpp"
-#include "sms_hook.hpp"
-#include "inject_sms.hpp"
-#include "root_hide.hpp"
-#include "sim_mock.hpp"
-#include "virtual_sim.hpp"
-#include "upi_hook.hpp"
 #include "outgoing_sms_hook.hpp"
-#include "device_spoof.hpp"
 #include "overlay_ui.hpp"
 #include "upi_registry.hpp"
 #include "sender_spoof.hpp"
@@ -17,7 +10,6 @@
 #include <ctime>
 #include <cstdio>
 #include <cstring>
-#include <fstream>
 #include <string>
 #include <unistd.h>
 #include <pthread.h>
@@ -25,87 +17,47 @@
 
 namespace {
 
-constexpr const char* kTargetPhone = "com.android.phone";
-constexpr const char* kTargetTelephony = "com.android.providers.telephony";
-constexpr const char* kInjectCommandFile = "/data/local/tmp/hivirtus_inject.cmd";
+// v1.0.1 SAFE MODE:
+// - NEVER inject into com.android.phone / telephony / launcher / systemui
+//   (ye SIM gayab + screen flicker + phone apps crash karte the)
+// - Sirf known UPI/banking apps: ISms client block + number spoof + floating bubble
 
-bool is_telephony_process(const char* nice_name) {
-    if (!nice_name) return false;
-    return strcmp(nice_name, kTargetPhone) == 0 ||
-           strcmp(nice_name, kTargetTelephony) == 0;
-}
-
-bool is_messaging_process(const char* nice_name) {
-    if (!nice_name) return false;
-    return strcmp(nice_name, "com.google.android.apps.messaging") == 0 ||
-           strcmp(nice_name, "com.android.mms") == 0 ||
-           strcmp(nice_name, "com.android.mms.service") == 0 ||
-           strcmp(nice_name, "com.samsung.android.messaging") == 0;
-}
-
-bool is_lsposed_stack(const std::string& process) {
-    static const char* kSkipProcesses[] = {
+bool is_dangerous_process(const std::string& process) {
+    if (process.empty()) return true;
+    static const char* kNever[] = {
+        "zygote", "zygote64", "system_server",
+        "com.android.phone",
+        "com.android.providers.telephony",
+        "com.android.systemui",
+        "com.android.settings",
+        "com.android.shell",
+        "com.android.keychain",
+        "com.android.networkstack",
+        "com.android.networkstack.tethering",
+        "com.android.se",
+        "com.android.nfc",
+        "android.ext.services",
         "org.lsposed.manager",
-        "lspd",
-        "lspd64",
-        "zygiskd",
-        "zygiskd64",
-        "zygiskd32",
-        "rezygiskd",
-        "rezygiskd64",
-        nullptr
+        "lspd", "lspd64",
+        "zygiskd", "zygiskd64", "zygiskd32",
+        "rezygiskd", "rezygiskd64",
+        nullptr,
     };
-    for (const char** name = kSkipProcesses; *name; ++name) {
-        if (process == *name) return true;
+    for (const char** p = kNever; *p; ++p) {
+        if (process == *p) return true;
     }
+    if (upi_registry::is_launcher_package(process)) return true;
+    if (process.rfind("com.android.", 0) == 0) return true;
+    if (process.rfind("android.", 0) == 0) return true;
     return false;
 }
 
-void mark_zygisk_native_active() {
+void mark_active() {
     FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
     if (f) {
         fprintf(f, "1\n");
         fclose(f);
         chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0644);
-    }
-}
-
-bool any_hooked_app(const ModuleConfig& config) {
-    for (const auto& [pkg, enabled] : config.hooked_upi_apps) {
-        (void)pkg;
-        if (enabled) return true;
-    }
-    return config.auto_hook_foreground;
-}
-
-bool is_gms_process(const char* nice_name) {
-    if (!nice_name) return false;
-    return strcmp(nice_name, "com.google.android.gms") == 0 ||
-           strcmp(nice_name, "com.google.android.gms.persistent") == 0;
-}
-
-bool framework_sms_active(const ModuleConfig& config) {
-    if (config.virtual_sim_active()) return true;
-    if (!config.inject_sender_id.empty() && config.inject_sender_id != "AD-TEST-S") return true;
-    if (config.hook_outgoing_sms || config.intercept_fake_success) return true;
-    if (!config.hook_incoming_sms && !config.hook_upi_verification) {
-        return false;
-    }
-    return any_hooked_app(config) || config.auto_hook_foreground;
-}
-
-bool sender_spoof_wanted(const ModuleConfig& config) {
-    if (!config.override_incoming_sender) return false;
-    const std::string& id = config.inject_sender_id;
-    return !id.empty() && id != "AD-TEST-S";
-}
-
-void touch_module_heartbeat() {
-    FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
-    if (f) {
-        fprintf(f, "%ld\n", static_cast<long>(time(nullptr)));
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_module_heartbeat.txt", 0644);
     }
 }
 
@@ -117,21 +69,14 @@ void append_diag(const char* path, const char* line) {
     chmod(path, 0644);
 }
 
-void touch_upi_inject(const char* pkg) {
-    if (!pkg || !pkg[0]) return;
-    char buf[256];
-    snprintf(buf, sizeof(buf), "zygisk_inject:%s:%ld", pkg, static_cast<long>(time(nullptr)));
-    append_diag("/data/local/tmp/hivirtus_inject.log", buf);
-    append_diag("/data/local/tmp/hivirtus_overlay.debug", buf);
-}
-
-bool overlay_only_mode() {
-    return access("/data/local/tmp/hivirtus_overlay_only", R_OK) == 0 ||
-           access("/data/local/tmp/hivirtus_safe_mode", R_OK) == 0;
-}
-
 bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_native_overlay", R_OK) != 0;
+}
+
+bool sender_spoof_wanted(const ModuleConfig& config) {
+    if (!config.override_incoming_sender) return false;
+    const std::string& id = config.inject_sender_id;
+    return !id.empty() && id != "AD-TEST-S";
 }
 
 struct DeferredOverlayJob {
@@ -148,7 +93,7 @@ void* deferred_overlay_worker(void* arg) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
             overlay_ui::install(env, job->api, job->pkg);
-            append_diag("/data/local/tmp/hivirtus_overlay.debug", "native_overlay_ready");
+            append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_ok");
             job->vm->DetachCurrentThread();
         }
     }
@@ -170,56 +115,7 @@ void schedule_overlay_ui(JNIEnv* env, zygisk::Api* api, const std::string& pkg, 
     pthread_detach(t);
 }
 
-struct DeferredRootHide {
-    JavaVM* vm = nullptr;
-    ModuleConfig config{};
-    zygisk::Api* api = nullptr;
-};
-
-void* deferred_root_hide_worker(void* arg) {
-    auto* job = static_cast<DeferredRootHide*>(arg);
-    sleep(3);
-    if (job && job->vm && job->api) {
-        JNIEnv* env = nullptr;
-        if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            root_hide::install(env, job->config, job->api);
-            append_diag("/data/local/tmp/hivirtus_overlay.debug", "root_hide_deferred_ok");
-            job->vm->DetachCurrentThread();
-        }
-    }
-    delete job;
-    return nullptr;
-}
-
-void schedule_deferred_root_hide(JNIEnv* env, const ModuleConfig& config, zygisk::Api* api) {
-    if (!config.hide_root && !config.hide_developer) return;
-    JavaVM* vm = nullptr;
-    if (!env || env->GetJavaVM(&vm) != JNI_OK || !vm) return;
-    auto* job = new DeferredRootHide();
-    job->vm = vm;
-    job->config = config;
-    job->api = api;
-    pthread_t t{};
-    pthread_create(&t, nullptr, deferred_root_hide_worker, job);
-    pthread_detach(t);
-}
-
-void process_inject_command(JNIEnv* env) {
-    std::ifstream cmd_file(kInjectCommandFile);
-    if (!cmd_file.is_open()) return;
-
-    std::string line;
-    if (!std::getline(cmd_file, line)) return;
-    if (line.rfind("INJECT|", 0) != 0) return;
-
-    const size_t first_sep = line.find('|', 7);
-    if (first_sep == std::string::npos) return;
-
-    inject_sms::inject_local_sms(env, line.substr(7, first_sep - 7), line.substr(first_sep + 1));
-    unlink(kInjectCommandFile);
-}
-
-class HivirtusModule : public zygisk::ModuleBase {
+class VirtusModule : public zygisk::ModuleBase {
 public:
     void onLoad(zygisk::Api* api, JNIEnv* env) override {
         api_ = api;
@@ -229,210 +125,93 @@ public:
     void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
         const char* process = env_->GetStringUTFChars(args->nice_name, nullptr);
         process_name_ = process ? process : "";
-        is_telephony_ = is_telephony_process(process);
-        is_messaging_ = is_messaging_process(process);
-        is_gms_ = is_gms_process(process);
         env_->ReleaseStringUTFChars(args->nice_name, process);
 
-        is_hooked_upi_ = false;
-
-        // Zygisk Next + APatch: zygote crash avoid — sirf whitelist pe module load rakho
-        if (is_lsposed_stack(process_name_) ||
-            process_name_ == "zygote" || process_name_ == "zygote64" ||
-            !upi_registry::is_whitelisted_hook_process(process_name_)) {
+        // Fast unload — phone/SIM/launcher/system kabhi load mat karo
+        if (is_dangerous_process(process_name_) ||
+            upi_registry::is_module_own_app(process_name_) ||
+            !upi_registry::is_sms_hook_target(process_name_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
-        // Config load postAppSpecialize me — preAppSpecialize me file I/O se zygote crash hota hai
     }
 
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
         (void)args;
-        if (is_lsposed_stack(process_name_)) {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
 
-        if (process_name_ == "zygote" || process_name_ == "zygote64") {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
-
-        if (upi_registry::is_module_own_app(process_name_)) {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
-
-        if (!upi_registry::is_whitelisted_hook_process(process_name_)) {
+        if (is_dangerous_process(process_name_) ||
+            upi_registry::is_module_own_app(process_name_) ||
+            !upi_registry::is_sms_hook_target(process_name_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
-        is_hooked_upi_ = config.is_upi_app_hooked(process_name_);
-        const bool want_sender_spoof = sender_spoof_wanted(config);
-        const bool phone_spoof_wanted = config.virtual_sim_active();
-        const bool sms_block_needed = config.hook_outgoing_sms || config.intercept_fake_success ||
-                                      config.virtual_sim_active();
+        if (!config.is_upi_app_hooked(process_name_)) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
         logger::init(config.log_file);
+        mark_active();
+        append_diag("/data/local/tmp/hivirtus_inject.log",
+                    ("safe_inject:" + process_name_).c_str());
 
-        // Home screen / app drawer — sirf gold V bubble + menu (screenshot wali jagah)
-        if (upi_registry::is_launcher_package(process_name_)) {
-            mark_zygisk_native_active();
-            touch_module_heartbeat();
-            touch_upi_inject(process_name_.c_str());
-            if (native_overlay_wanted()) {
-                schedule_overlay_ui(env_, api_, process_name_, 2);
-                logger::info("Hivirtus", "Launcher floating menu in %s", process_name_.c_str());
-            }
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
+        const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
+        const bool phone_spoof = config.virtual_sim_active();
+        const bool want_sender = sender_spoof_wanted(config);
+        const int delay = upi_registry::hook_startup_delay_sec(process_name_);
+
+        // SMS intercept — sirf UPI app process me BinderProxy client hook
+        // (com.android.phone me NAHI — SIM break hota tha)
+        if (sms_block) {
+            outgoing_sms_hook::install(env_, api_, false, false, true);
+            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, delay > 0 ? delay : 2);
+            logger::info("Virtus", "Safe ISms intercept in %s", process_name_.c_str());
         }
 
-        // Fragile banking — SMS hooks + delayed overlay (crash-safe)
-        if (is_hooked_upi_ && upi_registry::is_fragile_banking_app(process_name_)) {
-            touch_upi_inject(process_name_.c_str());
-            touch_module_heartbeat();
-            mark_zygisk_native_active();
-            const int hook_delay = upi_registry::hook_startup_delay_sec(process_name_);
-            if (sms_block_needed) {
-                virtual_sim::install(env_, api_, process_name_);
-                outgoing_sms_hook::install(env_, api_, false, false, true);
-                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay > 0 ? hook_delay : 2);
-                logger::info("Virtus", "Fragile SMS hooks in %s (delay=%ds)",
-                             process_name_.c_str(), hook_delay > 0 ? hook_delay : 2);
-            }
-            if (phone_spoof_wanted) {
-                phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
-                                                             hook_delay > 0 ? hook_delay : 3);
-            }
-            if (want_sender_spoof) {
-                sender_spoof::install(env_, api_, process_name_.c_str());
-            }
-            if (native_overlay_wanted()) {
-                schedule_overlay_ui(env_, api_, process_name_, hook_delay > 0 ? hook_delay + 1 : 4);
-            }
-            return;
+        // Fake number — sirf is app ke TelephonyManager pe
+        if (phone_spoof) {
+            phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
+                                                         delay > 0 ? delay : 2);
         }
 
-        if (is_gms_ && want_sender_spoof) {
-            sender_spoof::install(env_, api_, "gms");
-            touch_module_heartbeat();
-            return;
-        }
-
-        const bool keep_process = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
-                                  (is_gms_ && want_sender_spoof);
-        if (!keep_process) {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-            return;
-        }
-
-        mark_zygisk_native_active();
-        if (config.enable_device_id_spoof || !config.spoof_android_id.empty()) {
-            device_spoof::install(env_, config, api_);
-        }
-
-        const bool fragile_upi = upi_registry::is_fragile_banking_app(process_name_);
-        const int hook_delay = upi_registry::hook_startup_delay_sec(process_name_);
-
-        if (sms_block_needed && (is_telephony_ || is_messaging_ ||
-                                 (is_hooked_upi_ && !fragile_upi))) {
-            virtual_sim::install(env_, api_, process_name_);
-        }
-
-        if (phone_spoof_wanted && (is_telephony_ || is_messaging_ ||
-                                   (is_hooked_upi_ && !fragile_upi))) {
-            if (is_hooked_upi_) {
-                phone_number_hook::schedule_deferred_install(env_, api_, process_name_.c_str(),
-                                                             hook_delay);
-            } else {
-                phone_number_hook::install(env_, api_, process_name_.c_str());
-            }
-        }
-
-        if (is_hooked_upi_) {
-            touch_upi_inject(process_name_.c_str());
-            if ((config.hide_root || config.hide_developer) && !overlay_only_mode() && !fragile_upi) {
-                schedule_deferred_root_hide(env_, config, api_);
-            }
-        }
-
-        if (is_hooked_upi_ && !upi_registry::is_module_own_app(process_name_)) {
-            upi_hook::install(env_, api_, process_name_);
-            if (!fragile_upi) {
-                schedule_overlay_ui(env_, api_, process_name_, hook_delay > 0 ? hook_delay : 3);
-                logger::info("Hivirtus", "Native overlay scheduled in %s (%ds)", process_name_.c_str(),
-                             hook_delay > 0 ? hook_delay : 3);
-            }
-        }
-
-        if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof) &&
-            native_overlay_wanted()) {
-            schedule_overlay_ui(env_, api_, process_name_, 2);
-        }
-
-        if (is_messaging_ && (framework_sms_active(config) || want_sender_spoof)) {
-            if (config.hook_outgoing_sms || config.intercept_fake_success || config.virtual_sim_active()) {
-                outgoing_sms_hook::install(env_, api_, true, true);
-            }
-            if (want_sender_spoof) {
-                sender_spoof::install(env_, api_, process_name_.c_str());
-            }
-        }
-
-        if (is_telephony_ && (framework_sms_active(config) || want_sender_spoof)) {
-            logger::info("Hivirtus", "Telephony SMS hook in %s", process_name_.c_str());
-            sms_hook::install(env_, api_, config.hook_incoming_sms, config.hook_outgoing_sms);
-            if (want_sender_spoof) {
-                sender_spoof::install(env_, api_, "telephony");
-            }
-            if (config.hook_outgoing_sms || config.intercept_fake_success ||
-                config.virtual_sim_active()) {
-                outgoing_sms_hook::install(env_, api_, true, false);
-            }
-            process_inject_command(env_);
-        }
-
-        if (is_hooked_upi_ && want_sender_spoof) {
+        if (want_sender) {
             sender_spoof::install(env_, api_, process_name_.c_str());
         }
 
-        if (is_hooked_upi_ && (config.hook_outgoing_sms || config.intercept_fake_success ||
-                               config.virtual_sim_active())) {
-            if (fragile_upi) {
-                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay);
-            } else {
-                outgoing_sms_hook::install(env_, api_, false, false, true);
-                outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, hook_delay);
-            }
+        // Floating bubble — delayed, crash-safe
+        if (native_overlay_wanted()) {
+            schedule_overlay_ui(env_, api_, process_name_, delay > 0 ? delay + 1 : 3);
+            logger::info("Virtus", "Overlay scheduled in %s", process_name_.c_str());
         }
 
-        const bool needs_stay_loaded = is_telephony_ || is_messaging_ || is_hooked_upi_ ||
-                                       config.enable_device_id_spoof ||
-                                       !config.spoof_android_id.empty();
-        touch_module_heartbeat();
-        if (!needs_stay_loaded) {
-            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
-        }
+        // Stay loaded for PLT hooks
+        touch_heartbeat();
     }
 
     void postServerSpecialize(const zygisk::ServerSpecializeArgs* args) override {
         (void)args;
+        // system_server — kabhi hook mat karo
         api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
     }
 
 private:
+    void touch_heartbeat() {
+        FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
+        if (f) {
+            fprintf(f, "%ld\n", static_cast<long>(time(nullptr)));
+            fclose(f);
+            chmod("/data/local/tmp/hivirtus_module_heartbeat.txt", 0644);
+        }
+    }
+
     zygisk::Api* api_ = nullptr;
     JNIEnv* env_ = nullptr;
     std::string process_name_;
-    bool is_telephony_ = false;
-    bool is_messaging_ = false;
-    bool is_gms_ = false;
-    bool is_hooked_upi_ = false;
 };
 
 }  // namespace
 
-REGISTER_ZYGISK_MODULE(HivirtusModule)
+REGISTER_ZYGISK_MODULE(VirtusModule)

@@ -37,15 +37,15 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    if (result != 0 || !reply || !data || !telephony_spoof::phone_spoof_enabled()) {
+    if (result != 0 || !reply || !data) {
         return result;
     }
-
-    const std::string iface = telephony_spoof::read_binder_interface(env, data);
-    if (telephony_spoof::should_spoof_binder_iface(iface)) {
-        telephony_spoof::handle_binder_reply(env, data, reply, iface);
-    }
+    // SAFE: binder reply scrub OFF — SIM slot / radio crash fix
     return result;
+
+    if (!telephony_spoof::phone_spoof_enabled()) {
+        return result;
+    }
 }
 
 bool install_binder_plt(zygisk::Api* api) {

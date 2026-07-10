@@ -999,8 +999,21 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
     const jint bubble_w = px(env, activity, 52.0f);
     const jint bubble_h = px(env, activity, 52.0f);
 
+    // Prefer decor attach first (stable, no SIM/permission issues).
+    // System overlay only as fallback if decor fails.
     bool attached = false;
-    if (can_draw_overlays(env, activity)) {
+    g_system_overlay_mode = false;
+    add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800033, 12, 0, 0, 0));
+    add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
+    set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
+    if (!env->ExceptionCheck()) {
+        attached = true;
+        debug_marker("overlay_decor_mode");
+    } else {
+        env->ExceptionClear();
+    }
+
+    if (!attached && can_draw_overlays(env, activity)) {
         g_system_overlay_mode = true;
         attached = add_via_system_overlay(env, activity, bubble, 0x33, bubble_x, bubble_y, bubble_w, bubble_h);
         if (attached) {
@@ -1011,17 +1024,9 @@ void attach_virtus_overlay(JNIEnv* env, jobject activity, const ModuleConfig& co
         } else {
             g_system_overlay_mode = false;
         }
-    } else {
+    } else if (!attached) {
         request_overlay_grant(g_package);
         debug_marker("overlay_permission_pending");
-    }
-
-    if (!attached) {
-        g_system_overlay_mode = false;
-        add_to_decor(env, activity, bubble, frame_lp(env, activity, -2, -2, 0x800033, 12, 0, 0, 0));
-        add_to_decor(env, activity, g_menu_panel, frame_lp(env, activity, -1, -1, 0x11, 0, 0, 0, 0));
-        set_vis(env, g_menu_panel, g_menu_open ? 0 : 8);
-        debug_marker("overlay_decor_mode");
     }
 
     g_overlay_attached = true;

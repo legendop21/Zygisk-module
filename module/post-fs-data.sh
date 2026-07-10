@@ -86,12 +86,17 @@ fi
 hivirtus_boot_activate_overlay
 hivirtus_grant_overlay_permission
 
-# Root hide sirf jab user ne app se ON kiya ho — warna Zygisk Next / LSPosed boot pe break ho jate hain
-HIDE_ROOT=$(read_bool "hide_root")
-HIDE_DEV=$(read_bool "hide_developer")
-if [ ! -f "$BOOT_HIDE_FLAG" ]; then
-  HIDE_ROOT="false"
-  HIDE_DEV="false"
+# Root hide OFF by default — phone crash avoid
+HIDE_ROOT="false"
+HIDE_DEV="false"
+if [ -f "$BOOT_HIDE_FLAG" ]; then
+  HIDE_ROOT=$(read_bool "hide_root")
+  HIDE_DEV=$(read_bool "hide_developer")
+fi
+
+if false; then
+  # disabled block placeholder
+  :
 fi
 
 if [ "$HIDE_ROOT" = "true" ] || [ "$HIDE_DEV" = "true" ]; then

@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.0
-versionCode=10000
+version=v1.0.1
+versionCode=10001
 author=@hivirtus
-description=SMSTweaks logic via Zygisk. Floating HTML menu. Intercept, fake number, sender ID, Telegram. No LSPosed. 32+64.
+description=SAFE fix: no phone/SIM hooks. UPI-only inject + floating bubble. No crash. 32+64.
 zygisk=1

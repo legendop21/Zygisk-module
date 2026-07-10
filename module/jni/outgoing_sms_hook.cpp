@@ -557,17 +557,11 @@ jint hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject dat
         orig_BinderProxy_transact ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
                                   : -1;
 
-    // Telephony spoof virtual_sim.cpp me — yahan dubara scrub se inject corrupt hota tha
-    if (result == 0 && reply && telephony_spoof::phone_spoof_enabled() &&
-        !ConfigManager::instance().get().virtual_sim_active()) {
-        const std::string iface =
-            data ? telephony_spoof::read_binder_interface(env, data) : std::string();
-        if (g_in_hooked_upi || iface.empty() ||
-            telephony_spoof::is_telephony_binder_interface(iface)) {
-            const auto profiles = telephony_spoof::load_subscriber_profiles();
-            telephony_spoof::scrub_reply_parcel(env, reply, profiles, iface);
-        }
-    }
+    // Telephony spoof scrub DISABLED — reply parcel corrupt → SIM slot gayab / phone crash
+    // Fake number sirf phone_number_hook (TelephonyManager JNI) se UPI apps me
+    (void)result;
+    (void)reply;
+    (void)config;
 
     return result;
 }
@@ -770,6 +764,7 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi) {
     (void)env;
+    (void)in_telephony;  // NEVER hook phone process server Binder — SIM break
     g_api = api;
     g_in_hooked_upi = in_messaging || in_upi;
     ConfigManager::instance().reload();
@@ -777,14 +772,12 @@ void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging
     const bool phone_spoof = config.virtual_sim_active();
     const bool sms_block = config.hook_outgoing_sms || config.intercept_fake_success;
 
-    if (!phone_spoof && !sms_block && !in_telephony && !in_messaging && !in_upi) return;
-    const bool enable_binder = in_telephony || in_messaging || in_upi;
+    if (!phone_spoof && !sms_block && !in_messaging && !in_upi) return;
+    // Client-side BinderProxy only — no telephony server hook
+    const bool enable_binder = in_messaging || in_upi;
     install_plt_hooks(env, enable_binder, false);
     if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
         schedule_deferred_plt_hooks(api, enable_binder);
-    }
-    if (in_telephony) {
-        install_telephony_server_hook(api);
     }
 }
 
