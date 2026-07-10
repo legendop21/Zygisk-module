@@ -62,7 +62,11 @@ echo "==> Building embedded floating overlay dex"
 chmod +x "$ROOT_DIR/tools/build_overlay_dex.sh"
 "$ROOT_DIR/tools/build_overlay_dex.sh" || true
 
-echo "==> Packaging Zygisk module zip (no APK)"
+echo "==> Building float bubble APK (APatch fallback)"
+chmod +x "$ROOT_DIR/tools/build_float_apk.sh"
+"$ROOT_DIR/tools/build_float_apk.sh" || true
+
+echo "==> Packaging Zygisk module zip"
 cp "$MODULE_DIR/module.prop" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
@@ -81,9 +85,14 @@ if [[ -d "$MODULE_DIR/overlay/ui" ]]; then
   mkdir -p "$OUTPUT_DIR/overlay/ui"
   cp -r "$MODULE_DIR/overlay/ui/"* "$OUTPUT_DIR/overlay/ui/"
 fi
-rm -rf "$OUTPUT_DIR/overlay/classes" "$OUTPUT_DIR/overlay/sources.txt" "$OUTPUT_DIR/overlay/overlay.jar" "$OUTPUT_DIR/overlay/classes.dex"
+rm -rf "$OUTPUT_DIR/overlay/apk-build" "$OUTPUT_DIR/overlay/classes" "$OUTPUT_DIR/overlay/sources.txt" "$OUTPUT_DIR/overlay/overlay.jar" "$OUTPUT_DIR/overlay/classes.dex" "$OUTPUT_DIR/overlay/virtus-float-signed.apk.idsig" "$OUTPUT_DIR/overlay/base-unsigned.apk"
 if [[ ! -f "$OUTPUT_DIR/overlay/overlay.dex" ]] && [[ -f "$MODULE_DIR/overlay/overlay.dex" ]]; then
   cp "$MODULE_DIR/overlay/overlay.dex" "$OUTPUT_DIR/overlay/"
+fi
+if [[ -f "$OUTPUT_DIR/overlay/virtus-float.apk" ]]; then
+  : # already built
+elif [[ -f "$MODULE_DIR/overlay/virtus-float.apk" ]]; then
+  cp "$MODULE_DIR/overlay/virtus-float.apk" "$OUTPUT_DIR/overlay/"
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
@@ -97,4 +106,4 @@ ZIP_NAME="hivirtus_zygisk_mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cu
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME ($(du -h "$ROOT_DIR/$ZIP_NAME" | cut -f1))"
 echo ""
-echo "==> Sirf ye ZIP flash karo — koi APK install nahi. Reboot ke baad bubble aayega."
+echo "==> Sirf ye ZIP flash karo. Reboot ke baad left-side OTP bubble aayega."

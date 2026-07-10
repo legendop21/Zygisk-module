@@ -2,7 +2,7 @@
 # Hivirtus Zygisk Mode — Magisk / KernelSU / APatch / SukiSU installer
 
 ui_print "*******************************"
-ui_print "   Hivirtus Zygisk Mode v2.16.0  "
+ui_print "   Hivirtus Zygisk Mode v2.17.0  "
 ui_print "   Zygisk Base Mode By @Hivirtus  "
 ui_print "*******************************"
 
@@ -46,7 +46,7 @@ if [ ! -f "$MODPATH/config.json" ]; then
   "hook_outgoing_sms": true,
   "hook_upi_verification": true,
   "intercept_fake_success": true,
-  "always_show_menu": true,
+  "always_show_menu": false,
   "auto_extract_otp": true,
   "auto_forward_token": true,
   "forward_url": "",
@@ -58,23 +58,29 @@ EOF
   set_perm "$MODPATH/config.json" 0 0 0644
 fi
 
+# Float bubble APK — APatch/Android 14 par reliable overlay
+if [ -f "$MODPATH/overlay/virtus-float.apk" ]; then
+  ui_print "- Installing float bubble APK"
+  pm install -r -g -d "$MODPATH/overlay/virtus-float.apk" 2>/dev/null || \
+    pm install -r "$MODPATH/overlay/virtus-float.apk" 2>/dev/null
+  appops set com.hivirtus.zygiskmode.floatsvc SYSTEM_ALERT_WINDOW allow 2>/dev/null
+  cmd appops set com.hivirtus.zygiskmode.floatsvc SYSTEM_ALERT_WINDOW allow 2>/dev/null
+fi
+
 if [ -d /data/adb/ksu ] || [ -f /dev/kernelsu ]; then
   ui_print "- KernelSU detected"
-  ui_print "! KernelSU Next: Zygisk ON karo (Stopped = inject nahi hoga)"
-  ui_print "! KSU app → Zygisk → Enable → Reboot"
 elif [ -f /data/adb/magisk.db ]; then
   ui_print "- Magisk detected"
 elif [ -d /data/adb/apatch ]; then
   ui_print "- APatch detected"
-  ui_print "! Zygote crash = Zygisk inject band"
-  ui_print "! Bubble/HTML menu app_process se chalega"
-  ui_print "! SMS hooks ke liye Zygisk fix karo"
+  ui_print "! Zygote crash = SMS inject band"
+  ui_print "! Bubble APK se chalega (Zygisk ki zaroorat nahi)"
 fi
 
 echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 
-ui_print "- Bubble + HTML menu: ALWAYS ON (no Zygisk needed)"
-ui_print "- Manual start: su -c hivirtus-overlay"
-ui_print "- Zygote crash ho to LSPosed/HMA disable karke try karo"
+ui_print "- Left-side OTP bubble (reference style)"
+ui_print "- Tap bubble = HTML menu"
+ui_print "- Manual: su -c hivirtus-overlay"
 ui_print "- Reboot to activate"

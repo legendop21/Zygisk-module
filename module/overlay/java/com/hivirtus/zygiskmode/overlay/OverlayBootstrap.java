@@ -97,7 +97,7 @@ public final class OverlayBootstrap {
     private static boolean alwaysShowMenu() {
         try {
             JSONObject cfg = LocalConfig.load();
-            return LocalConfig.getBool(cfg, "always_show_menu", true);
+            return LocalConfig.getBool(cfg, "always_show_menu", false);
         } catch (Throwable t) {
             return true;
         }
