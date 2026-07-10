@@ -18,10 +18,10 @@
 
 namespace {
 
-// v1.0.20:
-// - Root companion logs inject (app UID / SELinux se /data/local/tmp write fail ho sakta)
-// - Process name :suffix strip (com.phonepe.app:push → com.phonepe.app)
-// - Skip reasons logged so waiting_for_upi_app_open debug ho sake
+// v1.0.21:
+// - safe_inject logged in pre via companion (post companion = SELinux fail)
+// - SMS/phone/sender hooks installed NOW in post (deferred api hooks were no-ops)
+// - Overlay UI still deferred (no Zygisk Api needed)
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
@@ -222,8 +222,9 @@ public:
             return;
         }
 
-        // Root companion: prove Zygisk loaded us into this UPI process
+        // connectCompanion ONLY works in preSpecialize — log inject commit here.
         report_line(api_, "pre_seen:" + process_name_);
+        report_line(api_, "safe_inject:" + pkg_);
         keep_ = true;
     }
 
@@ -238,20 +239,21 @@ public:
             return;
         }
 
+        // post: companion unavailable — best-effort direct log
+        append_diag("/data/local/tmp/hivirtus_inject.log",
+                    ("post_enter:" + pkg_).c_str());
+
         ConfigManager::instance().reload();
         const auto& config = ConfigManager::instance().get();
         if (!config.is_upi_app_hooked(pkg_)) {
-            report_line(api_, "skip_config_off:" + pkg_);
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("skip_config_off:" + pkg_).c_str());
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
         logger::init(config.log_file);
         mark_active();
-        report_line(api_, "safe_inject:" + pkg_);
-        if (process_name_ != pkg_) {
-            report_line(api_, "proc:" + process_name_);
-        }
 
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
@@ -264,28 +266,31 @@ public:
         const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
         const bool yespay = is_yespay(pkg_);
 
+        // Zygisk Api valid ONLY during postSpecialize. Deferred api hooks = no-op.
+        // Install SMS/phone/sender NOW; defer only overlay UI.
         if (sms_block) {
-            int sms_delay = 4;
-            if (fragile) sms_delay = 8;
-            if (yespay) sms_delay = 12;
-            outgoing_sms_hook::schedule_deferred_upi_hook(env_, api_, sms_delay);
-            report_line(api_, "isms_deferred:" + pkg_ + " d=" + std::to_string(sms_delay));
+            outgoing_sms_hook::install(env_, api_, false, false, true);
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("isms_now:" + pkg_).c_str());
         }
 
         if (phone_spoof) {
-            const int ph_delay = yespay ? 14 : (fragile ? 10 : 6);
-            phone_number_hook::schedule_deferred_install(
-                env_, api_, pkg_.c_str(), ph_delay);
+            phone_number_hook::install(env_, api_, pkg_.c_str());
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("phone_now:" + pkg_).c_str());
         }
 
         if (want_sender) {
-            const int sd = yespay ? 14 : (fragile ? 10 : 5);
-            schedule_sender(env_, api_, pkg_, sd);
+            sender_spoof::install(env_, api_, pkg_.c_str());
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("sender_now:" + pkg_).c_str());
         }
 
         if (native_overlay_wanted()) {
             const int ov = yespay ? 5 : (fragile ? 3 : 2);
             schedule_overlay_ui(env_, api_, pkg_, ov);
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("overlay_sched:" + pkg_ + " d=" + std::to_string(ov)).c_str());
         }
 
         touch_heartbeat();

@@ -3,15 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.20 INJECT+TG FIX       "
-ui_print "  Companion log · keep TG creds "
-ui_print "  Denylist → Unmount Only       "
-ui_print "  No early hooks · YesPay OK    "
+ui_print "     v1.0.21 HOOKS-NOW FIX       "
+ui_print "  SMS hook in postSpecialize    "
+ui_print "  Companion safe_inject in pre  "
+ui_print "  Bubble deferred · TG keep     "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! 1) ZygiskNext Denylist=Unmount Only"
-ui_print "! 2) Force-stop UPI app → reopen"
-ui_print "! 3) inject.log me safe_inject: dekho"
+ui_print "! Force-stop PhonePe → reopen"
+ui_print "! Log: safe_inject + isms_now"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
