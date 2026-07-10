@@ -3,8 +3,8 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.6 SAFE                "
-ui_print "  SIM/Settings crash FIXED      "
+ui_print "     v1.0.7                    "
+ui_print "  Centered menu · All UPI       "
 ui_print "  UPI-only · No phone hook      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
@@ -94,11 +94,12 @@ echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
 
 ui_print ""
-ui_print "Virtus Zygisk Mode v1.0.6 SAFE"
-ui_print "  SIM + Settings crash FIXED"
-ui_print "  1) Flash → REBOOT (zaroori)"
-ui_print "  2) Settings / SIM check karo"
-ui_print "  3) UPI app → gold V → menu"
+ui_print "Virtus Zygisk Mode v1.0.7"
+ui_print "  Menu CENTER card (ref size)"
+ui_print "  Bubble on all UPI/finance apps"
+ui_print "  KernelSU: Denylist = Unmount Only"
+ui_print "  (warna UPI apps pe inject nahi)"
+ui_print "  Flash → REBOOT → open any UPI app"
 ui_print ""
 ui_print "Agar SIM abhi bhi gayab:"
 ui_print "  adb shell su -c 'sh /data/adb/modules/hivirtus_zygisk_mode/repair_sim.sh'"

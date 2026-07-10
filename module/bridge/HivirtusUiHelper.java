@@ -525,12 +525,41 @@ public class HivirtusUiHelper {
     }
 
     private static FrameLayout makeMenuHost(Context ctx) {
-        FrameLayout menuHost = new FrameLayout(ctx);
+        final FrameLayout menuHost = new FrameLayout(ctx);
         menuHost.setTag(TAG_MENU);
         menuHost.setVisibility(View.GONE);
         menuHost.setClickable(true);
-        menuHost.setBackgroundColor(0xE6090B12);
+        // Dim backdrop — card beech me WebView se
+        menuHost.setBackgroundColor(0x99000000);
+        menuHost.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                menuOpen = false;
+                menuHost.setVisibility(View.GONE);
+                writeDebug("ui_menu_close_backdrop");
+            }
+        });
         return menuHost;
+    }
+
+    /** Reference size: ~88% x ~55% portrait, centered (MotaGian-style card) */
+    private static FrameLayout.LayoutParams centeredCardLp(Context ctx) {
+        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int sw = dm.widthPixels;
+        int sh = dm.heightPixels;
+        int w;
+        int h;
+        if (sw > sh) {
+            // landscape
+            w = (int) (sw * 0.52f);
+            h = (int) (sh * 0.82f);
+        } else {
+            w = (int) (sw * 0.88f);
+            h = (int) (sh * 0.55f);
+        }
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
+        lp.gravity = Gravity.CENTER;
+        return lp;
     }
 
     private static void toggleMenu(FrameLayout menuHost) {
@@ -556,6 +585,12 @@ public class HivirtusUiHelper {
         }
     }
 
+    private static void addCenteredChild(FrameLayout menuHost, View child) {
+        child.setClickable(true);
+        child.setFocusable(true);
+        menuHost.addView(child, centeredCardLp(menuHost.getContext()));
+    }
+
     private static void fillMenuWebView(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         WebView web = new WebView(activity);
@@ -569,7 +604,6 @@ public class HivirtusUiHelper {
                 ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
             } catch (Throwable ignored) {}
         }
-        // Android 11–16: file:// from /data/adb often blocked — use loadDataWithBaseURL
         try {
             if (Build.VERSION.SDK_INT < 30) {
                 Method m1 = WebSettings.class.getMethod("setAllowFileAccessFromFileURLs", boolean.class);
@@ -591,7 +625,6 @@ public class HivirtusUiHelper {
             base = baseMod;
         }
         if (html != null) {
-            // Inline CSS/JS so WebView file restrictions don't break menu
             String css = readUtf8(base + "style.css");
             String js = readUtf8(base + "app.js");
             if (css != null) {
@@ -603,17 +636,14 @@ public class HivirtusUiHelper {
                         "<script>" + js + "</script>");
             }
             web.loadDataWithBaseURL("file://" + base, html, "text/html", "utf-8", null);
-            menuHost.addView(web, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            writeDebug("ui_webview_ok_data");
+            addCenteredChild(menuHost, web);
+            writeDebug("ui_webview_ok_centered");
             return;
         }
 
-        // Embedded HTML — always works for testing even if ui/ missing
         web.loadDataWithBaseURL(null, EMBEDDED_MENU_HTML, "text/html", "utf-8", null);
-        menuHost.addView(web, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        writeDebug("ui_webview_ok_embedded");
+        addCenteredChild(menuHost, web);
+        writeDebug("ui_webview_ok_embedded_centered");
     }
 
     /** Native menu — WebView crash pe bhi test possible */
@@ -622,6 +652,7 @@ public class HivirtusUiHelper {
         try {
             float d = activity.getResources().getDisplayMetrics().density;
             ScrollView scroll = new ScrollView(activity);
+            scroll.setBackgroundColor(0xFF090B12);
             LinearLayout col = new LinearLayout(activity);
             col.setOrientation(LinearLayout.VERTICAL);
             int pad = (int) (20 * d);
@@ -635,7 +666,7 @@ public class HivirtusUiHelper {
             col.addView(title);
 
             TextView sub = new TextView(activity);
-            sub.setText("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\nTap V again to close.");
+            sub.setText("Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\nTap V / outside to close.");
             sub.setTextColor(0xFFB8A882);
             sub.setTextSize(13f);
             col.addView(sub);
@@ -683,9 +714,8 @@ public class HivirtusUiHelper {
             col.addView(save);
 
             scroll.addView(col);
-            menuHost.addView(scroll, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            writeDebug("ui_native_menu_ok");
+            addCenteredChild(menuHost, scroll);
+            writeDebug("ui_native_menu_ok_centered");
         } catch (Throwable t) {
             fillMenuFallback(activity, menuHost);
         }
@@ -694,14 +724,13 @@ public class HivirtusUiHelper {
     private static void fillMenuFallback(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         TextView tv = new TextView(activity);
-        tv.setText("Virtus Zygisk Mode\n\nTap V again to close.\nSDK " + Build.VERSION.SDK_INT);
+        tv.setText("Virtus Zygisk Mode\n\nTap V / outside to close.\nSDK " + Build.VERSION.SDK_INT);
         tv.setTextColor(Color.WHITE);
         tv.setTextSize(16f);
         tv.setPadding(48, 48, 48, 48);
         tv.setBackgroundColor(0xFF090B12);
-        menuHost.addView(tv, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        writeDebug("ui_fallback_menu");
+        addCenteredChild(menuHost, tv);
+        writeDebug("ui_fallback_menu_centered");
     }
 
     private static final String EMBEDDED_MENU_HTML =

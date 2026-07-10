@@ -63,14 +63,19 @@ hivirtus_grant_one_overlay() {
 hivirtus_overlay_core_pkgs() {
   cat <<'PKGS'
 com.phonepe.app
+com.phonepe.app.business
 net.one97.paytm
+com.paytm.business
 com.google.android.apps.nbu.paisa.user
+in.org.npci.upiapp
 com.yespay.next
 com.yesbank.yespay
+com.yesbank.yespaynext
 com.kreditbee.android
 com.whizdm.moneyview.loans
 com.stashfin.android
 com.snapmint.customerapp
+com.dreamplug.androidapp
 com.csam.icici.bank.imobile
 com.hdfcbank.payzapp
 com.axis.mobile
@@ -87,6 +92,26 @@ com.nira.finance
 com.lazypay.app
 com.naviapp
 com.navi.moneymanager
+com.myairtelapp
+com.jio.myjio
+com.amazon.mShop.android.shopping
+com.slice.app
+com.postpe.app
+com.earlysalary.android
+com.zestmoney.android
+com.buddyloan.app
+com.paysense.android
+com.cashe.android
+com.rupeeredee.app
+com.flexsalary
+com.availfinance
+com.bajajfinserv
+com.epifi.paisa
+com.jar.app
+com.angelbroking.angelone
+com.samsung.android.spay
+com.popclub.android
+com.tataneu
 PKGS
 }
 

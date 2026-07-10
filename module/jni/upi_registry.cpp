@@ -115,6 +115,36 @@ constexpr const char* kPackages[] = {
     "com.msf.sbi",
     "com.msf.bob",
     "com.msf.axis",
+    // more UPI / fintech / wallets
+    "club.bharatpe.app",
+    "com.bhimupi.app",
+    "com.npci.upi",
+    "com.ultracash.ultrapay",
+    "com.paytm.business",
+    "com.phonepe.app.business",
+    "in.amazon.mShop.android.shopping",
+    "com.indwealth",
+    "com.jupiter.customers",
+    "com.fi.money",
+    "money.jupiter",
+    "com.onecode.bharatx",
+    "com.unity.finance",
+    "com.loanfront.app",
+    "com.stashfin",
+    "com.kreditbee",
+    "com.whizdm.moneyview",
+    "com.moneyview.android",
+    "com.bajajfinservmarkets",
+    "com.bajajfinserv.in",
+    "com.tatacapital.moneyfy",
+    "com.indusind.indusmobile",
+    "com.pnb.mobile",
+    "com.bob.mobilebanking",
+    "com.iob.mobilebanking",
+    "com.ucobank.mobilebanking",
+    "com.bandhan.mobilebanking",
+    "com.ab.abmbanking",
+    "com.csb.mobilebanking",
     nullptr,
 };
 
@@ -129,6 +159,21 @@ bool is_known_upi(const std::string& package) {
     if (package.rfind("com.hero", 0) == 0 && package.find("fincorp") != std::string::npos) {
         return true;
     }
+    // Broad UPI/fintech name heuristics — more apps get bubble
+    if (package.find("upi") != std::string::npos) return true;
+    if (package.find("paytm") != std::string::npos) return true;
+    if (package.find("phonepe") != std::string::npos) return true;
+    if (package.find("bhim") != std::string::npos) return true;
+    if (package.find("kredit") != std::string::npos) return true;
+    if (package.find("loan") != std::string::npos) return true;
+    if (package.find("wallet") != std::string::npos) return true;
+    if (package.find("fintech") != std::string::npos) return true;
+    if (package.find("banking") != std::string::npos) return true;
+    if (package.find("moneyview") != std::string::npos) return true;
+    if (package.find("mobikwik") != std::string::npos) return true;
+    if (package.find("freecharge") != std::string::npos) return true;
+    if (package.find("payzapp") != std::string::npos) return true;
+    if (package.find("groww") != std::string::npos) return true;
     return false;
 }
 

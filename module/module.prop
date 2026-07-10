@@ -1,7 +1,7 @@
 id=hivirtus_zygisk_mode
 name=Virtus Zygisk Mode
-version=v1.0.6
-versionCode=10006
+version=v1.0.7
+versionCode=10007
 author=@hivirtus
-description=SAFE: SIM/Settings crash fix. Never Zygisk phone/settings. UPI-only. Repair APatch config.
+description=Centered menu card + all UPI bubble. TOP-LEFT gold V. Safe — no phone/settings hook.
 zygisk=1
