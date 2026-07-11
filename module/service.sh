@@ -488,33 +488,11 @@ intercept_is_on() {
 
 enforce_sms_block() {
   restore_sms_permission
-  # Nuclear radio kill for default SMS apps when intercept ON
+  # Do NOT revoke Messages SEND_SMS / appops ignore — can break SMS role + confuse STK.
+  # Real intercept is Zygisk client-side in Messages/UPI only (phone process never hooked).
   if intercept_is_on; then
-    for pkg in com.google.android.apps.messaging com.android.messaging \
-               com.samsung.android.messaging com.motorola.messaging \
-               com.android.mms com.android.mms.service com.oneplus.mms com.coloros.mms; do
-      pm path "$pkg" >/dev/null 2>&1 || continue
-      appops set "$pkg" SEND_SMS ignore 2>/dev/null || \
-        cmd appops set "$pkg" SEND_SMS ignore 2>/dev/null || true
-      # Privileged SMS role often ignores AppOps — also revoke runtime perm
-      pm revoke "$pkg" android.permission.SEND_SMS 2>/dev/null || true
-      cmd appops set "$pkg" WRITE_SMS ignore 2>/dev/null || \
-        appops set "$pkg" WRITE_SMS ignore 2>/dev/null || true
-    done
-    # Do NOT spam isms_trace (was hiding missing isms_blocked). Separate appops log.
-    echo "msg_send_sms_ignored $(date +%s)" > /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
+    echo "msg_sms_perm_left_alone $(date +%s)" > /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
-  else
-    for pkg in com.google.android.apps.messaging com.android.messaging \
-               com.samsung.android.messaging com.motorola.messaging \
-               com.android.mms com.android.mms.service com.oneplus.mms com.coloros.mms; do
-      pm path "$pkg" >/dev/null 2>&1 || continue
-      appops set "$pkg" SEND_SMS allow 2>/dev/null || \
-        cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || true
-      appops set "$pkg" WRITE_SMS allow 2>/dev/null || \
-        cmd appops set "$pkg" WRITE_SMS allow 2>/dev/null || true
-      pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
-    done
   fi
 }
 

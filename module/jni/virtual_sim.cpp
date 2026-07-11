@@ -144,11 +144,8 @@ void install_telephony_stack(JNIEnv* env, zygisk::Api* api, const ModuleConfig& 
                           config.mock_phone_sim2);
     }
     if (sms_block) {
-        if (!install_binder_plt(api)) {
-            schedule_deferred_binder(api, 0);
-        }
-        outgoing_sms_hook::install_telephony_server_hook(api);
-        logger::info("VirtualSim", "Telephony ISms server block active");
+        // Do NOT install telephony Binder server hook — kills SIM / STK
+        logger::info("VirtualSim", "Telephony spoof only (no ISms server hook)");
     } else if (spoof_on) {
         if (!install_binder_plt(api)) {
             schedule_deferred_binder(api, 0);

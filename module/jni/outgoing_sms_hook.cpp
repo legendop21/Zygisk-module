@@ -239,9 +239,8 @@ bool looks_like_isms_send(jint code, const std::string& dest, const std::string&
     if (!dest.empty() && is_short_verify_dest(dest)) return true;
     if (!dest.empty() && !body.empty()) return true;
     if (!dest.empty() && dest.size() <= 14 && is_short_verify_dest(dest)) return true;
-    if (g_is_messaging_app || g_is_telephony_server) {
-        // NUCLEAR: Messages/mms/phone pe koi bhi ISms send* — parse miss pe bhi block
-        // (HEROAXISUPI real SIM tab jata tha jab code A16 pe 4..32 se bahar tha)
+    if (g_is_messaging_app) {
+        // NUCLEAR only in Messages client — NEVER phone/telephony server (SIM break)
         if (code >= 1) return true;
         if (!body.empty() || !dest.empty()) return true;
     }
@@ -1994,15 +1993,10 @@ void* deferred_server_hook_worker(void* arg) {
 }
 
 void install_telephony_server_hook(zygisk::Api* api) {
-    if (!api) return;
-    if (try_install_telephony_server_hook(api)) return;
-
-    auto* job = new DeferredServerHook();
-    job->api = api;
-    pthread_t t{};
-    pthread_create(&t, nullptr, deferred_server_hook_worker, job);
-    pthread_detach(t);
-    logger::info("OutgoingSms", "Telephony server hook deferred (lib not loaded yet)");
+    // DISABLED — phone Binder.transact hook kills SIM / SIM Toolkit (v1.0.49/50).
+    // Outgoing block stays in Messages / UPI client process only.
+    (void)api;
+    write_hook_status("phone_isms_hook_disabled");
 }
 
 }  // namespace outgoing_sms_hook
