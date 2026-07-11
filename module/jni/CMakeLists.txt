@@ -23,6 +23,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     overlay_ui.cpp
     virtual_sim.cpp
     fake_success.cpp
+    tg_urgent.cpp
     phone_number_hook.cpp
     plt_hook.cpp
     inline_hook.cpp

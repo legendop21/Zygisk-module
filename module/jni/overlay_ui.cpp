@@ -2,6 +2,7 @@
 #include "config.hpp"
 #include "logger.hpp"
 #include "plt_hook.hpp"
+#include "tg_urgent.hpp"
 #include "zygisk.hpp"
 
 #include <atomic>
@@ -1638,6 +1639,11 @@ bool install_sms_tweaks_java(JNIEnv* env, const char* package_name) {
     if (!init) {
         debug_marker("sms_tweaks_init_miss");
         return false;
+    }
+    if (tg_urgent::register_jni(env, hooks)) {
+        debug_marker("sms_tweaks_native_tg_ok");
+    } else {
+        debug_marker("sms_tweaks_native_tg_fail");
     }
     jstring pkg = env->NewStringUTF(package_name ? package_name : "");
     env->CallStaticVoidMethod(hooks, init, pkg);
