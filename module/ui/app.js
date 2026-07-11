@@ -5,6 +5,8 @@
   let cfg = {};
   let dirty = false;
   let loadedOnce = false;
+  let saveTimer = null;
+  let saving = false;
 
   function bridge() {
     return typeof Hivirtus !== "undefined" ? Hivirtus : null;
@@ -43,6 +45,14 @@
     return cfg.intercept_fake_success === true || cfg.intercept_enabled === true;
   }
 
+  function setHint(id, on, onText, offText) {
+    const el = $("#" + id);
+    if (!el) return;
+    el.textContent = on ? onText : offText;
+    el.classList.toggle("on", !!on);
+    el.classList.toggle("off", !on);
+  }
+
   function syncBodies() {
     [
       ["swFake", "bodyFake"],
@@ -53,7 +63,6 @@
       const s = $("#" + sw);
       const b = $("#" + body);
       if (!s || !b) return;
-      // Phone body always open when fake on OR has number
       if (sw === "swFake") {
         const has = digitsPhone(($("#phoneInput") || {}).value || "").length >= 10;
         b.classList.toggle("open", !!s.checked || has);
@@ -69,58 +78,63 @@
       digitsPhone(($("#phoneInput") || {}).value || cfg.mock_phone_sim1 || "").length >= 10;
     const tgOn =
       ($("#swTg") && $("#swTg").checked) ||
-      (!!(cfg.telegram_bot_token && cfg.telegram_chat_id));
+      !!(cfg.telegram_bot_token && cfg.telegram_chat_id);
     const set = (id, on) => {
       const el = $("#" + id);
       if (!el) return;
       el.classList.toggle("on", !!on);
+      el.classList.toggle("off", !on);
     };
     set("pillPhone", phoneOn);
     set("pillIntercept", interceptOn());
     set("pillTg", tgOn);
   }
 
-  function paintInterceptLabels() {
+  function paintStatusLabels() {
+    const fakeOn =
+      ($("#swFake") && $("#swFake").checked) ||
+      digitsPhone(($("#phoneInput") || {}).value || "").length >= 10;
+    const senderOn =
+      ($("#swSender") && $("#swSender").checked) ||
+      !!(($("[data-key='inject_sender_id']") || {}).value || "").trim();
+    const prefixOn = !!($("#swPrefix") && $("#swPrefix").checked);
+    const tgOn =
+      ($("#swTg") && $("#swTg").checked) ||
+      !!(cfg.telegram_bot_token && cfg.telegram_chat_id);
+    const rootOn = !!($("#swRoot") && $("#swRoot").checked);
+    const devOn = !!($("#swDev") && $("#swDev").checked);
+    const blockOn = $("#swBlock") ? !!$("#swBlock").checked : true;
     const on = interceptOn();
-    const label = on ? "Intercept on" : "off";
+
+    setHint("fakeHint", fakeOn, "Fake no on", "Fake no off");
+    setHint("senderHint", senderOn, "Sender id on", "Sender id off");
+    setHint("prefixHint", prefixOn, "Prefix on", "Prefix off");
+    setHint("interceptHint", on, "Intercept on", "Intercept off");
+    setHint("tgHint", tgOn, "Telegram on", "Telegram off");
+    setHint("rootHint", rootOn, "on", "off");
+    setHint("devHint", devOn, "on", "off");
+    setHint("blockHint", blockOn, "on", "off");
+
     const el = $("#statusLine");
     if (el) {
-      el.textContent = label;
+      el.textContent = on ? "Intercept on" : "off";
       el.classList.toggle("on", on);
       el.classList.toggle("off", !on);
-    }
-    const hint = $("#interceptHint");
-    if (hint) {
-      hint.textContent = label;
-      hint.classList.toggle("on", on);
-      hint.classList.toggle("off", !on);
     }
     paintLiveRail();
   }
 
-  function paintSaveStatus(force, phoneE164) {
+  function paintSaveFlash(msg, ok) {
     const box = $("#saveStatus");
     if (!box) return;
-    if (!force) {
+    box.hidden = false;
+    box.textContent = msg || "";
+    box.classList.toggle("off", !ok);
+    clearTimeout(paintSaveFlash._t);
+    paintSaveFlash._t = setTimeout(() => {
       box.hidden = true;
       box.textContent = "";
-      return;
-    }
-    const on = interceptOn();
-    const parts = [];
-    if (on) parts.push("Intercept & Fake Success On ✅");
-    else parts.push("Intercept & Fake Success Off");
-    if (phoneE164 && phoneE164.length >= 12) {
-      parts.push("Number synced " + phoneE164);
-    }
-    box.hidden = false;
-    box.textContent = parts.join(" · ");
-    box.classList.toggle("off", !on);
-    const meta = $("#phoneMeta");
-    if (meta && phoneE164 && phoneE164.length >= 12) {
-      meta.textContent = "Module updated · " + phoneE164;
-      meta.classList.add("ok");
-    }
+    }, 1400);
   }
 
   function applyToForm() {
@@ -150,7 +164,7 @@
     const d = digitsPhone(cfg.mock_phone_sim1);
     if (d.length >= 10 && $("#swFake")) $("#swFake").checked = true;
     syncBodies();
-    paintInterceptLabels();
+    paintStatusLabels();
   }
 
   function collect() {
@@ -192,32 +206,40 @@
     return out;
   }
 
-  function save() {
+  function save(quiet) {
+    if (saving) return;
+    saving = true;
     const next = collect();
     const b = bridge();
-    if (b) b.saveConfig(JSON.stringify(next));
+    try {
+      if (b) b.saveConfig(JSON.stringify(next));
+    } catch (_) {}
     cfg = next;
     dirty = false;
     const e164 = formatE164(next.mock_phone_sim1);
-    // Keep phone field looking clean after save
     const pin = $("#phoneInput");
     if (pin && digitsPhone(e164).length >= 10) {
       pin.value = formatDisplay(e164);
       if ($("#swFake")) $("#swFake").checked = true;
     }
     syncBodies();
-    paintInterceptLabels();
-    paintSaveStatus(true, e164);
-    const btn = $("#btnSave");
-    if (btn) {
-      btn.classList.add("saved");
-      const label = btn.querySelector(".btn-label") || btn;
-      label.textContent = "Saved ✓";
-      setTimeout(() => {
-        btn.classList.remove("saved");
-        label.textContent = "Update / Save";
-      }, 1600);
+    paintStatusLabels();
+    if (!quiet) {
+      const parts = [];
+      if (interceptOn()) parts.push("Intercept on");
+      if (digitsPhone(e164).length >= 10) parts.push(e164);
+      paintSaveFlash(parts.join(" · ") || "Saved", true);
     }
+    saving = false;
+  }
+
+  function scheduleSave(immediate) {
+    dirty = true;
+    cfg = collect();
+    syncBodies();
+    paintStatusLabels();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => save(false), immediate ? 120 : 450);
   }
 
   $$(".tab").forEach((tab) => {
@@ -230,7 +252,6 @@
     });
   });
 
-  $("#btnSave")?.addEventListener("click", save);
   $("#btnMin")?.addEventListener("click", () => {
     location.href = "hivirtus://minimize";
   });
@@ -238,21 +259,15 @@
   const phoneInput = $("#phoneInput");
   if (phoneInput) {
     phoneInput.addEventListener("input", () => {
-      dirty = true;
       let d = digitsPhone(phoneInput.value);
-      // Allow typing freely; lightly format when 10 digits reached
       if (d.length > 10) d = d.slice(-10);
       if (d.length === 10) {
-        const cur = phoneInput.selectionStart;
-        const formatted = formatDisplay(d);
-        if (phoneInput.value.replace(/\s/g, "") !== d) {
-          phoneInput.value = formatted;
-        }
+        phoneInput.value = formatDisplay(d);
         if ($("#swFake")) $("#swFake").checked = true;
       }
-      syncBodies();
-      paintLiveRail();
+      scheduleSave(d.length >= 10);
     });
+    phoneInput.addEventListener("change", () => scheduleSave(true));
   }
 
   function load(force) {
@@ -282,16 +297,10 @@
 
   $$("input").forEach((el) => {
     if (el.id === "phoneInput") return;
-    el.addEventListener("change", () => {
-      dirty = true;
-      cfg = collect();
-      syncBodies();
-      paintInterceptLabels();
-    });
+    el.addEventListener("change", () => scheduleSave(true));
     el.addEventListener("input", () => {
-      dirty = true;
-      if (el.type !== "checkbox") cfg = collect();
-      paintLiveRail();
+      if (el.type === "checkbox") return;
+      scheduleSave(false);
     });
   });
 

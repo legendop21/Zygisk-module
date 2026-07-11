@@ -23,9 +23,9 @@
     </header>
 
     <div class="live-rail" id="liveRail">
-      <span class="pill" id="pillPhone"><i></i>Phone</span>
-      <span class="pill" id="pillIntercept"><i></i>Intercept</span>
-      <span class="pill" id="pillTg"><i></i>Telegram</span>
+      <span class="pill off" id="pillPhone"><i></i>Phone</span>
+      <span class="pill off" id="pillIntercept"><i></i>Intercept</span>
+      <span class="pill off" id="pillTg"><i></i>Telegram</span>
     </div>
 
     <nav class="tabs" role="tablist">
@@ -38,10 +38,10 @@
       <section class="panel active" id="panel-basic">
         <article class="card card-hero">
           <div class="card-head">
-            <div class="ico ico-teal">📱</div>
+            <div class="ico ico-purple">📱</div>
             <div class="card-copy">
               <h3>Fake Phone Number</h3>
-              <p>Apps ko yeh number dikhega</p>
+              <p id="fakeHint" class="hint off">Fake no off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="enable_sim1_mock" id="swFake" />
@@ -57,7 +57,6 @@
                        data-key="mock_phone_sim1" placeholder="98765 43210" autocomplete="off" />
               </div>
             </label>
-            <div class="field-meta" id="phoneMeta">Save ke baad module me update hoga</div>
           </div>
         </article>
 
@@ -66,7 +65,7 @@
             <div class="ico ico-mint">🏷️</div>
             <div class="card-copy">
               <h3>Incoming Sender ID</h3>
-              <p>Inbox pe yeh naam dikhe</p>
+              <p id="senderHint" class="hint off">Sender id off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="override_incoming_sender" id="swSender" />
@@ -86,7 +85,7 @@
             <div class="ico ico-cyan">✉️</div>
             <div class="card-copy">
               <h3>Outgoing SMS Prefix</h3>
-              <p>Har outgoing SMS pe prefix</p>
+              <p id="prefixHint" class="hint off">Prefix off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="prefix_enabled" id="swPrefix" />
@@ -108,7 +107,7 @@
             <div class="ico ico-coral">🚫</div>
             <div class="card-copy">
               <h3>Intercept &amp; Fake Success</h3>
-              <p id="interceptHint">off</p>
+              <p id="interceptHint" class="hint off">Intercept off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="intercept_fake_success" id="swIntercept" />
@@ -121,11 +120,11 @@
           <div class="card-head">
             <div class="ico ico-gold">🔒</div>
             <div class="card-copy">
-              <h3>Hide Root</h3>
-              <p>Magisk / APatch / KSU hide</p>
+              <h3>Iam not root</h3>
+              <p id="rootHint" class="hint off">off</p>
             </div>
             <label class="switch">
-              <input type="checkbox" data-key="hide_root" />
+              <input type="checkbox" data-key="hide_root" id="swRoot" />
               <span class="slider"></span>
             </label>
           </div>
@@ -135,11 +134,11 @@
           <div class="card-head">
             <div class="ico ico-gold">🛠️</div>
             <div class="card-copy">
-              <h3>Hide Developer</h3>
-              <p>Dev options / USB debug hide</p>
+              <h3>iam not developer</h3>
+              <p id="devHint" class="hint off">off</p>
             </div>
             <label class="switch">
-              <input type="checkbox" data-key="hide_developer" />
+              <input type="checkbox" data-key="hide_developer" id="swDev" />
               <span class="slider"></span>
             </label>
           </div>
@@ -150,10 +149,10 @@
             <div class="ico ico-cyan">📤</div>
             <div class="card-copy">
               <h3>Block Outgoing SMS</h3>
-              <p>UPI verify tokens block</p>
+              <p id="blockHint" class="hint off">off</p>
             </div>
             <label class="switch">
-              <input type="checkbox" data-key="hook_outgoing_sms" />
+              <input type="checkbox" data-key="hook_outgoing_sms" id="swBlock" />
               <span class="slider"></span>
             </label>
           </div>
@@ -166,7 +165,7 @@
             <div class="ico ico-sky">✈️</div>
             <div class="card-copy">
               <h3>Telegram Forwarding</h3>
-              <p>Intercepted SMS → bot</p>
+              <p id="tgHint" class="hint off">Telegram off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="auto_forward_token" id="swTg" />
@@ -188,9 +187,6 @@
     </main>
 
     <footer class="foot">
-      <button type="button" class="primary" id="btnSave">
-        <span class="btn-label">Update / Save</span>
-      </button>
       <div class="save-status" id="saveStatus" hidden></div>
       <span class="credit">Virtus Zygisk Menu · <span class="accent">@hivirtus</span></span>
     </footer>

