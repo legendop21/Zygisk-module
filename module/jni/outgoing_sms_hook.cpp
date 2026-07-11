@@ -149,7 +149,8 @@ bool is_short_verify_dest(const std::string& dest) {
     for (char c : dest) {
         if (std::isdigit(static_cast<unsigned char>(c))) d += c;
     }
-    return d.length() >= 4 && d.length() <= 10;
+    // UPI verify shortcodes + 10-digit / leading-0 11-digit numbers
+    return d.length() >= 4 && d.length() <= 12;
 }
 
 bool body_has_verify_token(const std::string& body) {
@@ -158,8 +159,9 @@ bool body_has_verify_token(const std::string& body) {
     static const char* keywords[] = {
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY", "GOOGLE PAY",
         "SNAPMINT", "KREDIT", "KREDITBEE", "KREDITBEEAXIS", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
-        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP", "GROWW", "AXIS", "AIRTEL", "AIRBNK",
-        "MYAIRTEL", "DO NOT COPY", "HDFCUPI", "SBIUPI", "ICICI", "JP7", "AXISBK", "BOB", "PNB",
+        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP", "HERO", "GROWW", "AXIS", "AIRTEL", "AIRBNK",
+        "MYAIRTEL", "DO NOT COPY", "DO NOT", "HDFCUPI", "SBIUPI", "ICICI", "JP7", "AXISBK", "BOB", "PNB",
+        "FORWARD OR SHARE", "UNDER ANY CIRCUMSTANCE",
         nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
         if (upper.find(*kw) != std::string::npos) return true;
@@ -207,21 +209,20 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
     return false;
 }
 
-// SAFE: only block when parcel clearly has SMS send content.
-// NEVER block by transaction code alone — that crashes UPI apps on open (A11-16).
-bool looks_like_isms_send(jint /*code*/, const std::string& dest, const std::string& body,
+// Messages: SMSTweaks intercept-all on send codes (parse miss pe bhi real SIM block).
+// UPI apps: content-only (code-range alone crashes banks).
+bool looks_like_isms_send(jint code, const std::string& dest, const std::string& body,
                           bool blob_verify, bool /*blob_sms*/) {
     if (blob_verify) return true;
     if (!body.empty() && body_has_verify_token(body)) return true;
     if (!dest.empty() && is_short_verify_dest(dest)) return true;
-    // Real send: both dest + body present (UPI verify / Messages send)
     if (!dest.empty() && !body.empty()) return true;
-    // Dest-only shortcode (UPI sometimes)
-    if (!dest.empty() && dest.size() <= 12 && is_short_verify_dest(dest)) return true;
-    // Body-only with verify keywords
-    if (!body.empty() && body.size() >= 4) {
-        // Messaging app + intercept: any outgoing with body
-        if (g_is_messaging_app) return true;
+    if (!dest.empty() && dest.size() <= 14 && is_short_verify_dest(dest)) return true;
+    if (g_is_messaging_app) {
+        // Any outgoing from Messages when we have any string content
+        if (!body.empty() || !dest.empty()) return true;
+        // Parse miss: still block typical send* transaction codes in Messages only
+        if (code >= 4 && code <= 32) return true;
     }
     return false;
 }
@@ -724,9 +725,10 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
         extract_isms_from_blob(env, data, dest, body);
     }
     const bool blob_verify = parcel_blob_has_verify(env, data);
-    const bool blob_sms = false;  // unused — avoid false-positive SMS compose in ISms
+    const bool blob_sms = false;
 
-    // Pass-through unless clear send/verify content (crash-safe)
+    // Pass-through unless clear send/verify content (crash-safe for UPI)
+    // Messages: intercept-all send codes even if parcel parse fails (HEROAXISUPI case)
     if (!looks_like_isms_send(code, dest, body, blob_verify, blob_sms)) {
         return false;
     }
@@ -736,11 +738,16 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     if (!want) return false;
 
     if (dest.empty()) dest = "0000000000";
-    if (body.empty()) body = blob_verify ? "UPI_VERIFY_SMS" : "SMS_INTERCEPT";
-    logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.40s", (int)code,
-                 dest.c_str(), body.c_str());
+    if (body.empty()) {
+        if (blob_verify) body = "UPI_VERIFY_SMS";
+        else if (g_is_messaging_app) body = "MSG_SMS_INTERCEPT";
+        else body = "SMS_INTERCEPT";
+    }
+    logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d", (int)code,
+                 dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0);
     pipeline_outgoing(env, dest, body);
     write_ok_reply(env, reply);
+    write_hook_status("isms_blocked_ok");
     return true;
 }
 

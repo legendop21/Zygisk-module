@@ -255,7 +255,6 @@ hivirtus_seed_app_writable_files() {
     /data/local/tmp/hivirtus_tg_last_response.txt \
     /data/local/tmp/hivirtus_tg_test_response.txt \
     /data/local/tmp/hivirtus_tg_test_payload.json \
-    /data/local/tmp/hivirtus_save_ok.flag \
     /data/local/tmp/hivirtus_hook_status.txt \
     /data/local/tmp/hivirtus_spoof_phone.txt \
     /data/local/tmp/hivirtus_sender_id.txt
@@ -269,6 +268,8 @@ hivirtus_seed_app_writable_files() {
     fi
     chmod 666 "$f" 2>/dev/null
   done
+  # NEVER auto-create save_ok.flag — empty placeholder → infinite TG test + heat
+  [ -f /data/local/tmp/hivirtus_save_ok.flag ] && chmod 666 /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
   # tg_test.request — DO NOT auto-create (spam). Only chmod if Save created it.
   [ -f /data/local/tmp/hivirtus_tg_test.request ] && chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
   if [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ]; then

