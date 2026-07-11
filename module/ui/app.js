@@ -91,29 +91,9 @@
   }
 
   function paintStatusLabels() {
-    const fakeOn =
-      ($("#swFake") && $("#swFake").checked) ||
-      digitsPhone(($("#phoneInput") || {}).value || "").length >= 10;
-    const senderOn =
-      ($("#swSender") && $("#swSender").checked) ||
-      !!(($("[data-key='inject_sender_id']") || {}).value || "").trim();
-    const prefixOn = !!($("#swPrefix") && $("#swPrefix").checked);
-    const tgOn =
-      ($("#swTg") && $("#swTg").checked) ||
-      !!(cfg.telegram_bot_token && cfg.telegram_chat_id);
-    const rootOn = !!($("#swRoot") && $("#swRoot").checked);
-    const devOn = !!($("#swDev") && $("#swDev").checked);
-    const blockOn = $("#swBlock") ? !!$("#swBlock").checked : true;
     const on = interceptOn();
-
-    setHint("fakeHint", fakeOn, "Fake no on", "Fake no off");
-    setHint("senderHint", senderOn, "Sender id on", "Sender id off");
-    setHint("prefixHint", prefixOn, "Prefix on", "Prefix off");
-    setHint("interceptHint", on, "Intercept on", "Intercept off");
-    setHint("tgHint", tgOn, "Telegram on", "Telegram off");
-    setHint("rootHint", rootOn, "on", "off");
-    setHint("devHint", devOn, "on", "off");
-    setHint("blockHint", blockOn, "on", "off");
+    // Sirf Intercept on/off — Fake no / Sender id / baaki on text hatao
+    setHint("interceptHint", on, "Intercept on", "off");
 
     const el = $("#statusLine");
     if (el) {

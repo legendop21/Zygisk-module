@@ -109,12 +109,17 @@ public class HivirtusJsBridge {
             }
         }
 
-        // Overlay dedicated global files (even if JSON missing keys)
+        // Sender file = fallback ONLY when JSON missing.
+        // Old bug: always overlay file → AX-AIRTEL-S stuck forever after change.
         try {
-            String sid = readFirstLine(new File(SENDER_ID_FILE));
-            if (sid.isEmpty()) sid = readFirstLine(new File("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt"));
-            if (sid.isEmpty() && appCtx != null) {
-                sid = readFirstLine(new File(appCtx.getFilesDir(), "hivirtus_sender_id.txt"));
+            String jsonSid = merged.optString("inject_sender_id", "").trim();
+            if ("AD-TEST-S".equals(jsonSid)) jsonSid = "";
+            if (jsonSid.isEmpty()) {
+                String sid = readFirstLine(new File(SENDER_ID_FILE));
+                if (sid.isEmpty()) sid = readFirstLine(new File("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt"));
+                if (sid.isEmpty() && appCtx != null) {
+                    sid = readFirstLine(new File(appCtx.getFilesDir(), "hivirtus_sender_id.txt"));
+                }
                 if (sid.isEmpty()) {
                     try {
                         File docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
@@ -122,9 +127,12 @@ public class HivirtusJsBridge {
                     } catch (Exception ignored) {
                     }
                 }
-            }
-            if (!sid.isEmpty() && !"AD-TEST-S".equals(sid)) {
-                merged.put("inject_sender_id", sid);
+                if (!sid.isEmpty() && !"AD-TEST-S".equals(sid)) {
+                    merged.put("inject_sender_id", sid);
+                    merged.put("override_incoming_sender", true);
+                    merged.put("sender_id_enabled", true);
+                }
+            } else {
                 merged.put("override_incoming_sender", true);
                 merged.put("sender_id_enabled", true);
             }
@@ -275,6 +283,9 @@ public class HivirtusJsBridge {
         writeUtf8("/data/local/tmp/hivirtus_sender_save.request", sid + "\n");
         writeUtf8("/sdcard/Documents/hivirtus_sender_save.request", sid + "\n");
         writeUtf8("/sdcard/Download/hivirtus_sender_save.request", sid + "\n");
+        // Stamp so service harvest never prefers stale AX-AIRTEL-S app copies
+        writeUtf8("/data/local/tmp/hivirtus_sender_save.ts", String.valueOf(System.currentTimeMillis() / 1000) + "\n");
+        writeUtf8("/sdcard/Documents/hivirtus_sender_save.ts", String.valueOf(System.currentTimeMillis() / 1000) + "\n");
         return n + 1;
     }
 
@@ -401,10 +412,16 @@ public class HivirtusJsBridge {
                 }
             }
 
-            String sid = merged.optString("inject_sender_id", "").trim();
+            // THIS save sender wins — never keep stale AX-AIRTEL-S from old merge/file
+            String sid = incomingSid;
+            if (sid.isEmpty()) sid = merged.optString("inject_sender_id", "").trim();
             if ("AD-TEST-S".equals(sid)) {
                 sid = "";
                 merged.put("inject_sender_id", "");
+            }
+            if (!incomingSid.isEmpty()) {
+                merged.put("inject_sender_id", incomingSid);
+                sid = incomingSid;
             }
             if (!sid.isEmpty()) {
                 merged.put("override_incoming_sender", true);

