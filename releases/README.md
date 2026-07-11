@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.59.zip**
+Latest: **virtus-zygisk-mode-v1.0.60.zip**
 
-Drive Magisk floating-menu parity: inject almost all apps, `SmsTweaksHooks.init` early (ServiceManager ISms Java proxy before Application), native Binder only for Messages/UPI backup.
+Drive MenuLoader exact fix: `IBinder` → `queryLocalInterface` → `ISms` proxy (pehle galat IBinder pe sendText dhoondh rahe the). Native: Android 16 `iface_ok=0` pe bhi Messages ISms block. Junk inject + repair/diag files hata diye.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.59.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.60.zip

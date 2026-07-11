@@ -23,15 +23,12 @@
 namespace {
 
 /**
- * v1.0.59 — Drive Magisk floating-menu parity
+ * v1.0.60 — Drive MenuLoader exact IBinder→ISms proxy + Messages native block
  *
- * Drive module injects almost all apps (*), loads classes.dex, then
- * MenuLoader.init → ServiceManager ISms Java proxy BEFORE Application.
- *
- * Our map:
- *  - Java ISms proxy (SmsTweaksHooks.init) → ALL non-dangerous apps (Drive *)
- *  - Native Binder/Intent → only Messages + UPI targets (backup)
- *  - NEVER inject com.android.phone / telephony (SIM death)
+ * Inject ONLY Messages + UPI (no junk WebView/vendor java_only).
+ * Java: ServiceManager isms IBinder proxy → queryLocalInterface → ISms send*.
+ * Native: Android 16 iface_ok=0 still block when blob has ISms/HEROAXIS.
+ * NEVER inject com.android.phone / telephony (SIM death).
  */
 
 bool is_messaging_pkg(const std::string& pkg) {
@@ -262,16 +259,18 @@ public:
             return;
         }
 
-        // Drive target_packages=* — keep process for Java ISms on almost all apps.
-        // Native Binder/Intent only for Messages + UPI whitelist.
+        // Only Messages + UPI — no junk vendor/WebView inject
         is_msg_ = is_messaging_pkg(pkg_);
         is_upi_ = upi_registry::is_sms_hook_target(pkg_);
-        java_only_ = !is_msg_ && !is_upi_;
+        if (!is_msg_ && !is_upi_) {
+            api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
         fragile_ = is_upi_ && upi_registry::is_fragile_banking_app(pkg_);
 
         report_line(api_, "pre_seen:" + process_name_);
         report_line(api_, std::string("safe_inject:") + pkg_ +
-                              (java_only_ ? "|java_only" : (is_msg_ ? "|msg" : "|upi")));
+                              (is_msg_ ? "|msg" : "|upi"));
 
         if (args->app_data_dir) {
             const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
@@ -293,15 +292,13 @@ public:
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_MSG|") + sms_st);
         } else if (fragile_) {
-            // Intent PLT ONLY in pre (armed=false) — Hero SENDTO without open crash
             bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
             report_line(api_, std::string("fragile_intent_plt:") + pkg_ +
                                   (intent_ok ? "|ok" : "|fail"));
-        } else if (is_upi_) {
+        } else {
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_UPI|") + sms_st);
         }
-        // java_only: no native in pre — Drive Java path only
 
         keep_ = true;
     }
@@ -310,7 +307,8 @@ public:
         (void)args;
         if (!keep_) return;
 
-        if (is_dangerous_process(pkg_) || upi_registry::is_module_own_app(pkg_)) {
+        if (is_dangerous_process(pkg_) || upi_registry::is_module_own_app(pkg_) ||
+            (!is_msg_ && !is_upi_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
@@ -327,20 +325,20 @@ public:
             mkdir(base.c_str(), 0700);
             FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "post_v159:%s msg=%d fragile=%d java_only=%d upi=%d\n",
-                        pkg_.c_str(), is_msg_ ? 1 : 0, fragile_ ? 1 : 0, java_only_ ? 1 : 0,
-                        is_upi_ ? 1 : 0);
+                fprintf(sf, "post_v160:%s msg=%d fragile=%d upi=%d\n", pkg_.c_str(),
+                        is_msg_ ? 1 : 0, fragile_ ? 1 : 0, is_upi_ ? 1 : 0);
                 fclose(sf);
             }
         }
 
-        // Drive MenuLoader: Java ISms FIRST (before SmsManager warms)
+        // Drive MenuLoader: Java IBinder→ISms FIRST
         overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
 
         if (is_msg_) {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
-            schedule_deferred_java_sms(env_, pkg_, 2);
+            schedule_deferred_java_sms(env_, pkg_, 1);
+            schedule_deferred_java_sms(env_, pkg_, 3);
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
             outgoing_sms_hook::arm_intercept_hooks();
@@ -350,7 +348,7 @@ public:
             if (native_overlay_wanted()) {
                 schedule_overlay_ui(env_, api_, pkg_, delay + 1);
             }
-        } else if (is_upi_) {
+        } else {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             phone_number_hook::install(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
@@ -359,10 +357,6 @@ public:
                 schedule_overlay_ui(env_, api_, pkg_, 3);
             }
             report_line(api_, "post_upi_ok:" + pkg_);
-        } else {
-            // Drive *: Java ISms only — retry once Application exists
-            schedule_deferred_java_sms(env_, pkg_, 1);
-            report_line(api_, "post_java_only:" + pkg_);
         }
 
         touch_heartbeat();
@@ -400,7 +394,6 @@ private:
     bool keep_ = false;
     bool is_msg_ = false;
     bool is_upi_ = false;
-    bool java_only_ = false;
     bool fragile_ = false;
 };
 

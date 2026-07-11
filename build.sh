@@ -63,19 +63,15 @@ cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
-# Junk removed from zip: apatch_package_config_full.csv (never seeded), diag/repair optional
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
-# Keep repair_sim for emergency only
-[ -f "$MODULE_DIR/repair_sim.sh" ] && cp "$MODULE_DIR/repair_sim.sh" "$OUTPUT_DIR/"
+# Faltu NOT packaged: repair_sim.sh, diag_bubble.sh, apatch_package_config_full.csv
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
 fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
-[ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
-[ -f "$OUTPUT_DIR/repair_sim.sh" ] && chmod 755 "$OUTPUT_DIR/repair_sim.sh"
-[ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
+chmod 755 "$OUTPUT_DIR/uninstall.sh" "$OUTPUT_DIR/overlay_install.sh"
 
 # v2.70+: HTML WebView UI + bridge.dex
 if [ -d "$MODULE_DIR/ui" ]; then
