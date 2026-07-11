@@ -7,6 +7,8 @@ namespace upi_registry {
 bool is_known_upi(const std::string& package);
 bool is_sms_hook_target(const std::string& package);
 bool is_fragile_banking_app(const std::string& package);
+/** LSPosed-style "Invalidate inline hooks" — no PLT/inline; Java+bubble only. */
+bool is_no_inline_hook_pkg(const std::string& package);
 bool is_default_sms_app(const std::string& package);
 int hook_startup_delay_sec(const std::string& package);
 bool is_module_own_app(const std::string& package);

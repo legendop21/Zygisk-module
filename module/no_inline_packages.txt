@@ -1,0 +1,16 @@
+# Virtus — LSPosed-style "Invalidate inline hooks" list
+# One package per line. These apps get Java ISms + bubble ONLY (no PLT/inline).
+# Fixes open-crash on SuperMoney / loan apps while still injecting.
+money.super.payments
+money.super.app
+com.supermoney.app
+com.snapmint.customerapp
+com.kreditbee.android
+com.stashfin.android
+com.naviapp
+com.whizdm.moneyview.loans
+com.mpokket.app
+com.cashe.android
+com.kissht.android
+com.earlysalary.android
+com.zestmoney.android

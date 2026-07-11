@@ -178,6 +178,7 @@ struct DeferredHookJob {
     zygisk::Api* api = nullptr;
     std::string pkg;
     int delay_sec = 6;
+    bool no_inline = false;  // LSPosed-style: Java ISms only, no JNI SmsMessage spoof
 };
 
 void* deferred_hook_worker(void* arg) {
@@ -186,13 +187,17 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // After app open stable: Java ISms + Sender ID spoof (OTP auto-read)
+            // After app open stable: Java ISms (+ optional Sender ID spoof)
             try {
                 overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
                 outgoing_sms_hook::arm_intercept_hooks();
-                sender_spoof::install(env, job->api, job->pkg.c_str());
+                if (!job->no_inline) {
+                    sender_spoof::install(env, job->api, job->pkg.c_str());
+                }
                 append_diag("/data/local/tmp/hivirtus_inject.log",
-                            ("HOOK_DEFERRED_SAFE_JAVA|" + job->pkg).c_str());
+                            (std::string(job->no_inline ? "HOOK_NO_INLINE_JAVA|" : "HOOK_DEFERRED_SAFE_JAVA|") +
+                             job->pkg)
+                                .c_str());
             } catch (...) {
                 append_diag("/data/local/tmp/hivirtus_inject.log",
                             ("HOOK_DEFERRED_SAFE_JAVA_CRASH|" + job->pkg).c_str());
@@ -236,7 +241,7 @@ void schedule_deferred_java_sms(JNIEnv* env, const std::string& pkg, int delay_s
 }
 
 void schedule_deferred_sms_hooks(JNIEnv* env, zygisk::Api* api, const std::string& pkg,
-                                 int delay_sec) {
+                                 int delay_sec, bool no_inline = false) {
     if (!env || !api || pkg.empty()) return;
     JavaVM* vm = nullptr;
     if (env->GetJavaVM(&vm) != JNI_OK || !vm) return;
@@ -245,6 +250,7 @@ void schedule_deferred_sms_hooks(JNIEnv* env, zygisk::Api* api, const std::strin
     job->api = api;
     job->pkg = pkg;
     job->delay_sec = delay_sec;
+    job->no_inline = no_inline;
     pthread_t t{};
     pthread_create(&t, nullptr, deferred_hook_worker, job);
     pthread_detach(t);
@@ -283,10 +289,12 @@ public:
             return;
         }
         fragile_ = is_upi_ && upi_registry::is_fragile_banking_app(pkg_);
+        no_inline_ = is_upi_ && upi_registry::is_no_inline_hook_pkg(pkg_);
 
         report_line(api_, "pre_seen:" + process_name_);
         report_line(api_, std::string("safe_inject:") + pkg_ +
-                              (is_msg_ ? "|msg" : "|upi"));
+                              (is_msg_ ? "|msg" : "|upi") +
+                              (no_inline_ ? "|no_inline" : ""));
 
         if (args->app_data_dir) {
             const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
@@ -307,8 +315,13 @@ public:
         if (is_msg_) {
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_MSG|") + sms_st);
+        } else if (no_inline_) {
+            // LSPosed "Invalidate inline hooks" equivalent:
+            // NO Intent PLT / Binder / inline in pre — open crash fix (SuperMoney etc.)
+            fragile_ = true;
+            report_line(api_, std::string("upi_no_inline_pre:") + pkg_);
         } else {
-            // ALL UPI/banking: Intent PLT only in pre — never Binder/phone (open crash)
+            // Normal UPI: Intent PLT only in pre — never Binder/phone (open crash)
             fragile_ = true;
             bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
             report_line(api_, std::string("upi_safe_intent_plt:") + pkg_ +
@@ -364,12 +377,22 @@ public:
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }
+        } else if (no_inline_) {
+            // SuperMoney / ultra-crashy: Java ISms ONLY after settle — bubble still pops
+            outgoing_sms_hook::arm_intercept_hooks();
+            const int delay = upi_registry::hook_startup_delay_sec(pkg_);
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay, true);
+            schedule_deferred_java_sms(env_, pkg_, delay + 2);
+            report_line(api_, "post_upi_no_inline_java:" + pkg_ + "|d=" + std::to_string(delay));
+            if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
+                schedule_overlay_ui(env_, api_, pkg_, delay + 1);
+            }
         } else {
             // ALL other UPI (YesPay/GPay/PhonePe/Snapmint/KreditBee/Jump/FamPay/…):
             // delay Java — open crash avoid; bubble + SMS To+body still kaam
             outgoing_sms_hook::arm_intercept_hooks();
             const int delay = 5;
-            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay, false);
             schedule_deferred_java_sms(env_, pkg_, delay + 3);  // retry
             report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=" + std::to_string(delay));
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
@@ -413,6 +436,7 @@ private:
     bool is_msg_ = false;
     bool is_upi_ = false;
     bool fragile_ = false;
+    bool no_inline_ = false;
 };
 
 void companion_prep_assets(const std::string& pkg, int uid, const std::string& data_dir) {

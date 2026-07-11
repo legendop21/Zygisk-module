@@ -1,5 +1,6 @@
 #include "upi_registry.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace upi_registry {
@@ -174,7 +175,9 @@ constexpr const char* kPackages[] = {
     "com.herofincorp.lending",
     "com.herofincorp.upi",
     "money.super.app",
+    "money.super.payments",
     "com.supermoney.app",
+    "com.supermoney",
     "in.fampay.app",
     "com.fampay.android",
     "com.postpe",
@@ -223,6 +226,7 @@ bool is_known_upi(const std::string& package) {
     if (package.find("stashfin") != std::string::npos) return true;
     if (package.find("snapmint") != std::string::npos) return true;
     if (package.find("supermoney") != std::string::npos) return true;
+    if (package.rfind("money.super.", 0) == 0) return true;
     if (package.find("bharatpe") != std::string::npos) return true;
     if (package.find("postpe") != std::string::npos) return true;
     if (package.find("esaf") != std::string::npos) return true;
@@ -400,7 +404,69 @@ bool is_fragile_banking_app(const std::string& package) {
     return false;
 }
 
+namespace {
+
+bool file_lists_pkg(const char* path, const std::string& package) {
+    FILE* f = fopen(path, "r");
+    if (!f) return false;
+    char line[256];
+    bool hit = false;
+    while (fgets(line, sizeof(line), f)) {
+        // trim
+        char* s = line;
+        while (*s == ' ' || *s == '\t') ++s;
+        size_t n = strlen(s);
+        while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r' || s[n - 1] == ' ')) {
+            s[--n] = 0;
+        }
+        if (n == 0 || s[0] == '#') continue;
+        if (package == s) {
+            hit = true;
+            break;
+        }
+    }
+    fclose(f);
+    return hit;
+}
+
+}  // namespace
+
+bool is_no_inline_hook_pkg(const std::string& package) {
+    if (package.empty() || is_default_sms_app(package)) return false;
+    // Built-in ultra-crashy apps (LSPosed "Invalidate inline hooks" equivalent)
+    static const char* kNoInline[] = {
+        "money.super.payments",
+        "money.super.app",
+        "com.supermoney.app",
+        "com.supermoney",
+        "com.snapmint.customerapp",
+        "com.kreditbee.android",
+        "com.stashfin.android",
+        "com.naviapp",
+        "com.whizdm.moneyview.loans",
+        "com.mpokket.app",
+        "com.cashe.android",
+        "com.kissht.android",
+        "com.earlysalary.android",
+        "com.zestmoney.android",
+        "com.branch_international.branch.branch_demo_android",
+        nullptr,
+    };
+    for (const char* const* p = kNoInline; *p; ++p) {
+        if (package == *p) return true;
+    }
+    if (package.rfind("money.super.", 0) == 0) return true;
+    if (package.find("supermoney") != std::string::npos) return true;
+    // User / module override lists (one package per line)
+    if (file_lists_pkg("/data/local/tmp/hivirtus_no_inline_packages.txt", package)) return true;
+    if (file_lists_pkg("/data/adb/modules/hivirtus_zygisk_mode/no_inline_packages.txt", package)) {
+        return true;
+    }
+    return false;
+}
+
 int hook_startup_delay_sec(const std::string& package) {
+    if (is_no_inline_hook_pkg(package)) return 8;
     if (is_fragile_banking_app(package)) return 5;
     if (package.find("bank") != std::string::npos) return 3;
     return 1;

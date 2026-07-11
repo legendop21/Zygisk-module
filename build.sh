@@ -73,6 +73,7 @@ if [ -d "$MODULE_DIR/bin" ]; then
   chmod 755 "$OUTPUT_DIR/bin/"* 2>/dev/null || true
   echo "==> Bundled bin/sqlite3 for Sender ID rewrite"
 fi
+[ -f "$MODULE_DIR/no_inline_packages.txt" ] && cp -f "$MODULE_DIR/no_inline_packages.txt" "$OUTPUT_DIR/"
 # Faltu NOT packaged: repair_sim.sh, diag_bubble.sh, apatch_package_config_full.csv
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
