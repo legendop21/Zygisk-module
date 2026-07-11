@@ -164,7 +164,7 @@ echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
-echo "v1.0.55" > /data/local/tmp/hivirtus_module_version.txt
+echo "v1.0.56" > /data/local/tmp/hivirtus_module_version.txt
 chmod 666 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
 
 # Silent SIM repair (v1.0.49/50 phone-hook breakage)
@@ -178,11 +178,21 @@ for pkg in com.google.android.apps.messaging com.android.messaging \
   pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
 done
 
-# Seed diag files so user always sees them in file manager
+# Seed diag files so user always sees them in file manager — wipe stuck OTP junk
 : > /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
 chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
 echo '{"dest":"","body":"","note":"waiting_for_outgoing_verify"}' > /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
 chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
-rm -f /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
+rm -f /data/local/tmp/hivirtus_tg_out_dedupe.hash \
+      /data/local/tmp/hivirtus_pending_verify.json \
+      /data/local/tmp/hivirtus_outgoing_blocked.json \
+      /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
+for pkg in com.google.android.apps.messaging com.herofincorp.diyjourneys \
+           com.phonepe.app com.google.android.apps.nbu.paisa.user; do
+  rm -f "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+        "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+        "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
+        "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" 2>/dev/null
+done
 
 ui_print "License done activated ✅"

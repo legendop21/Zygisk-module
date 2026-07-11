@@ -318,7 +318,7 @@ public:
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
             // SMSTweaks-style: wait for UI, then JNI BinderProxy + phone + sender
-            const int delay = is_yespay(pkg_) ? 8 : 6;
+            const int delay = is_yespay(pkg_) ? 4 : 2;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
             // Bubble after hooks settle

