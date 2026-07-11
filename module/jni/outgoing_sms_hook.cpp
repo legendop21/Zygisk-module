@@ -172,6 +172,8 @@ bool is_short_verify_dest(const std::string& dest) {
     return d.length() >= 4 && d.length() <= 12;
 }
 
+bool blob_contains_needle(const std::string& blob, const char* ascii);
+
 bool body_has_verify_token(const std::string& body) {
     if (body.empty()) return false;
     const std::string upper = to_upper(body);
