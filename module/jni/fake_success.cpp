@@ -401,7 +401,7 @@ void on_outgoing_intercepted(JNIEnv* env, const std::string& dest, const std::st
             auto* job = new PiJob();
             job->vm = vm;
             job->dest = dest;
-            job->delay_ms = 900;
+            job->delay_ms = 120;  // Hero token race — was 900ms → Something went wrong / expire
             if (sent_intent) job->sent = env->NewGlobalRef(sent_intent);
             if (delivery_intent) job->delivery = env->NewGlobalRef(delivery_intent);
             pthread_t t{};

