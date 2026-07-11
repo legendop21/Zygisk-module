@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.42 GAMEX FULL PORT    "
+ui_print "     v1.0.43 MSG PLT + NO SPAM   "
 ui_print "  Messages intercept-all send   "
 ui_print "  TG spam/heat FIXED            "
 ui_print "  HEROAXISUPI body → Telegram   "
@@ -160,18 +160,24 @@ if [ -n "$OLD_TG_TOKEN" ] && [ -n "$OLD_TG_CHAT" ]; then
     > /data/local/tmp/hivirtus_telegram_credentials.json
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
   ui_print "- Telegram + phone + sender preserved"
-  # Kill spam leftovers; do NOT mark sent — Save pe ek test jaana chahiye
+  # Kill spam leftovers — keep sent.hash if same token (no re-spam on every flash)
   rm -f /data/local/tmp/hivirtus_tg_test.request \
         /sdcard/Documents/hivirtus_tg_test.request \
         /sdcard/Download/hivirtus_tg_test.request 2>/dev/null
-  rm -f /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
-  rm -f /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
   echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null
+  PREV_SENT=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null | tr -d '\r\n')
+  CUR="${OLD_TG_TOKEN}|${OLD_TG_CHAT}"
+  if [ "$PREV_SENT" = "$CUR" ]; then
+    echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
+    ui_print "- TG already tested for this token — no spam"
+  else
+    # One boot test only when token never tested
+    rm -f /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
+    echo 1 > /data/local/tmp/hivirtus_tg_test.request
+    chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+    ui_print "- TG test queued once (new/changed token)"
+  fi
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
-  # Queue ONE boot test after flash
-  echo 1 > /data/local/tmp/hivirtus_tg_test.request
-  chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-  ui_print "- TG test queued (once after reboot)"
 else
   ui_print "- Telegram empty — bubble → Token+Chat → Save"
 fi
@@ -180,7 +186,10 @@ fi
 : > /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
 chmod 666 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
 rm -f /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null
-rm -f /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+# Do NOT wipe tg_test.request here if we just queued above for new token
+if [ -f /data/local/tmp/hivirtus_tg_boot_sent.flag ]; then
+  rm -f /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+fi
 
 # Clear leftover SEND_SMS ignore from older module versions
 ui_print "- Restoring SEND_SMS allow (No permission fix)..."

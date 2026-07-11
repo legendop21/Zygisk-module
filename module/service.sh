@@ -213,7 +213,7 @@ sync_config() {
     TG_T=$(grep -o '"telegram_bot_token"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     TG_C=$(grep -o '"telegram_chat_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
     if [ -n "$TG_T" ] && [ -n "$TG_C" ]; then
-      OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
+      OLD_HASH=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null | tr -d '\r\n')
       NEW_HASH="${TG_T}|${TG_C}"
       printf '%s\n' "{\"telegram_bot_token\":\"${TG_T}\",\"telegram_chat_id\":\"${TG_C}\"}" \
         > /data/local/tmp/hivirtus_telegram_credentials.json
@@ -222,15 +222,11 @@ sync_config() {
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
       [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
 
-      # TG test: ONLY real Save (save_ok content=1) — empty placeholder caused heat spam
-      SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
+      # TG test: ONLY explicit Save (save_ok=1). Hash-change alone NEVER queues (spam fix).
+      SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null | tr -d '\r\n')
       QUEUE=0
       SAVE_OK_VAL=$(cat /data/local/tmp/hivirtus_save_ok.flag 2>/dev/null | tr -d '\r\n[:space:]')
-      if [ "$SAVE_OK_VAL" = "1" ]; then
-        if [ "$NEW_HASH" != "$SENT_HASH" ]; then
-          QUEUE=1
-        fi
-      elif [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
+      if [ "$SAVE_OK_VAL" = "1" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
         QUEUE=1
       fi
       echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
@@ -750,14 +746,15 @@ send_tg_test_if_requested() {
     return 0
   fi
   CUR_HASH="${TG_TOKEN}|${TG_CHAT}"
-  SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
+  SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null | tr -d '\r\n')
   if [ -n "$SENT_HASH" ] && [ "$CUR_HASH" = "$SENT_HASH" ]; then
     rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
     return 0
   fi
   NOW=$(date +%s)
   LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
-  if [ $((NOW - LAST_TRY)) -lt 15 ]; then
+  # Hard cooldown 120s — spam kill
+  if [ $((NOW - LAST_TRY)) -lt 120 ]; then
     return 0
   fi
   echo "$NOW" > /data/local/tmp/hivirtus_tg_test_last_try.ts
@@ -781,6 +778,7 @@ Device: ${DEV}"
     echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
     echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
     echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
+    chmod 666 /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
     rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
@@ -788,7 +786,7 @@ Device: ${DEV}"
     FAILS=$((FAILS + 1))
     echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_fail try=$FAILS $(date +%s) resp=$(head -c 160 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-    if [ "$FAILS" -ge 5 ]; then
+    if [ "$FAILS" -ge 3 ]; then
       echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
       rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
       echo "tg_test_give_up $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null

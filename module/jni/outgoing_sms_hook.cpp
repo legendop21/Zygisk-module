@@ -1042,20 +1042,56 @@ bool register_binder_proxy_plt() {
 
 bool register_binder_proxy_jni(JNIEnv* env) {
     if (!g_api || !env) return false;
-    void* our_hook = reinterpret_cast<void*>(hook_BinderProxy_transact);
-    JNINativeMethod methods[] = {
-        {"transactNative", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", our_hook},
-    };
-    g_api->hookJniNativeMethods(env, "android/os/BinderProxy", methods, 1);
-    // CRITICAL: agar method na mile to fnPtr == our_hook reh sakta hai → infinite recurse → crash
-    if (methods[0].fnPtr && methods[0].fnPtr != our_hook) {
-        orig_BinderProxy_transact =
-            reinterpret_cast<decltype(orig_BinderProxy_transact)>(methods[0].fnPtr);
-        logger::info("OutgoingSms", "JNI BinderProxy.transactNative hooked");
-        write_hook_status("jni_binderproxy_ok");
+    if (orig_BinderProxy_transact) {
+        write_hook_status("jni_binderproxy_already");
         return true;
     }
+    void* our_hook = reinterpret_cast<void*>(hook_BinderProxy_transact);
+    // Try common AOSP signatures (A10–A16)
+    const char* sigs[] = {
+        "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
+        nullptr,
+    };
+    for (const char** sig = sigs; *sig; ++sig) {
+        JNINativeMethod methods[] = {
+            {"transactNative", *sig, our_hook},
+        };
+        g_api->hookJniNativeMethods(env, "android/os/BinderProxy", methods, 1);
+        if (methods[0].fnPtr && methods[0].fnPtr != our_hook) {
+            orig_BinderProxy_transact =
+                reinterpret_cast<decltype(orig_BinderProxy_transact)>(methods[0].fnPtr);
+            logger::info("OutgoingSms", "JNI BinderProxy.transactNative hooked");
+            write_hook_status("jni_binderproxy_ok");
+            return true;
+        }
+        char detail[96];
+        snprintf(detail, sizeof(detail), "jni_binderproxy_miss fn=%p", methods[0].fnPtr);
+        write_hook_status(detail);
+    }
     write_hook_status("jni_binderproxy_fail");
+    return false;
+}
+
+/** Messages-only PLT — banking pe crash, Messages pe HEROAXISUPI real-SIM catch. */
+bool register_binder_proxy_plt_messages() {
+    if (!g_api || !g_is_messaging_app) return false;
+    if (orig_BinderProxy_transact) return true;
+    plt_hook::set_api(g_api);
+    const bool reg = register_binder_proxy_plt();
+    if (!reg) {
+        write_hook_status("plt_binder_msg_reg_fail");
+        return false;
+    }
+    if (!plt_hook::commit()) {
+        write_hook_status("plt_binder_msg_commit_fail");
+        return false;
+    }
+    if (orig_BinderProxy_transact) {
+        write_hook_status("plt_binder_msg_ok");
+        logger::info("OutgoingSms", "Messages PLT BinderProxy hooked");
+        return true;
+    }
+    write_hook_status("plt_binder_msg_no_orig");
     return false;
 }
 
@@ -1369,6 +1405,7 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         (g_upi_pkg.find(".mms") != std::string::npos) ||
         (g_upi_pkg == "com.oneplus.mms") || (g_upi_pkg == "com.coloros.mms") ||
         (g_upi_pkg == "com.android.mms") || (g_upi_pkg == "com.samsung.android.messaging") ||
+        (g_upi_pkg == "com.motorola.messaging") ||
         upi_registry::is_default_sms_app(g_upi_pkg);
     ensure_pkg_diag_dir();
     write_hook_status("upi_install_begin");
@@ -1376,37 +1413,56 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
     const std::string pkg = g_upi_pkg;
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
-    // SMSTweaks-style: JNI ONLY — never PLT Binder/Intent (banking open crash)
     bool jni_ok = register_binder_proxy_jni(env);
+    bool plt_ok = false;
+    // CRITICAL: ZygiskNext pe BinderProxy JNI aksar miss → Messages MUST use PLT
+    // (Hero SENDTO → Messages → ISms → SIM). Banking pe PLT mat lagao (open crash).
+    if (!orig_BinderProxy_transact && g_is_messaging_app) {
+        plt_ok = register_binder_proxy_plt_messages();
+    }
     bool sms_ok = register_smsmanager_jni(env);
     bool intent_jni = false;
-    // Intent hooks also crash some UPI — only non-fragile, non-messaging
     if (!g_is_messaging_app && !fragile) {
         intent_jni = register_instrumentation_jni(env);
     }
-    // One JNI retry if binder missed (lib not ready)
     if (!orig_BinderProxy_transact) {
         jni_ok = register_binder_proxy_jni(env) || jni_ok;
+        if (!orig_BinderProxy_transact && g_is_messaging_app) {
+            plt_ok = register_binder_proxy_plt_messages() || plt_ok;
+        }
     }
 
-    char summary[256];
+    const bool ok = orig_BinderProxy_transact != nullptr;
+    char summary[320];
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d sms_jni=%d intent=%d OK=%d "
-             "SAFE=jni_only",
+             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d jni=%d plt=%d sms_jni=%d "
+             "intent=%d OK=%d path=%s",
              pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0,
-             orig_BinderProxy_transact ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0,
-             orig_BinderProxy_transact ? 1 : 0);
+             ok ? 1 : 0, jni_ok ? 1 : 0, plt_ok ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0,
+             ok ? 1 : 0, g_is_messaging_app ? (plt_ok ? "msg_plt" : "msg_jni") : "upi_jni");
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
+    // Always mirror Messages status to global tmp so user can see binder=1
+    if (g_is_messaging_app) {
+        FILE* gf = fopen("/data/local/tmp/hivirtus_hook_status.txt", "w");
+        if (gf) {
+            fprintf(gf, "%s\n", summary);
+            fclose(gf);
+            chmod("/data/local/tmp/hivirtus_hook_status.txt", 0666);
+        }
+    }
     logger::info("OutgoingSms", "%s", summary);
     return std::string(summary);
 }
 
 bool install_binder_plt_force(zygisk::Api* api) {
-    // v1.0.39: PLT Binder FORCE DISABLED — YesPay/PhonePe open crash
-    (void)api;
-    write_hook_status("plt_force_disabled_v139");
-    return false;
+    // Only for Messages — never force PLT on banking
+    if (!api || !g_is_messaging_app) {
+        write_hook_status("plt_force_skip_non_msg");
+        return false;
+    }
+    g_api = api;
+    return register_binder_proxy_plt_messages();
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec) {
