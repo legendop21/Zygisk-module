@@ -894,23 +894,21 @@ forward_blocked_telegram() {
   read_tg_creds
   [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
 
-  # Display like SMS Tweaks (+91 for 10-digit Indian)
+  # Display (+91 for 10-digit Indian)
   TO_NUM="$BLOCKED_DEST"
   if [ ${#TO_DIGITS} -eq 10 ]; then
     TO_NUM="+91${TO_DIGITS}"
+  elif [ ${#TO_DIGITS} -eq 12 ] && [ "${TO_DIGITS#91}" != "$TO_DIGITS" ]; then
+    TO_NUM="+${TO_DIGITS}"
   fi
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
-  ONE_TAP="To: ${TO_NUM}
-Message: ${MSG_BODY}"
 
-  # Exact SMS Tweaks layout — outgoing only, no pkg / no menu spam
-  TEXT="📱 SMS Intercepted
------------------
-📞 To: ${TO_NUM}
-💬 Message: ${MSG_BODY}
-📋 One-tap copy:
-${ONE_TAP}"
+  # User format — message + one-tap copy same layout
+  ONE_TAP="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
+To ${TO_NUM}
+Message: ${MSG_BODY}"
+  TEXT="$ONE_TAP"
 
   ESC_TEXT=$(tg_json_escape "$TEXT")
   ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")

