@@ -164,7 +164,7 @@ echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
-echo "v1.0.52" > /data/local/tmp/hivirtus_module_version.txt
+echo "v1.0.53" > /data/local/tmp/hivirtus_module_version.txt
 chmod 666 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
 
 # Silent SIM repair (v1.0.49/50 phone-hook breakage)
@@ -181,7 +181,8 @@ done
 # Seed diag files so user always sees them in file manager
 : > /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
 chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
-echo '{"dest":"","body":"","note":"waiting_for_intercept"}' > /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+echo '{"dest":"","body":"","note":"waiting_for_outgoing_verify"}' > /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
 chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+rm -f /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
 
 ui_print "License done activated ✅"

