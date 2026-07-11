@@ -238,6 +238,10 @@ bool is_known_upi(const std::string& package) {
     if (package.find("yespay") != std::string::npos) return true;
     if (package.find("herofincorp") != std::string::npos) return true;
     if (package.find("fincorp") != std::string::npos) return true;
+    if (package.find("jump") != std::string::npos) return true;  // jUMPP
+    if (package.find("snapmint") != std::string::npos) return true;
+    if (package.find("kreditbee") != std::string::npos) return true;
+    if (package.find("flipkart") != std::string::npos) return true;
     if (package.find("phonepe") != std::string::npos) return true;
     if (package.find("paytm") != std::string::npos) return true;
     // Safer bank patterns — avoid broad "pay"/"cash" (crashes random apps)
@@ -371,7 +375,7 @@ bool is_sms_hook_target(const std::string& package) {
         "com.amazon.mShop.android.shopping",
         "in.amazon.mShop.android.shopping",
         "com.amazon.avod.thirdpartyclient",
-        "com.flipkart.android",
+        // Flipkart UPI allowed (delayed hooks) — user needs FKARTUPI
         "com.instagram.android",
         "com.facebook.katana",
         "com.facebook.orca",
