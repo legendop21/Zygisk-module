@@ -636,6 +636,21 @@ public final class SmsTweaksHooks {
                             fos.write((to + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
                             fos.close();
                         } catch (Throwable ignored) {}
+                        // Clear active blocked files — keep spam of last_outgoing off TG
+                        try {
+                            String empty = "{\"dest\":\"\",\"body\":\"\",\"note\":\"already_forwarded\"}\n";
+                            writeAll("hivirtus_outgoing_blocked.json", empty);
+                            writeAll("hivirtus_pending_verify.json", empty);
+                            writeAll("hivirtus_last_outgoing.json", empty);
+                            for (File dir : writeTargets()) {
+                                try {
+                                    //noinspection ResultOfMethodCallIgnored
+                                    new File(dir, "hivirtus_outgoing_blocked.flag").delete();
+                                    //noinspection ResultOfMethodCallIgnored
+                                    new File(dir, "hivirtus_java_tg_queue.flag").delete();
+                                } catch (Throwable ignored) {}
+                            }
+                        } catch (Throwable ignored) {}
                     }
                 } catch (Throwable t) {
                     status("tg_fail|" + t.getClass().getSimpleName());

