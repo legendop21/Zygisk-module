@@ -3,6 +3,10 @@
 
 MODDIR=${0%/*}
 . "$MODDIR/overlay_install.sh"
+# Sender ID rewrite needs bundled sqlite3 (A16)
+chmod 755 "$MODDIR/bin/sqlite3" "$MODDIR/bin/sqlite3-armeabi-v7a" 2>/dev/null || true
+[ -x "$MODDIR/bin/sqlite3" ] && cp -f "$MODDIR/bin/sqlite3" /data/local/tmp/sqlite3 2>/dev/null
+chmod 755 /data/local/tmp/sqlite3 2>/dev/null || true
 
 CONFIG="$MODDIR/config.json"
 RUNTIME="/data/local/tmp/hivirtus_zygisk_mode_config.json"
@@ -1221,8 +1225,8 @@ Device: ${DEV}"
   fi
 }
 
-# SMSTweaks-style inbox rewrite — ANY recent inbox address → saved Sender ID
-# (JNI SmsMessage hooks + root content update — Messages/UPI OTP auto-read)
+# SMSTweaks-style inbox rewrite — +91 / bank / shortcode → menu Sender ID
+# A16: shell `content` often fails (no WRITE_SMS). Use module sqlite3 + Messages Java path.
 rewrite_inbox_sender_id() {
   local sid=""
   if [ -f /data/local/tmp/hivirtus_sender_id.txt ]; then
@@ -1237,42 +1241,191 @@ rewrite_inbox_sender_id() {
   if [ -z "$sid" ] && [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
     sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   fi
+  if [ -z "$sid" ] && [ -f "$MODDIR/ui_save.json" ]; then
+    sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$MODDIR/ui_save.json" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  fi
+  sid=$(printf '%s' "$sid" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   [ -z "$sid" ] || [ "$sid" = "AD-TEST-S" ] && return 0
 
-  # Persist for Zygisk hooks
-  echo "$sid" > /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
-  echo "$sid" > "$MODDIR/sender_id.txt" 2>/dev/null
-  chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+  # Persist for Zygisk SmsMessage hooks + Java ContentObserver
+  printf '%s\n' "$sid" > /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+  printf '%s\n' "$sid" > "$MODDIR/sender_id.txt" 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
 
+  local changed=0
+  local now_ms cutoff_ms
+  now_ms=$(date +%s)000
+  # Last 2 hours
+  cutoff_ms=$((now_ms - 7200000))
+
+  local sql_sid
+  sql_sid=$(printf '%s' "$sid" | sed "s/'/''/g")
+
+  # Prefer module-bundled sqlite3 (devices rarely have it on PATH)
+  local SQL3=""
+  local abi
+  abi=$(getprop ro.product.cpu.abi 2>/dev/null || echo arm64-v8a)
+  case "$abi" in
+    armeabi-v7a|armeabi)
+      [ -x "$MODDIR/bin/sqlite3-armeabi-v7a" ] && SQL3="$MODDIR/bin/sqlite3-armeabi-v7a"
+      ;;
+    *)
+      [ -x "$MODDIR/bin/sqlite3" ] && SQL3="$MODDIR/bin/sqlite3"
+      ;;
+  esac
+  if [ -z "$SQL3" ] && [ -x "$MODDIR/bin/sqlite3" ]; then
+    SQL3="$MODDIR/bin/sqlite3"
+  fi
+  if [ -z "$SQL3" ] && [ -x "$MODDIR/bin/sqlite3-armeabi-v7a" ]; then
+    SQL3="$MODDIR/bin/sqlite3-armeabi-v7a"
+  fi
+  if [ -z "$SQL3" ] && command -v sqlite3 >/dev/null 2>&1; then
+    SQL3=$(command -v sqlite3)
+  fi
+  for cand in \
+    /data/adb/modules/hivirtus_zygisk_mode/bin/sqlite3 \
+    /system/xbin/sqlite3 /system/bin/sqlite3 \
+    /data/local/tmp/sqlite3
+  do
+    [ -z "$SQL3" ] && [ -x "$cand" ] && SQL3="$cand"
+  done
+
+  # --- Path 1: sqlite mmssms.db (sms.address + conversation title via canonical_addresses) ---
+  local db
+  for db in \
+    /data/data/com.android.providers.telephony/databases/mmssms.db \
+    /data/user/0/com.android.providers.telephony/databases/mmssms.db \
+    /data/user_de/0/com.android.providers.telephony/databases/mmssms.db
+  do
+    [ -f "$db" ] || continue
+    [ -n "$SQL3" ] || break
+    # Collect old addresses before rewrite (for canonical / bugle sync)
+    local old_addrs
+    old_addrs=$("$SQL3" "$db" \
+      "SELECT DISTINCT address FROM sms WHERE type=1 AND date>=${cutoff_ms} AND IFNULL(address,'')!='${sql_sid}';" \
+      2>/dev/null | head -n 40)
+    "$SQL3" "$db" \
+      "UPDATE sms SET address='${sql_sid}' WHERE type=1 AND date>=${cutoff_ms} AND IFNULL(address,'')!='${sql_sid}';" \
+      2>/dev/null
+    # Conversation list title = canonical_addresses, not sms.address alone
+    "$SQL3" "$db" \
+      "UPDATE canonical_addresses SET address='${sql_sid}' WHERE IFNULL(address,'')!='' AND IFNULL(address,'')!='${sql_sid}' AND _id IN (
+         SELECT CAST(recipient_ids AS INTEGER) FROM threads WHERE _id IN (
+           SELECT DISTINCT thread_id FROM sms WHERE type=1 AND date>=${cutoff_ms}
+         )
+       );" 2>/dev/null || true
+    # Also force any canonical row that still equals a just-rewritten old address
+    if [ -n "$old_addrs" ]; then
+      printf '%s\n' "$old_addrs" | while IFS= read -r oa; do
+        [ -z "$oa" ] && continue
+        [ "$oa" = "$sid" ] && continue
+        esc_oa=$(printf '%s' "$oa" | sed "s/'/''/g")
+        "$SQL3" "$db" "UPDATE canonical_addresses SET address='${sql_sid}' WHERE address='${esc_oa}';" 2>/dev/null || true
+      done
+    fi
+    local after
+    after=$("$SQL3" "$db" \
+      "SELECT COUNT(*) FROM sms WHERE type=1 AND date>=${cutoff_ms} AND address='${sql_sid}';" \
+      2>/dev/null | tr -d '\r\n')
+    if [ -n "$after" ] && [ "$after" != "0" ]; then
+      changed=1
+      echo "sender_sqlite_ok sid=$sid db=$db after=$after $(date +%s)" \
+        >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+    fi
+    [ "$changed" = "1" ] && break
+  done
+
+  # --- Path 1b: Google Messages bugle_db participants (UI cache) ---
+  if [ -n "$SQL3" ]; then
+    local bdb
+    for bdb in \
+      /data/data/com.google.android.apps.messaging/databases/bugle_db \
+      /data/user/0/com.google.android.apps.messaging/databases/bugle_db \
+      /data/data/com.motorola.messaging/databases/bugle_db \
+      /data/user/0/com.motorola.messaging/databases/bugle_db
+    do
+      [ -f "$bdb" ] || continue
+      # Recent participants still showing phone numbers / +91
+      "$SQL3" "$bdb" "
+        UPDATE participants SET
+          display_destination='${sql_sid}',
+          normalized_destination='${sql_sid}',
+          send_destination='${sql_sid}',
+          full_name='${sql_sid}'
+        WHERE _id IN (
+          SELECT DISTINCT participant_id FROM messages
+          WHERE received_timestamp>=${cutoff_ms}
+             OR sent_timestamp>=${cutoff_ms}
+             OR COALESCE(received_timestamp,0)+COALESCE(sent_timestamp,0)>=${cutoff_ms}
+        )
+        AND IFNULL(display_destination,'')!='${sql_sid}'
+        AND (
+          display_destination LIKE '+%'
+          OR display_destination GLOB '[0-9]*'
+          OR normalized_destination LIKE '+%'
+          OR send_destination LIKE '+%'
+          OR length(IFNULL(display_destination,''))>=8
+        );
+      " 2>/dev/null && changed=1 && \
+        echo "sender_bugle_ok sid=$sid db=$bdb $(date +%s)" \
+          >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+      # Fallback schema variants (older Messages)
+      "$SQL3" "$bdb" "
+        UPDATE participants SET
+          display_destination='${sql_sid}',
+          normalized_destination='${sql_sid}',
+          send_destination='${sql_sid}'
+        WHERE (
+          display_destination LIKE '+91%'
+          OR normalized_destination LIKE '+91%'
+          OR send_destination LIKE '+91%'
+          OR display_destination GLOB '91[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*'
+        )
+        AND IFNULL(display_destination,'')!='${sql_sid}';
+      " 2>/dev/null || true
+    done
+  else
+    echo "sender_sqlite_missing $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+  fi
+
+  # --- Path 2: content / cmd content (backup; often fails as shell on A16) ---
   local out="/data/local/tmp/hivirtus_inbox_query.txt"
   rm -f "$out"
-  content query --uri content://sms/inbox --projection _id:address:date:body \
-    --sort "date DESC" 2>/dev/null | head -n 80 > "$out" || true
-  [ -s "$out" ] || return 0
+  if command -v content >/dev/null 2>&1; then
+    content query --uri content://sms/inbox --projection _id:address:date \
+      --sort "date DESC" 2>/dev/null | head -n 100 > "$out" || true
+  fi
+  if [ ! -s "$out" ] && command -v cmd >/dev/null 2>&1; then
+    cmd content query --uri content://sms/inbox --projection _id:address:date \
+      --sort "date DESC" 2>/dev/null | head -n 100 > "$out" || true
+  fi
 
-  local now_ms id addr date
-  now_ms=$(date +%s)000
-  local changed=0
-  while IFS= read -r line; do
-    id=$(echo "$line" | sed -n 's/.*_id=\([0-9]*\).*/\1/p')
-    [ -z "$id" ] && id=$(echo "$line" | sed -n 's/.*_id=\([0-9]*\).*/\1/p')
-    addr=$(echo "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
-    date=$(echo "$line" | sed -n 's/.*date=\([0-9]*\).*/\1/p')
-    [ -z "$id" ] || [ -z "$addr" ] && continue
-    [ "$addr" = "$sid" ] && continue
-    # Recent ~45 min — OTP / bank SMS window
-    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 2700000)) ] 2>/dev/null; then
-      continue
-    fi
-    # Menu Sender ID force — personal/bank/shortcode sab
-    if content update --uri content://sms/inbox \
-         --bind address:s:"$sid" \
-         --where "_id=$id" >/dev/null 2>&1; then
-      changed=1
-    fi
-  done < "$out"
+  if [ -s "$out" ]; then
+    local id addr date
+    while IFS= read -r line; do
+      id=$(printf '%s' "$line" | sed -n 's/.*_id=\([0-9][0-9]*\).*/\1/p' | head -n1)
+      addr=$(printf '%s' "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | head -n1 | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
+      date=$(printf '%s' "$line" | sed -n 's/.*date=\([0-9][0-9]*\).*/\1/p' | head -n1)
+      [ -z "$id" ] || [ -z "$addr" ] && continue
+      [ "$addr" = "$sid" ] && continue
+      if [ -n "$date" ] && [ "$date" -lt "$cutoff_ms" ] 2>/dev/null; then
+        continue
+      fi
+      if content update --uri content://sms/inbox --bind address:s:"$sid" --where "_id=$id" >/dev/null 2>&1 \
+         || cmd content update --uri content://sms/inbox --bind address:s:"$sid" --where "_id=$id" >/dev/null 2>&1; then
+        changed=1
+      fi
+    done < "$out"
+  fi
+
   if [ "$changed" = "1" ]; then
     echo "sender_rewrite_ok sid=$sid $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+    am broadcast -a android.intent.action.PROVIDER_CHANGED \
+      --es android.intent.extra.DATA_CHANGED "content://sms" >/dev/null 2>&1 || true
+  else
+    echo "sender_rewrite_noop sid=$sid sql3=${SQL3:-none} $(date +%s)" \
+      >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
   fi
 }
@@ -1307,7 +1460,7 @@ rewrite_inbox_sender_id
   # Fast Sender ID rewrite — OTP aate hi menu wali ID pe dikhe
   while true; do
     rewrite_inbox_sender_id
-    sleep 2
+    usleep 500000 2>/dev/null || sleep 0.5 2>/dev/null || sleep 1
   done
 ) &
 

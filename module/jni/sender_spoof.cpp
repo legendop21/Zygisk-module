@@ -49,9 +49,12 @@ std::string read_sender_file() {
 std::string resolve_sender(const std::string& actual) {
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    g_sender_id = config.inject_sender_id;
-    if (is_placeholder(g_sender_id)) {
-        g_sender_id = read_sender_file();
+    // Prefer live Save file over stale config.json (menu Save writes file first)
+    const std::string from_file = read_sender_file();
+    if (!is_placeholder(from_file)) {
+        g_sender_id = from_file;
+    } else {
+        g_sender_id = config.inject_sender_id;
     }
     g_override_incoming = config.override_incoming_sender || !is_placeholder(g_sender_id);
     if (!g_override_incoming || is_placeholder(g_sender_id)) return actual;
@@ -138,8 +141,12 @@ void install(JNIEnv* env, zygisk::Api* api, const char* tag) {
     g_api = api;
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
-    g_sender_id = config.inject_sender_id;
-    if (is_placeholder(g_sender_id)) g_sender_id = read_sender_file();
+    const std::string from_file = read_sender_file();
+    if (!is_placeholder(from_file)) {
+        g_sender_id = from_file;
+    } else {
+        g_sender_id = config.inject_sender_id;
+    }
     g_override_incoming = config.override_incoming_sender || !is_placeholder(g_sender_id);
     persist_sender_file(g_sender_id);
 

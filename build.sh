@@ -66,6 +66,13 @@ cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
 [ -f "$MODULE_DIR/spoof_phone.txt" ] && cp "$MODULE_DIR/spoof_phone.txt" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
+# Bundled sqlite3 for Sender ID inbox rewrite (A16 shell content update fails)
+if [ -d "$MODULE_DIR/bin" ]; then
+  mkdir -p "$OUTPUT_DIR/bin"
+  cp -f "$MODULE_DIR/bin/"* "$OUTPUT_DIR/bin/" 2>/dev/null || true
+  chmod 755 "$OUTPUT_DIR/bin/"* 2>/dev/null || true
+  echo "==> Bundled bin/sqlite3 for Sender ID rewrite"
+fi
 # Faltu NOT packaged: repair_sim.sh, diag_bubble.sh, apatch_package_config_full.csv
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"

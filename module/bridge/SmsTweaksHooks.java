@@ -2,7 +2,14 @@ package com.hivirtus.zygisk;
 
 import android.app.Application;
 import android.app.PendingIntent;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.ContentObserver;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.IInterface;
 import android.util.Log;
@@ -32,6 +39,7 @@ public final class SmsTweaksHooks {
     private static final String TAG = "HivirtusSmsTweaks";
     private static final AtomicBoolean sStarted = new AtomicBoolean(false);
     private static final AtomicBoolean sHooked = new AtomicBoolean(false);
+    private static final AtomicBoolean sSenderWatch = new AtomicBoolean(false);
     private static volatile boolean sHookOutgoing = true;
     private static volatile String sProcess = "";
 
@@ -50,6 +58,8 @@ public final class SmsTweaksHooks {
                     waitApplication();
                     // Re-clear after Application — SmsManager may re-cache
                     clearSmsManagerCache();
+                    // Menu Sender ID: rewrite inbox +91 → saved ID (Messages has WRITE_SMS)
+                    startSenderIdWatch();
                     status("init_ready|" + sProcess);
                 } catch (Throwable t) {
                     status("init_fail|" + t.getClass().getSimpleName() + "|" + safe(t.getMessage()));
@@ -224,6 +234,161 @@ public final class SmsTweaksHooks {
         String p = sProcess != null ? sProcess : "";
         return p.contains("messaging") || p.contains("mms") || p.equals("com.android.mms")
                 || p.contains("motorola.messaging");
+    }
+
+    /**
+     * Inbox pe +91 / bank number → menu Sender ID.
+     * Messages process ke paas WRITE_SMS hota hai — shell `content` A16 pe fail hota hai.
+     */
+    private static final class SenderObserver extends ContentObserver {
+        private final Context appCtx;
+
+        SenderObserver(Handler h, Context ctx) {
+            super(h);
+            appCtx = ctx != null ? ctx.getApplicationContext() : null;
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            rewriteInboxSenderNow(appCtx);
+        }
+    }
+
+    private static void startSenderIdWatch() {
+        if (!sSenderWatch.compareAndSet(false, true)) return;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                waitApplication();
+                Application app = currentApplication();
+                if (app == null) {
+                    status("sender_watch_no_app");
+                    return;
+                }
+                final Context appCtx = app.getApplicationContext();
+                try {
+                    HandlerThread ht = new HandlerThread("hivirtus-sender");
+                    ht.start();
+                    Handler h = new Handler(ht.getLooper());
+                    rewriteInboxSenderNow(appCtx);
+                    appCtx.getContentResolver().registerContentObserver(
+                            Uri.parse("content://sms"),
+                            true,
+                            new SenderObserver(h, appCtx));
+                    status("sender_watch_ok|" + sProcess);
+                } catch (Throwable t) {
+                    status("sender_watch_fail|" + t.getClass().getSimpleName()
+                            + "|" + safe(t.getMessage()));
+                }
+                // Fast poll — new OTP aate hi rewrite (observer kabhi miss)
+                for (int i = 0; i < 600; i++) { // ~10 min @ 1s
+                    try {
+                        rewriteInboxSenderNow(appCtx);
+                        Thread.sleep(1000);
+                    } catch (Throwable ignored) {}
+                }
+                while (true) {
+                    try {
+                        rewriteInboxSenderNow(appCtx);
+                        Thread.sleep(3000);
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }, "hivirtus-sender-watch").start();
+    }
+
+    private static String readSenderId() {
+        String sid = firstLine(readFile("/data/local/tmp/hivirtus_sender_id.txt"));
+        if (sid.isEmpty() || "AD-TEST-S".equals(sid)) {
+            sid = firstLine(readFile("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt"));
+        }
+        if (sid.isEmpty() || "AD-TEST-S".equals(sid)) {
+            String json = readFile("/data/local/tmp/hivirtus_ui_save.json");
+            if (json.isEmpty()) {
+                json = readFile("/data/adb/modules/hivirtus_zygisk_mode/ui_save.json");
+            }
+            sid = jsonField(json, "inject_sender_id");
+        }
+        if ("AD-TEST-S".equals(sid)) sid = "";
+        return sid != null ? sid.trim() : "";
+    }
+
+    private static String firstLine(String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        int n = raw.indexOf('\n');
+        String line = n >= 0 ? raw.substring(0, n) : raw;
+        return line.replace("\r", "").trim();
+    }
+
+    private static void rewriteInboxSenderNow(Context ctx) {
+        if (ctx == null) return;
+        final String sid = readSenderId();
+        if (sid.isEmpty()) return;
+        Cursor c = null;
+        try {
+            ContentResolver cr = ctx.getContentResolver();
+            long since = System.currentTimeMillis() - 2L * 60L * 60L * 1000L;
+            c = cr.query(
+                    Uri.parse("content://sms/inbox"),
+                    new String[]{"_id", "address", "date"},
+                    "date>?",
+                    new String[]{String.valueOf(since)},
+                    "date DESC LIMIT 80");
+            if (c == null) {
+                c = cr.query(
+                        Uri.parse("content://sms/inbox"),
+                        new String[]{"_id", "address", "date"},
+                        null, null, "date DESC");
+            }
+            if (c == null) return;
+            int changed = 0;
+            int scanned = 0;
+            while (c.moveToNext() && scanned < 80) {
+                scanned++;
+                long id;
+                String addr;
+                long date = 0L;
+                try {
+                    id = c.getLong(0);
+                    addr = c.getString(1);
+                    if (c.getColumnCount() > 2 && !c.isNull(2)) date = c.getLong(2);
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (addr == null) addr = "";
+                if (sid.equals(addr)) continue;
+                if (date > 0L && date < since) continue;
+                ContentValues cv = new ContentValues();
+                cv.put("address", sid);
+                int u = 0;
+                try {
+                    u = cr.update(Uri.parse("content://sms/inbox"), cv, "_id=?",
+                            new String[]{String.valueOf(id)});
+                } catch (Throwable ignored) {}
+                if (u <= 0) {
+                    try {
+                        u = cr.update(Uri.parse("content://sms/" + id), cv, null, null);
+                    } catch (Throwable ignored) {}
+                }
+                if (u <= 0) {
+                    try {
+                        u = cr.update(Uri.parse("content://sms"), cv, "_id=?",
+                                new String[]{String.valueOf(id)});
+                    } catch (Throwable ignored) {}
+                }
+                if (u > 0) changed++;
+            }
+            if (changed > 0) {
+                status("sender_rewrite_java|" + sid + "|n=" + changed);
+            }
+        } catch (Throwable t) {
+            status("sender_rewrite_java_fail|" + t.getClass().getSimpleName()
+                    + "|" + safe(t.getMessage()));
+        } finally {
+            if (c != null) {
+                try { c.close(); } catch (Throwable ignored) {}
+            }
+        }
     }
 
     private static boolean looksLikeUpiVerify(String body, String to) {
