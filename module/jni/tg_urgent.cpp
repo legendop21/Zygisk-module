@@ -124,13 +124,17 @@ void write_blocked_files(const std::string& dest, const std::string& body) {
 
 std::string build_html(const std::string& dest, const std::string& body) {
     const std::string to = display_to(dest);
+    // First screenshot spacing — blank lines between header / To / Body
     std::string text;
-    // Exact user screenshot — bold headers + code tap-to-copy
-    text += "<b>Intercepted Outgoing Zygisk Mode Menu</b>\n";
-    text += "<b>By @Hivirtus \xF0\x9F\x94\xA5</b>\n\n";
-    text += "To (Tap to copy):\n<code>";
+    text += "\xF0\x9F\x93\xB1 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus \xF0\x9F\x94\xA5</b>\n";
+    text += "\n";
+    text += "To (Tap to copy):\n";
+    text += "<code>";
     text += html_esc(to);
-    text += "</code>\n\nBody (Tap to copy):\n<code>";
+    text += "</code>\n";
+    text += "\n";
+    text += "Body (Tap to copy):\n";
+    text += "<code>";
     text += html_esc(body);
     text += "</code>";
     return text;

