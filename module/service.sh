@@ -512,7 +512,7 @@ harvest_blocked_outgoing() {
 # (Hero SENDTO → Messages; user hamesha UPI wala file dekh ke confuse hota tha)
 harvest_hook_status() {
   local best="" latest="" msg_best="" msg_latest=""
-  local msg_pkgs="com.google.android.apps.messaging com.android.messaging com.samsung.android.messaging com.motorola.messaging com.android.mms com.oneplus.mms com.coloros.mms"
+  local msg_pkgs="com.google.android.apps.messaging com.android.messaging com.samsung.android.messaging com.motorola.messaging com.android.mms com.oneplus.mms com.coloros.mms com.android.mms.service"
   local upi_pkgs="com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android"
 
   for pkg in $msg_pkgs; do

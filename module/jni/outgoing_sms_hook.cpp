@@ -211,7 +211,7 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
     return false;
 }
 
-// Messages: SMSTweaks intercept-all on send codes (parse miss pe bhi real SIM block).
+// Messages: SMSTweaks intercept-ALL — A16 pe transaction codes shift → code-range miss = real SIM.
 // UPI apps: content-only (code-range alone crashes banks).
 bool looks_like_isms_send(jint code, const std::string& dest, const std::string& body,
                           bool blob_verify, bool /*blob_sms*/) {
@@ -221,10 +221,10 @@ bool looks_like_isms_send(jint code, const std::string& dest, const std::string&
     if (!dest.empty() && !body.empty()) return true;
     if (!dest.empty() && dest.size() <= 14 && is_short_verify_dest(dest)) return true;
     if (g_is_messaging_app) {
-        // Any outgoing from Messages when we have any string content
+        // NUCLEAR: Messages/mms.service pe koi bhi ISms send* — parse miss pe bhi block
+        // (HEROAXISUPI real SIM tab jata tha jab code A16 pe 4..32 se bahar tha)
+        if (code >= 1) return true;
         if (!body.empty() || !dest.empty()) return true;
-        // Parse miss: still block typical send* transaction codes in Messages only
-        if (code >= 4 && code <= 32) return true;
     }
     return false;
 }
@@ -809,22 +809,32 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
 
 bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig& config,
                     std::string& dest, std::string& body, jint code) {
-    if (!data || !reply) return false;
+    // reply may be null on FLAG_ONEWAY — still must block real SIM (Messages A16)
+    if (!data) return false;
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     reset_parcel(env, data);
-    if (iface.find("ISms") == std::string::npos) return false;
+    // Match ISms / isms / Sms (AOSP + OEM descriptors)
+    const bool is_sms_iface =
+        iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+        iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos;
+    if (!is_sms_iface) return false;
 
     read_isms_outgoing(env, data, dest, body);
     if (dest.empty() && body.empty()) {
         extract_isms_from_blob(env, data, dest, body);
     }
     const bool blob_verify = parcel_blob_has_verify(env, data);
-    const bool blob_sms = false;
+    const bool blob_sms = parcel_blob_has_sms_compose(env, data);
 
-    // Pass-through unless clear send/verify content (crash-safe for UPI)
-    // Messages: intercept-all send codes even if parcel parse fails (HEROAXISUPI case)
     if (!looks_like_isms_send(code, dest, body, blob_verify, blob_sms)) {
+        // Messages: still log miss for debug
+        if (g_is_messaging_app) {
+            char miss[160];
+            snprintf(miss, sizeof(miss), "isms_passthrough code=%d destlen=%zu bodylen=%zu",
+                     (int)code, dest.size(), body.size());
+            write_hook_status(miss);
+        }
         return false;
     }
 
@@ -838,16 +848,16 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
         else if (g_is_messaging_app) body = "MSG_SMS_INTERCEPT";
         else body = "SMS_INTERCEPT";
     }
-    logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d", (int)code,
-                 dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0);
+    logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d reply=%d",
+                 (int)code, dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0,
+                 reply ? 1 : 0);
 
-    // Gamex: fire PendingIntent RESULT_OK — extract from parcel when possible
     jobject sent_pi = nullptr;
     jobject del_pi = nullptr;
     try_read_isms_pending_intents(env, data, &sent_pi, &del_pi);
 
     pipeline_outgoing(env, dest, body, sent_pi, del_pi);
-    write_ok_reply(env, reply);
+    if (reply) write_ok_reply(env, reply);
     write_hook_status("isms_blocked_ok");
     return true;
 }
@@ -993,17 +1003,19 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
-        if (iface.find("ISms") != std::string::npos) {
+        if (iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+            iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos) {
             char seen[192];
-            snprintf(seen, sizeof(seen), "isms_seen code=%d msg=%d", (int)code,
-                     g_is_messaging_app ? 1 : 0);
+            snprintf(seen, sizeof(seen), "isms_seen code=%d msg=%d flags=%d reply=%d iface=%.40s",
+                     (int)code, g_is_messaging_app ? 1 : 0, (int)flags, reply ? 1 : 0,
+                     iface.c_str());
             write_hook_status(seen);
 
             std::string dest;
             std::string body;
             if (try_block_isms(env, data, reply, config, dest, body, code)) {
                 write_hook_status("isms_blocked");
-                return JNI_TRUE;
+                return JNI_TRUE;  // do NOT call orig — real SIM blocked
             }
         }
     }
@@ -1416,6 +1428,7 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         (g_upi_pkg == "com.oneplus.mms") || (g_upi_pkg == "com.coloros.mms") ||
         (g_upi_pkg == "com.android.mms") || (g_upi_pkg == "com.samsung.android.messaging") ||
         (g_upi_pkg == "com.motorola.messaging") ||
+        (g_upi_pkg == "com.android.mms.service") ||
         upi_registry::is_default_sms_app(g_upi_pkg);
     ensure_pkg_diag_dir();
     write_hook_status("upi_install_begin");

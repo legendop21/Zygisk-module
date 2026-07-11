@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.45 HERO SENDTO BLOCK  "
+ui_print "     v1.0.46 NUCLEAR ISMS BLOCK "
 ui_print "  Messages intercept-all send   "
 ui_print "  TG spam/heat FIXED            "
 ui_print "  HEROAXISUPI body → Telegram   "

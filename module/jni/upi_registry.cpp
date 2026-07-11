@@ -261,6 +261,8 @@ bool is_default_sms_app(const std::string& package) {
         "com.motorola.messaging",
         "com.oneplus.mms",
         "com.coloros.mms",
+        // Platform service that actually talks to radio ISms on many OEMs
+        "com.android.mms.service",
         nullptr,
     };
     for (const char** p = kSms; *p; ++p) {
@@ -272,8 +274,7 @@ bool is_default_sms_app(const std::string& package) {
 bool is_denied_hook_package(const std::string& package) {
     if (package.empty()) return true;
 
-    // EXCEPTION: default SMS apps — Hero/UPI SENDTO → Messages → real SIM.
-    // Must hook ISms here or intercept never works.
+    // EXCEPTION: default SMS apps + mms.service — real SIM send path
     if (is_default_sms_app(package)) return false;
 
     // NEVER phone/telephony/settings — SIM + Settings crash
@@ -284,8 +285,7 @@ bool is_denied_hook_package(const std::string& package) {
         "com.android.settings",
         "com.android.shell",
         "com.android.keychain",
-        // mms.service = telephony SMS service — do NOT inject (crash)
-        "com.android.mms.service",
+        // mms.service ALLOWED via is_default_sms_app (v1.0.46)
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",
         "com.samsung.android.dialer",

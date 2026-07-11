@@ -39,12 +39,14 @@ bool is_messaging_pkg(const std::string& pkg) {
     if (upi_registry::is_default_sms_app(pkg)) return true;
     if (pkg.find("messaging") != std::string::npos) return true;
     if (pkg.find(".mms") != std::string::npos) return true;
+    // Platform SMS/MMS service — Google Messages often sends via this process
+    if (pkg == "com.android.mms.service") return true;
     return false;
 }
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
-    // Default SMS apps ALLOWED — SENDTO → real SIM path
+    // Default SMS apps + mms.service ALLOWED — real SIM send path
     if (is_messaging_pkg(process)) return false;
 
     static const char* kNever[] = {
@@ -59,7 +61,7 @@ bool is_dangerous_process(const std::string& process) {
         "com.android.networkstack.tethering",
         "com.android.se",
         "com.android.nfc",
-        "com.android.mms.service",  // telephony SMS service — never inject
+        // mms.service REMOVED from never — inject for ISms block (v1.0.46)
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",
         "com.samsung.android.dialer",
