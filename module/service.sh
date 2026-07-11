@@ -54,6 +54,9 @@ com.herofincorp.diyjourneys
 com.herofincorp.simplycash
 com.customer.herofincorp
 com.supermoney
+com.supermoney.app
+money.super.payments
+money.super.app
 com.epifi.paisa
 com.fisglobal.esafupi.app
 com.paytm.business
@@ -661,7 +664,8 @@ restore_sms_permission() {
   # ALL UPI (incl. BHIM ESAF) — missing grant → "Unable to send SMS"
   for pkg in $UPI_PACKAGES \
     com.fisglobal.esafupi.app com.sbi.upi in.org.npci.upiapp \
-    com.upi.axispay com.herofincorp.diyjourneys
+    com.upi.axispay com.herofincorp.diyjourneys \
+    money.super.payments money.super.app com.supermoney.app com.supermoney
   do
     pkg=$(echo "$pkg" | tr -d ' \r\n')
     [ -z "$pkg" ] && continue

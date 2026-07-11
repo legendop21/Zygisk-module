@@ -385,7 +385,7 @@ hivirtus_apatch_allow_upi_inject() {
   AP_CFG="/data/adb/ap/package_config"
   [ -f "$AP_CFG" ] || return 0
   TMP="/data/local/tmp/hivirtus_ap_upi_fix.csv"
-  UPI_RE='phonepe|paytm|paisa|yespay|yesbank|kreditbee|moneyview|mobikwik|postpe|upi|payzapp|bhim|freecharge|stashfin|snapmint|dreamplug|fampay|slice|navi|bharatpe|supermoney|groww|hdfc|icici|axis|sbi|kotak|idfc|baroda'
+  UPI_RE='phonepe|paytm|paisa|yespay|yesbank|kreditbee|moneyview|mobikwik|postpe|upi|payzapp|bhim|freecharge|stashfin|snapmint|dreamplug|fampay|slice|navi|bharatpe|supermoney|money\.super|groww|hdfc|icici|axis|sbi|kotak|idfc|baroda|esaf|fisglobal'
   awk -F, -v re="$UPI_RE" 'BEGIN{OFS=","}
     NR==1 {print; next}
     $1 ~ re {

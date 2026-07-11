@@ -466,6 +466,10 @@ bool is_no_inline_hook_pkg(const std::string& package) {
 }
 
 int hook_startup_delay_sec(const std::string& package) {
+    // SuperMoney: still no-inline, but do not wait 8s — SMS window is short
+    if (package.rfind("money.super.", 0) == 0 || package.find("supermoney") != std::string::npos) {
+        return 2;
+    }
     if (is_no_inline_hook_pkg(package)) return 8;
     if (is_fragile_banking_app(package)) return 5;
     if (package.find("bank") != std::string::npos) return 3;
