@@ -174,14 +174,14 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // SMSTweaks-style: hooks AFTER app settled — JNI only, no PLT
+            // Arm Intent PLT (registered in pre with pass-through) + JNI retry
+            outgoing_sms_hook::arm_intercept_hooks();
             std::string st =
                 outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
-            // Gamex/SMSTweaks: phone + incoming sender in same app process
             phone_number_hook::install(env, job->api, job->pkg.c_str());
             sender_spoof::install(env, job->api, job->pkg.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("HOOK_DEFERRED|" + st + "|phone+sender").c_str());
+                        ("HOOK_DEFERRED|" + st + "|armed+phone+sender").c_str());
             job->vm->DetachCurrentThread();
         }
     }
@@ -255,12 +255,15 @@ public:
         fragile_ = !is_msg_ && upi_registry::is_fragile_banking_app(pkg_);
 
         if (is_msg_) {
-            // Messages: install ISms NOW (SENDTO real-SIM catch) — JNI only
+            // Messages: install ISms NOW (SENDTO real-SIM catch) — JNI + PLT
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_MSG|") + sms_st);
         } else if (fragile_) {
-            // YesPay/PhonePe/GPay/Hero: ZERO hooks in pre — prevents open crash
-            report_line(api_, "fragile_no_pre_hooks:" + pkg_);
+            // Intent PLT ONLY in pre (armed=false) — Hero SENDTO catch without open crash
+            // Binder PLT still forbidden on banking
+            bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, false);
+            report_line(api_, std::string("fragile_intent_plt:") + pkg_ +
+                                  (intent_ok ? "|ok" : "|fail"));
         } else {
             // Mild UPI: JNI hooks in pre OK
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());

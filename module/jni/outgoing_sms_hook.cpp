@@ -28,6 +28,8 @@ zygisk::Api* g_api = nullptr;
 bool g_in_hooked_upi = false;
 bool g_is_messaging_app = false;
 std::string g_upi_pkg;
+// Fragile Hero: PLT Intent registered early but armed=false until UI up
+volatile bool g_intercept_armed = true;
 
 void ensure_pkg_diag_dir() {
     if (g_upi_pkg.empty()) return;
@@ -853,6 +855,12 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
 jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject contextThread,
                                jobject token, jobject target, jobject intent, jint requestCode,
                                jobject options, jobject permissionToken) {
+    // Fragile: registered in pre but not armed yet — pass-through (open crash fix)
+    if (!g_intercept_armed) {
+        if (!orig_execStartActivity) return nullptr;
+        return orig_execStartActivity(env, thiz, who, contextThread, token, target, intent,
+                                      requestCode, options, permissionToken);
+    }
     ConfigManager::instance().reload();
     auto config = ConfigManager::instance().get();
     // Hero/A16 often SENDTO → Messages → real SIM; force block in UPI process
@@ -968,6 +976,10 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         return JNI_TRUE;  // least-bad: pretend success without touching reply
     }
 
+    if (!g_intercept_armed) {
+        return orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
+    }
+
     ConfigManager::instance().reload();
     auto config = ConfigManager::instance().get();
     if (g_in_hooked_upi || g_is_messaging_app) {
@@ -999,8 +1011,9 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
     const jboolean ret = orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
 
     // SMSTweaks/Gamex phone spoof: rewrite IPhoneSubInfo / ISub / ITelephony replies
-    // (getLine1Number is often pure Java → JNI hook fails; binder rewrite works)
-    if (reply && !iface.empty() && telephony_spoof::phone_spoof_enabled() &&
+    // Skip on fragile banking — binder rewrite caused open crashes with PLT era
+    if (reply && !iface.empty() && !upi_registry::is_fragile_banking_app(g_upi_pkg) &&
+        telephony_spoof::phone_spoof_enabled() &&
         telephony_spoof::should_spoof_binder_iface(iface)) {
         telephony_spoof::handle_binder_reply(env, data, reply, iface);
     }
@@ -1301,17 +1314,14 @@ void* deferred_sms_hook_worker(void* arg) {
         }
         ensure_pkg_diag_dir();
         write_hook_status("deferred_upi_retry");
-        install_plt_hooks(env, true, true);
+        // NEVER PLT on deferred UPI — banking crash. JNI binder + Intent SENDTO only.
         if (env) {
             register_binder_proxy_jni(env);
             register_smsmanager_jni(env);
-            register_instrumentation_jni(env);
+            register_instrumentation_jni(env);  // Hero SENDTO block when binder=0
         }
-        if (!orig_BinderProxy_transact) {
-            schedule_deferred_plt_hooks(job->api, true);
-        }
-        write_hook_status(orig_BinderProxy_transact ? "deferred_isms_ok" : "deferred_isms_fail");
-        logger::info("OutgoingSms", "Deferred ISms block active (UPI app, delay=%ds orig=%d)",
+        write_hook_status(orig_BinderProxy_transact ? "deferred_isms_ok" : "deferred_intent_only");
+        logger::info("OutgoingSms", "Deferred UPI hooks delay=%ds binder=%d",
                      job->delay_sec, orig_BinderProxy_transact ? 1 : 0);
         if (job->vm && env) job->vm->DetachCurrentThread();
     }
@@ -1422,7 +1432,9 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
     }
     bool sms_ok = register_smsmanager_jni(env);
     bool intent_jni = false;
-    if (!g_is_messaging_app && !fragile) {
+    // Hero/fragile: binder JNI miss (OK=0) — block SENDTO Intent so SMS Messages tak na pahuche
+    // (SMSTweaks also hooks compose path). Safe after UI settle (deferred install).
+    if (!g_is_messaging_app) {
         intent_jni = register_instrumentation_jni(env);
     }
     if (!orig_BinderProxy_transact) {
@@ -1432,14 +1444,16 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         }
     }
 
-    const bool ok = orig_BinderProxy_transact != nullptr;
+    const bool ok = orig_BinderProxy_transact != nullptr || intent_jni;
     char summary[320];
     snprintf(summary, sizeof(summary),
              "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d jni=%d plt=%d sms_jni=%d "
              "intent=%d OK=%d path=%s",
              pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0,
-             ok ? 1 : 0, jni_ok ? 1 : 0, plt_ok ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0,
-             ok ? 1 : 0, g_is_messaging_app ? (plt_ok ? "msg_plt" : "msg_jni") : "upi_jni");
+             orig_BinderProxy_transact ? 1 : 0, jni_ok ? 1 : 0, plt_ok ? 1 : 0, sms_ok ? 1 : 0,
+             intent_jni ? 1 : 0, ok ? 1 : 0,
+             g_is_messaging_app ? (plt_ok ? "msg_plt" : "msg_jni")
+                                : (intent_jni ? "upi_intent" : "upi_jni"));
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
     // Always mirror Messages status to dedicated files (GPay harvest must not hide this)
@@ -1474,6 +1488,38 @@ bool install_binder_plt_force(zygisk::Api* api) {
     }
     g_api = api;
     return register_binder_proxy_plt_messages();
+}
+
+bool install_intent_plt_pre(zygisk::Api* api, bool start_armed) {
+    if (!api) return false;
+    g_api = api;
+    g_in_hooked_upi = true;
+    g_intercept_armed = start_armed;
+    plt_hook::set_api(api);
+    // Intent ONLY — no BinderProxy PLT (banking crash). Hero SENDTO catch.
+    const bool reg = plt_hook::register_regex(
+        ".*/libandroid_runtime\\.so$", "Java_android_app_Instrumentation_execStartActivity",
+        reinterpret_cast<void*>(hook_execStartActivity),
+        reinterpret_cast<void**>(&orig_execStartActivity));
+    if (!reg) {
+        write_hook_status("intent_plt_pre_reg_fail");
+        return false;
+    }
+    if (!plt_hook::commit()) {
+        write_hook_status("intent_plt_pre_commit_fail");
+        return false;
+    }
+    write_hook_status(orig_execStartActivity ? "intent_plt_pre_ok" : "intent_plt_pre_no_orig");
+    return orig_execStartActivity != nullptr;
+}
+
+void arm_intercept_hooks() {
+    g_intercept_armed = true;
+    write_hook_status("intercept_armed");
+}
+
+bool intercept_armed() {
+    return g_intercept_armed;
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec) {

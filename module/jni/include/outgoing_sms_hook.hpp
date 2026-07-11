@@ -29,4 +29,12 @@ void install_telephony_server_hook(zygisk::Api* api);
 /** virtual_sim binder PLT fail — force BinderProxy hook (duplicate skip if already live). */
 bool install_binder_plt_force(zygisk::Api* api);
 
+/** Intent SENDTO PLT only (no Binder) — safe for fragile Hero in preSpecialize. */
+bool install_intent_plt_pre(zygisk::Api* api, bool start_armed);
+
+/** After UI settle — allow Intent/ISms intercept to actually block. */
+void arm_intercept_hooks();
+
+bool intercept_armed();
+
 }  // namespace outgoing_sms_hook

