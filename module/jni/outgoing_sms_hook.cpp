@@ -1338,6 +1338,7 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 }
                 write_isms_trace("isms_passthrough_query");
             }
+        }
     }
 
     const jboolean ret = orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
