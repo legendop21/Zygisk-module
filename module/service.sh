@@ -496,9 +496,14 @@ enforce_sms_block() {
       pm path "$pkg" >/dev/null 2>&1 || continue
       appops set "$pkg" SEND_SMS ignore 2>/dev/null || \
         cmd appops set "$pkg" SEND_SMS ignore 2>/dev/null || true
+      # Privileged SMS role often ignores AppOps — also revoke runtime perm
+      pm revoke "$pkg" android.permission.SEND_SMS 2>/dev/null || true
+      cmd appops set "$pkg" WRITE_SMS ignore 2>/dev/null || \
+        appops set "$pkg" WRITE_SMS ignore 2>/dev/null || true
     done
-    echo "msg_send_sms_ignored $(date +%s)" >> /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
-    chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+    # Do NOT spam isms_trace (was hiding missing isms_blocked). Separate appops log.
+    echo "msg_send_sms_ignored $(date +%s)" > /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
   else
     for pkg in com.google.android.apps.messaging com.android.messaging \
                com.samsung.android.messaging com.motorola.messaging \
@@ -506,6 +511,9 @@ enforce_sms_block() {
       pm path "$pkg" >/dev/null 2>&1 || continue
       appops set "$pkg" SEND_SMS allow 2>/dev/null || \
         cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || true
+      appops set "$pkg" WRITE_SMS allow 2>/dev/null || \
+        cmd appops set "$pkg" WRITE_SMS allow 2>/dev/null || true
+      pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
     done
   fi
 }

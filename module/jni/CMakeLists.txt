@@ -25,6 +25,7 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     fake_success.cpp
     phone_number_hook.cpp
     plt_hook.cpp
+    inline_hook.cpp
     zygisk_utils.cpp
 )
 
