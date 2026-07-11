@@ -3,7 +3,7 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.41 GAMEX PI LOGIC     "
+ui_print "     v1.0.42 GAMEX FULL PORT    "
 ui_print "  Messages intercept-all send   "
 ui_print "  TG spam/heat FIXED            "
 ui_print "  HEROAXISUPI body → Telegram   "

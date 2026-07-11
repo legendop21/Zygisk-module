@@ -975,9 +975,10 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         config.hook_outgoing_sms = true;
     }
 
-    if (data && reply) {
+    std::string iface;
+    if (data) {
         reset_parcel(env, data);
-        const std::string iface = parcel_read_string(env, data);
+        iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
         if (iface.find("ISms") != std::string::npos) {
@@ -995,7 +996,16 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         }
     }
 
-    return orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
+    const jboolean ret = orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
+
+    // SMSTweaks/Gamex phone spoof: rewrite IPhoneSubInfo / ISub / ITelephony replies
+    // (getLine1Number is often pure Java → JNI hook fails; binder rewrite works)
+    if (reply && !iface.empty() && telephony_spoof::phone_spoof_enabled() &&
+        telephony_spoof::should_spoof_binder_iface(iface)) {
+        telephony_spoof::handle_binder_reply(env, data, reply, iface);
+    }
+
+    return ret;
 }
 
 jint hook_Binder_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jobject reply,

@@ -3,6 +3,8 @@
 #include "logger.hpp"
 #include "outgoing_sms_hook.hpp"
 #include "overlay_ui.hpp"
+#include "phone_number_hook.hpp"
+#include "sender_spoof.hpp"
 #include "upi_registry.hpp"
 
 #include <cstdint>
@@ -175,8 +177,11 @@ void* deferred_hook_worker(void* arg) {
             // SMSTweaks-style: hooks AFTER app settled — JNI only, no PLT
             std::string st =
                 outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
+            // Gamex/SMSTweaks: phone + incoming sender in same app process
+            phone_number_hook::install(env, job->api, job->pkg.c_str());
+            sender_spoof::install(env, job->api, job->pkg.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("HOOK_DEFERRED|" + st).c_str());
+                        ("HOOK_DEFERRED|" + st + "|phone+sender").c_str());
             job->vm->DetachCurrentThread();
         }
     }
@@ -297,9 +302,11 @@ public:
         if (is_msg_) {
             // Re-assert Messages hooks (JNI only — install_for_upi skips PLT)
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            // Sender spoof useful if Messages reads SmsMessage; phone optional
+            sender_spoof::install(env_, api_, pkg_.c_str());
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
-            // SMSTweaks-style: wait for UI, then JNI BinderProxy/Intent
+            // SMSTweaks-style: wait for UI, then JNI BinderProxy + phone + sender
             const int delay = is_yespay(pkg_) ? 8 : 6;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
@@ -309,6 +316,8 @@ public:
             }
         } else {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            phone_number_hook::install(env_, api_, pkg_.c_str());
+            sender_spoof::install(env_, api_, pkg_.c_str());
             if (native_overlay_wanted()) {
                 schedule_overlay_ui(env_, api_, pkg_, 3);
             }

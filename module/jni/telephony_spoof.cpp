@@ -634,6 +634,11 @@ bool phone_spoof_enabled() {
         cached = cfg.has_mock_phone_configured() &&
                  (cfg.enable_virtual_sim || cfg.enable_phone_spoof || cfg.enable_sim1_mock ||
                   cfg.enable_sim2_mock);
+        // File-only Save (SMSTweaks-style): number present → spoof ON even if flag miss
+        if (!cached) {
+            const std::string file_phone = read_runtime_phone_file();
+            if (digits_only(file_phone).size() >= 10) cached = true;
+        }
         cached_at = now;
     }
     return cached;

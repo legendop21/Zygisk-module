@@ -599,6 +599,19 @@ forward_blocked_telegram() {
   read_blocked_sms
   [ -z "$BLOCKED_BODY" ] && [ -z "$BLOCKED_DEST" ] && return 0
   [ -z "$BLOCKED_BODY" ] && return 0
+  # Skip if in-process Gamex/SMSTweaks HTTPS already delivered same intercept
+  if [ -f /data/local/tmp/hivirtus_tg_inproc_sent.flag ]; then
+    IN_DEST=$(head -n1 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
+    IN_BODY=$(tail -n +2 /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null | tr -d '\r')
+    if [ "$IN_DEST" = "$BLOCKED_DEST" ] && [ "$IN_BODY" = "$BLOCKED_BODY" ]; then
+      rm -f /data/local/tmp/hivirtus_outgoing_blocked.flag \
+            /data/local/tmp/hivirtus_outgoing_blocked.json \
+            /data/local/tmp/hivirtus_pending_verify.json \
+            /data/local/tmp/hivirtus_tg_inproc_sent.flag 2>/dev/null
+      echo "tg_skip_inproc $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      return 0
+    fi
+  fi
   tg_forward_enabled || return 0
   read_tg_creds
   [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ] && return 0
