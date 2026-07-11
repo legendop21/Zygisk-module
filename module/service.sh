@@ -970,6 +970,8 @@ ${MSG_BODY}"
     rm -f "$PAYLOAD"
     for pkg in com.herofincorp.diyjourneys com.phonepe.app \
                com.google.android.apps.nbu.paisa.user net.one97.paytm \
+               com.yespay.next com.fampay.in com.kreditbee.android \
+               com.stashfin.android in.org.npci.upiapp \
                com.google.android.apps.messaging; do
       rm -f "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
             "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \

