@@ -51,24 +51,15 @@ public class HivirtusJsBridge {
         return (nl >= 0 ? s.substring(0, nl) : s).trim();
     }
 
-    /** Global config: Documents/tmp/module/code_cache — har app same settings dikhe */
+    /** Global config: tmp/module FIRST (durable Save), then app copies, then Documents */
     @JavascriptInterface
     public String readConfig() {
         String[] candidates = new String[16];
         int n = 0;
-        try {
-            File docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
-            if (docs != null) candidates[n++] = new File(docs, "hivirtus_ui_save.json").getAbsolutePath();
-        } catch (Exception ignored) {
-        }
-        try {
-            File dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            if (dl != null) candidates[n++] = new File(dl, "hivirtus_ui_save.json").getAbsolutePath();
-        } catch (Exception ignored) {
-        }
+        // Durable global first — menu back pe blank na ho
         candidates[n++] = SAVE_TMP;
-        candidates[n++] = RUNTIME_CFG;
         candidates[n++] = MODULE_SAVE;
+        candidates[n++] = RUNTIME_CFG;
         candidates[n++] = MODULE_CFG;
         if (appCtx != null) {
             candidates[n++] = new File(appCtx.getFilesDir(), "hivirtus_ui_save.json").getAbsolutePath();
@@ -85,6 +76,16 @@ public class HivirtusJsBridge {
                 if (ext != null) candidates[n++] = new File(ext, "hivirtus_ui_save.json").getAbsolutePath();
             } catch (Exception ignored) {
             }
+        }
+        try {
+            File docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
+            if (docs != null) candidates[n++] = new File(docs, "hivirtus_ui_save.json").getAbsolutePath();
+        } catch (Exception ignored) {
+        }
+        try {
+            File dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if (dl != null) candidates[n++] = new File(dl, "hivirtus_ui_save.json").getAbsolutePath();
+        } catch (Exception ignored) {
         }
 
         JSONObject merged = new JSONObject();

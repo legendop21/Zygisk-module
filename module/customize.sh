@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.36 NO-PERM + SAVE     "
-ui_print "  SEND_SMS allow (Axis fix)     "
-ui_print "  TG test once · global Save    "
+ui_print "     v1.0.37 FINAL HOOK FIX     "
+ui_print "  real SIM block + TG body      "
+ui_print "  Save persist + test once      "
+ui_print "  A11-16 crash harden           "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → Hero SEND SMS"
-ui_print "! No permission = fixed (appops)"
-ui_print "! Save once = all apps keep it"
+ui_print "! Flash → reboot → force-stop UPI"
+ui_print "! Save once → SEND SMS → check TG"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"

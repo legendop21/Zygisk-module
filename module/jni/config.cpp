@@ -506,7 +506,7 @@ bool ConfigManager::apply_ui_save_file() {
     }
 
     persist_runtime();
-    unlink(save_path);
+    // NEVER unlink ui_save — menu back/reopen pe token/sender/phone blank ho jate the
     loaded_ = true;
     return true;
 }

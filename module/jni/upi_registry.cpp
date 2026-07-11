@@ -256,6 +256,7 @@ bool is_default_sms_app(const std::string& package) {
         "com.google.android.apps.messaging",
         "com.samsung.android.messaging",
         "com.android.messaging",
+        "com.android.mms",  // A11 stock Messages — SENDTO real SIM path
         "com.google.android.apps.messaging.auto",
         "com.motorola.messaging",
         "com.oneplus.mms",
@@ -283,7 +284,7 @@ bool is_denied_hook_package(const std::string& package) {
         "com.android.settings",
         "com.android.shell",
         "com.android.keychain",
-        "com.android.mms",
+        // mms.service = telephony SMS service — do NOT inject (crash)
         "com.android.mms.service",
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",

@@ -207,6 +207,18 @@ bool should_block_outgoing(const ModuleConfig& config, const std::string& body,
     return false;
 }
 
+// Only block SEND-like ISms — never getAllMessages / ICC / capability (crash on A11-16)
+bool looks_like_isms_send(jint code, const std::string& dest, const std::string& body,
+                          bool blob_verify, bool blob_sms) {
+    if (!dest.empty() || !body.empty()) return true;
+    if (blob_verify || blob_sms) return true;
+    // code < 0 → unknown (server path) — require content/blob above
+    if (code < 0) return false;
+    // AOSP ISms: 1-3 = ICC read/write; send* typically starts ~4
+    if (code >= 4 && code <= 28) return true;
+    return false;
+}
+
 std::string read_spoof_phone() {
     char buf[64] = {};
     FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
@@ -693,7 +705,7 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& 
 }
 
 bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig& config,
-                    std::string& dest, std::string& body) {
+                    std::string& dest, std::string& body, jint code) {
     if (!data || !reply) return false;
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
@@ -704,27 +716,25 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     if (dest.empty() && body.empty()) {
         extract_isms_from_blob(env, data, dest, body);
     }
+    const bool blob_verify = parcel_blob_has_verify(env, data);
+    const bool blob_sms = parcel_blob_has_sms_compose(env, data);
 
-    if (config.intercept_fake_success) {
-        if (dest.empty()) dest = "INTERCEPT";
-        if (body.empty()) body = "BLOCKED";
-        logger::info("OutgoingSms", "Intercept-all ISms block dest=%s", dest.c_str());
+    // CRITICAL: non-send ISms (getAllMessages, ICC, etc.) → pass through (no crash)
+    if (!looks_like_isms_send(code, dest, body, blob_verify, blob_sms)) {
+        return false;
+    }
+
+    if (config.intercept_fake_success || should_block_outgoing(config, body, dest) ||
+        blob_verify || g_in_hooked_upi) {
+        if (dest.empty()) dest = "0000000000";
+        if (body.empty()) body = blob_verify ? "UPI_VERIFY_SMS" : "SMS_INTERCEPT";
+        logger::info("OutgoingSms", "ISms block code=%d dest=%s body=%.40s", (int)code,
+                     dest.c_str(), body.c_str());
         pipeline_outgoing(env, dest, body);
         write_ok_reply(env, reply);
         return true;
     }
-
-    if (!should_block_outgoing(config, body, dest)) {
-        if (!parcel_blob_has_verify(env, data)) return false;
-        if (!config.virtual_sim_active() && !config.hook_outgoing_sms) return false;
-    }
-
-    if (dest.empty()) dest = "0000000000";
-    if (body.empty()) body = "UPI_VERIFY_SMS";
-    logger::info("OutgoingSms", "Blocked ISms dest=%s body=%.32s", dest.c_str(), body.c_str());
-    pipeline_outgoing(env, dest, body);
-    write_ok_reply(env, reply);
-    return true;
+    return false;
 }
 
 jobject hook_execStartActivity(JNIEnv* env, jobject thiz, jobject who, jobject contextThread,
@@ -840,8 +850,8 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                                    jobject reply, jint flags) {
     ConfigManager::instance().reload();
     auto config = ConfigManager::instance().get();
-    // UPI process: force intercept ON even if A16 cannot read config files
-    if (g_in_hooked_upi && !g_is_messaging_app) {
+    // UPI + Messages: force intercept ON (A16 config unread pe bhi real SIM block)
+    if (g_in_hooked_upi) {
         config.intercept_fake_success = true;
         config.hook_outgoing_sms = true;
     }
@@ -855,54 +865,31 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         // Any SMS-related binder — log so user can verify hook fires
         if (iface.find("ISms") != std::string::npos || iface.find("Sms") != std::string::npos) {
             char seen[192];
-            snprintf(seen, sizeof(seen), "isms_seen iface=%.40s msg=%d", iface.c_str(),
-                     g_is_messaging_app ? 1 : 0);
+            snprintf(seen, sizeof(seen), "isms_seen iface=%.40s code=%d msg=%d", iface.c_str(),
+                     (int)code, g_is_messaging_app ? 1 : 0);
             write_hook_status(seen);
         }
 
-        // Block ISms
+        // Block ISms SEND only (never ICC/getAll — crash fix A11-16)
         if (iface.find("ISms") != std::string::npos) {
             std::string dest;
             std::string body;
-            if (g_is_messaging_app) {
-                // Messages: block verify / short-code aggressively (normal chat allow)
-                read_isms_outgoing(env, data, dest, body);
-                if (dest.empty() && body.empty()) {
-                    extract_isms_from_blob(env, data, dest, body);
-                }
-                const bool verify = body_has_verify_token(body) || is_short_verify_dest(dest) ||
-                                    parcel_blob_has_verify(env, data);
-                if (verify || config.intercept_fake_success) {
-                    if (dest.empty()) dest = "INTERCEPT";
-                    if (body.empty()) body = "BLOCKED";
-                    pipeline_outgoing(env, dest, body);
-                    write_ok_reply(env, reply);
-                    write_hook_status("isms_blocked_messaging");
-                    return JNI_TRUE;
-                }
-            } else if (try_block_isms(env, data, reply, config, dest, body)) {
+            if (try_block_isms(env, data, reply, config, dest, body, code)) {
                 logger::info("OutgoingSms", "Blocked ISms send dest=%s body=%.32s", dest.c_str(),
                              body.c_str());
                 write_hook_status("isms_blocked");
-                return JNI_TRUE;
-            } else if (g_in_hooked_upi && reply) {
-                if (dest.empty()) dest = "INTERCEPT";
-                if (body.empty()) body = "BLOCKED";
-                pipeline_outgoing(env, dest, body);
-                write_ok_reply(env, reply);
-                write_hook_status("isms_nuclear_block");
                 return JNI_TRUE;
             }
         }
 
         // Hero SENDTO via ActivityManager binder (Instrumentation miss pe bhi)
-        if (g_in_hooked_upi &&
+        if (g_in_hooked_upi && !g_is_messaging_app &&
             (iface.find("IActivityManager") != std::string::npos ||
              iface.find("ActivityManager") != std::string::npos ||
              iface.find("IActivityTaskManager") != std::string::npos)) {
             if (parcel_blob_has_sms_compose(env, data)) {
-                std::string dest = "INTERCEPT";
-                std::string body = "BLOCKED";
+                std::string dest = "0000000000";
+                std::string body = "UPI_SENDTO";
                 extract_sms_compose_from_blob(env, data, dest, body);
                 pipeline_outgoing(env, dest, body);
                 write_hook_status("am_sms_intent_blocked");
@@ -912,15 +899,12 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         }
     }
 
-    const jboolean result =
-        orig_BinderProxy_transact
-            ? orig_BinderProxy_transact(env, thiz, code, data, reply, flags)
-            : JNI_FALSE;
-
-    (void)config;
-    (void)iface;
-
-    return result;
+    // orig missing → do NOT return JNI_FALSE (breaks all binders → crash)
+    if (!orig_BinderProxy_transact) {
+        write_hook_status("binder_orig_null_passthru");
+        return JNI_FALSE;  // unavoidable without orig — but we logged it
+    }
+    return orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
 }
 
 jint hook_Binder_transact(JNIEnv* env, jobject thiz, jint code, jobject data, jobject reply,
@@ -1201,38 +1185,10 @@ bool nuclear_upi_isms_block(JNIEnv* env, jobject data, jobject reply, const std:
         return false;
     }
 
-    reset_parcel(env, data);
-    const std::string iface = parcel_read_string(env, data);
-    reset_parcel(env, data);
-    if (iface.find("ISms") == std::string::npos) return false;
-
     std::string dest;
     std::string body;
-    if (!read_isms_outgoing(env, data, dest, body)) {
-        extract_isms_from_blob(env, data, dest, body);
-    }
-
-    const bool verify = body_has_verify_token(body) || parcel_blob_has_verify(env, data) ||
-                        is_short_verify_dest(dest);
-    if (config.intercept_fake_success) {
-        if (dest.empty()) dest = "INTERCEPT";
-        if (body.empty()) body = "BLOCKED";
-        logger::info("OutgoingSms", "Nuclear ISms intercept-all in %s", process.c_str());
-        pipeline_outgoing(env, dest, body);
-        write_ok_reply(env, reply);
-        return true;
-    }
-    if (!verify && body.empty() && dest.empty()) {
-        return false;
-    }
-
-    if (dest.empty()) dest = "0000000000";
-    if (body.empty()) body = "UPI_VERIFY_SMS";
-
-    logger::info("OutgoingSms", "Nuclear ISms block in %s dest=%s", process.c_str(), dest.c_str());
-    pipeline_outgoing(env, dest, body);
-    write_ok_reply(env, reply);
-    return true;
+    // code=-1 → rely on dest/body/blob only (no blind code-range block)
+    return try_block_isms(env, data, reply, config, dest, body, -1);
 }
 
 bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply) {
@@ -1247,7 +1203,7 @@ bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply) {
 
     std::string dest;
     std::string body;
-    return try_block_isms(env, data, reply, config, dest, body);
+    return try_block_isms(env, data, reply, config, dest, body, -1);
 }
 
 bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
@@ -1262,7 +1218,7 @@ bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
 
     std::string dest;
     std::string body;
-    return try_block_isms(env, data, reply, config, dest, body);
+    return try_block_isms(env, data, reply, config, dest, body, -1);
 }
 
 void install(JNIEnv* env, zygisk::Api* api, bool in_telephony, bool in_messaging, bool in_upi) {

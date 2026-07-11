@@ -333,14 +333,10 @@ hivirtus_tg_watchdog() {
   HASH="${tg_t}|${tg_c}"
   OLD=$(cat /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null)
   SENT=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
-  # ONLY queue test when creds CHANGE and not already sent for this hash
-  if [ "$HASH" != "$OLD" ] && [ "$HASH" != "$SENT" ]; then
-    echo "$HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-    echo 1 > /data/local/tmp/hivirtus_tg_test.request
-    chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
-    echo "tg_test_queued_watchdog $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-  else
-    echo "$HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+  # Watchdog NEVER queues TG test — only Save path may queue (spam fix)
+  echo "$HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+  if [ -z "$SENT" ] && [ -z "$OLD" ]; then
+    : # first boot with creds — boot subshell handles one test
   fi
 }
 
