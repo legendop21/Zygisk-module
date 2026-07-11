@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.60.zip**
+Latest: **virtus-zygisk-mode-v1.0.61.zip**
 
-Drive MenuLoader exact fix: `IBinder` → `queryLocalInterface` → `ISms` proxy (pehle galat IBinder pe sendText dhoondh rahe the). Native: Android 16 `iface_ok=0` pe bhi Messages ISms block. Junk inject + repair/diag files hata diye.
+Nuclear Messages block: `blob_ok=1` pe SIM passthrough band. Drive IBinder→ISms proxy. Purana 1.0.59 hata ke ye flash karo.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.60.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.61.zip
