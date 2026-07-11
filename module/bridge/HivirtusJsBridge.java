@@ -310,11 +310,22 @@ public class HivirtusJsBridge {
             if (!incomingToken.isEmpty()) merged.put("telegram_bot_token", incomingToken);
             if (!incomingChat.isEmpty()) merged.put("telegram_chat_id", incomingChat);
 
-            if (merged.optBoolean("enable_sim1_mock", false)
+            // Always write phone when THIS save has digits — empty-wipe already blocked above
+            if (incomingPhone.length() >= 10) {
+                merged.put("mock_phone_sim1", incomingPhone);
+                merged.put("enable_sim1_mock", true);
+                merged.put("enable_phone_spoof", true);
+                merged.put("fake_number_enabled", true);
+                merged.put("enable_virtual_sim", true);
+                wrote += writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", incomingPhone + "\n");
+                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", incomingPhone + "\n");
+                // Extra durable copies
+                writeUtf8("/sdcard/Documents/hivirtus_spoof_phone.txt", incomingPhone + "\n");
+                writeUtf8("/sdcard/Download/hivirtus_spoof_phone.txt", incomingPhone + "\n");
+            } else if (merged.optBoolean("enable_sim1_mock", false)
                     || merged.optBoolean("enable_phone_spoof", false)
                     || merged.optBoolean("fake_number_enabled", false)
-                    || merged.optBoolean("enable_virtual_sim", false)
-                    || incomingPhone.length() >= 10) {
+                    || merged.optBoolean("enable_virtual_sim", false)) {
                 merged.put("enable_sim1_mock", true);
                 merged.put("enable_phone_spoof", true);
                 String phone = normalizePhone(merged.optString("mock_phone_sim1", ""));

