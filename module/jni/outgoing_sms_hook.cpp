@@ -1442,13 +1442,24 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
              ok ? 1 : 0, g_is_messaging_app ? (plt_ok ? "msg_plt" : "msg_jni") : "upi_jni");
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
-    // Always mirror Messages status to global tmp so user can see binder=1
+    // Always mirror Messages status to dedicated files (GPay harvest must not hide this)
     if (g_is_messaging_app) {
-        FILE* gf = fopen("/data/local/tmp/hivirtus_hook_status.txt", "w");
+        FILE* gf = fopen("/data/local/tmp/hivirtus_messages_hook.txt", "w");
+        if (gf) {
+            fprintf(gf, "%s\n", summary);
+            fclose(gf);
+            chmod("/data/local/tmp/hivirtus_messages_hook.txt", 0666);
+        }
+        gf = fopen("/data/local/tmp/hivirtus_hook_status.txt", "w");
         if (gf) {
             fprintf(gf, "%s\n", summary);
             fclose(gf);
             chmod("/data/local/tmp/hivirtus_hook_status.txt", 0666);
+        }
+        gf = fopen("/data/adb/modules/hivirtus_zygisk_mode/messages_hook.txt", "w");
+        if (gf) {
+            fprintf(gf, "%s\n", summary);
+            fclose(gf);
         }
     }
     logger::info("OutgoingSms", "%s", summary);

