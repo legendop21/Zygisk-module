@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.51.zip**
+Latest: **virtus-zygisk-mode-v1.0.52.zip**
 
-SIM-safe hotfix — phone process NOT hooked.
+Hero SmsManager intercept + isms_trace harvest fix.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.51.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.52.zip
