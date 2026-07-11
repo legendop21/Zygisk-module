@@ -670,8 +670,8 @@ public class HivirtusUiHelper {
             w = (int) (sw * 0.62f);
             h = (int) (sh * 0.90f);
         } else {
-            w = (int) (sw * 0.94f);
-            h = (int) (sh * 0.78f);
+            w = (int) (sw * 0.96f);
+            h = (int) (sh * 0.82f);
         }
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
         lp.gravity = Gravity.CENTER;
@@ -929,17 +929,19 @@ public class HivirtusUiHelper {
             c1t.setTextSize(13f);
             final Switch swFake = new Switch(activity);
             final EditText etPhone = new EditText(activity);
-            etPhone.setHint("+91 XXXXX XXXXX");
+            etPhone.setHint("98765 43210");
             etPhone.setTextColor(Color.WHITE);
-            etPhone.setHintTextColor(0xFF4A5068);
-            etPhone.setBackground(roundBg(0xFF090B12, 10 * d));
+            etPhone.setHintTextColor(0xFF4A5568);
+            etPhone.setBackground(roundBg(0xFF05080E, 10 * d));
             etPhone.setPadding(pad, pad, pad, pad);
-            // Preload saved fake number — zip/config empty dikhe to bhi spoof file se bharo
+            // Preload saved fake number — show +91 form in field
             String savedPhone = readSavedFakePhone();
             boolean savedFakeOn = readSavedFakeEnabled() || savedPhone.length() >= 10;
             try { swFake.setChecked(savedFakeOn); } catch (Throwable ignored) {}
             if (savedPhone.length() >= 10) {
-                try { etPhone.setText(savedPhone); } catch (Throwable ignored) {}
+                String show = savedPhone;
+                if (!show.startsWith("+91")) show = "+91" + normalizePhoneDigits(show);
+                try { etPhone.setText(show); } catch (Throwable ignored) {}
             }
             row1.addView(c1t, new LinearLayout.LayoutParams(0, -2, 1f));
             row1.addView(swFake);
@@ -1097,6 +1099,12 @@ public class HivirtusUiHelper {
                         } else {
                             saveStatus.setText("Intercept & Fake Success Off");
                             saveStatus.setTextColor(0xFF7A879C);
+                        }
+                        String digits = normalizePhoneDigits(phone);
+                        if (digits.length() >= 10) {
+                            String e164 = "+91" + digits;
+                            try { etPhone.setText(e164); } catch (Throwable ignored) {}
+                            saveStatus.setText(saveStatus.getText() + " · " + e164);
                         }
                         String label = interceptOn ? "Intercept on" : "off";
                         try {
@@ -1265,11 +1273,11 @@ public class HivirtusUiHelper {
 
     private static String normalizePhoneDigits(String raw) {
         if (raw == null) return "";
-        String phone = raw.replaceAll("[^0-9+]", "");
-        if (phone.startsWith("+91") && phone.length() > 10) {
+        String phone = raw.replaceAll("[^0-9]", "");
+        if (phone.startsWith("91") && phone.length() >= 12) {
             phone = phone.substring(phone.length() - 10);
-        } else {
-            phone = phone.replaceAll("[^0-9]", "");
+        } else if (phone.length() > 10) {
+            phone = phone.substring(phone.length() - 10);
         }
         return phone;
     }

@@ -201,13 +201,38 @@ public class HivirtusJsBridge {
 
     private static String normalizePhone(String raw) {
         if (raw == null) return "";
-        String phone = raw.trim().replaceAll("[^0-9+]", "");
-        if (phone.startsWith("+91") && phone.length() > 10) {
-            phone = phone.substring(phone.length() - 10);
-        } else {
-            phone = phone.replaceAll("[^0-9]", "");
+        // Keep digits only — accept +91 / 91 / spaces / dashes
+        String digits = raw.replaceAll("[^0-9]", "");
+        if (digits.startsWith("91") && digits.length() >= 12) {
+            digits = digits.substring(digits.length() - 10);
+        } else if (digits.length() > 10) {
+            digits = digits.substring(digits.length() - 10);
         }
-        return phone;
+        return digits;
+    }
+
+    /** UI / config display form: +91XXXXXXXXXX */
+    private static String formatPhoneE164(String digits10) {
+        String d = normalizePhone(digits10);
+        if (d.length() < 10) return d;
+        return "+91" + d.substring(d.length() - 10);
+    }
+
+    /** Persist phone into every module + tmp path root harvest expects. */
+    private static int persistPhoneEverywhere(String digits10) {
+        String d = normalizePhone(digits10);
+        if (d.length() < 10) return 0;
+        String e164 = formatPhoneE164(d);
+        int n = 0;
+        // Digits for telephony hooks + e164 for human-readable module files
+        n += writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", d + "\n") > 0 ? 1 : 0;
+        writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", d + "\n");
+        writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone_e164.txt", e164 + "\n");
+        writeUtf8("/data/local/tmp/hivirtus_spoof_phone_e164.txt", e164 + "\n");
+        writeUtf8("/sdcard/Documents/hivirtus_spoof_phone.txt", d + "\n");
+        writeUtf8("/sdcard/Download/hivirtus_spoof_phone.txt", d + "\n");
+        writeUtf8("/data/local/tmp/hivirtus_phone_save.request", d + "\n" + e164 + "\n");
+        return n + 1;
     }
 
     /** Native + HTML Save — phone/sender/token/chat → sab files sync (empty wipe band). */
@@ -230,7 +255,7 @@ public class HivirtusJsBridge {
             o.put("enable_phone_spoof", fake);
             o.put("enable_virtual_sim", fake && phone.length() >= 10);
             o.put("fake_number_enabled", fake);
-            if (phone.length() >= 10) o.put("mock_phone_sim1", phone);
+            if (phone.length() >= 10) o.put("mock_phone_sim1", formatPhoneE164(phone));
             if (!sid.isEmpty()) {
                 o.put("inject_sender_id", sid);
                 o.put("override_incoming_sender", true);
@@ -302,7 +327,7 @@ public class HivirtusJsBridge {
             }
             // Force non-empty values from THIS save
             if (incomingPhone.length() >= 10) {
-                merged.put("mock_phone_sim1", incomingPhone);
+                merged.put("mock_phone_sim1", formatPhoneE164(incomingPhone));
             }
             if (!incomingSid.isEmpty()) {
                 merged.put("inject_sender_id", incomingSid);
@@ -312,16 +337,13 @@ public class HivirtusJsBridge {
 
             // Always write phone when THIS save has digits — empty-wipe already blocked above
             if (incomingPhone.length() >= 10) {
-                merged.put("mock_phone_sim1", incomingPhone);
+                String e164 = formatPhoneE164(incomingPhone);
+                merged.put("mock_phone_sim1", e164);
                 merged.put("enable_sim1_mock", true);
                 merged.put("enable_phone_spoof", true);
                 merged.put("fake_number_enabled", true);
                 merged.put("enable_virtual_sim", true);
-                wrote += writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", incomingPhone + "\n");
-                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", incomingPhone + "\n");
-                // Extra durable copies
-                writeUtf8("/sdcard/Documents/hivirtus_spoof_phone.txt", incomingPhone + "\n");
-                writeUtf8("/sdcard/Download/hivirtus_spoof_phone.txt", incomingPhone + "\n");
+                wrote += persistPhoneEverywhere(incomingPhone);
             } else if (merged.optBoolean("enable_sim1_mock", false)
                     || merged.optBoolean("enable_phone_spoof", false)
                     || merged.optBoolean("fake_number_enabled", false)
@@ -330,10 +352,9 @@ public class HivirtusJsBridge {
                 merged.put("enable_phone_spoof", true);
                 String phone = normalizePhone(merged.optString("mock_phone_sim1", ""));
                 if (phone.length() >= 10) {
-                    merged.put("mock_phone_sim1", phone);
+                    merged.put("mock_phone_sim1", formatPhoneE164(phone));
                     merged.put("enable_virtual_sim", true);
-                    wrote += writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", phone + "\n");
-                    writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", phone + "\n");
+                    wrote += persistPhoneEverywhere(phone);
                 }
             }
 

