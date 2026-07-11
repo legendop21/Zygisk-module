@@ -220,20 +220,21 @@ sync_config() {
       chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
       [ "$NEW_HASH" != "$OLD_HASH" ] && NEED_PUSH=1
 
-      # TG test: SIRF ek baar per token|chat (Save pe spam mat karo)
+      # TG test: user Save → always one test (clear stale sent from flash)
       SENT_HASH=$(cat /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null)
       QUEUE=0
-      if [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
+      if [ -f /data/local/tmp/hivirtus_save_ok.flag ]; then
+        rm -f /data/local/tmp/hivirtus_tg_test_sent.hash
         QUEUE=1
-        echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-        echo "tg_test_queued_new_creds $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      else
-        echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+      elif [ "$NEW_HASH" != "$OLD_HASH" ] && [ "$NEW_HASH" != "$SENT_HASH" ]; then
+        QUEUE=1
       fi
+      echo "$NEW_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
       if [ "$QUEUE" = "1" ]; then
         echo 1 > /data/local/tmp/hivirtus_tg_test.request
         rm -f /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null
         chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+        echo "tg_test_queued_save $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       fi
     fi
 
@@ -678,9 +679,12 @@ tg_http_post() {
   local payload="$1"
   local resp="$2"
   local url="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+  rm -f "$resp"
+  : > "$resp"
+  # Prefer curl (JSON body)
   if command -v curl >/dev/null 2>&1; then
-    curl -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
-    return $?
+    curl -sS -m 30 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" -o "$resp" 2>/data/local/tmp/hivirtus_tg_curl.err
+    [ -s "$resp" ] && return 0
   fi
   for c in /system/bin/curl /system/xbin/curl \
            /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox \
@@ -688,32 +692,42 @@ tg_http_post() {
     if [ -x "$c" ]; then
       case "$c" in
         *busybox*)
-          "$c" wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
+          "$c" wget -q -O "$resp" -T 30 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
           ;;
         *)
-          "$c" -s -m 25 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" > "$resp" 2>/dev/null
+          "$c" -sS -m 30 -X POST "$url" -H "Content-Type: application/json" --data-binary "@${payload}" -o "$resp" 2>/dev/null
           ;;
       esac
-      return $?
+      [ -s "$resp" ] && return 0
     fi
   done
-  if [ -x /system/bin/toybox ]; then
-    /system/bin/toybox wget -q -O "$resp" -T 25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
-    return $?
+  # Fallback: form-urlencoded text= (wget without JSON)
+  local text chat
+  text=$(grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' "$payload" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+  chat="$TG_CHAT"
+  if [ -n "$text" ] && [ -n "$chat" ]; then
+    local form="/data/local/tmp/hivirtus_tg_form.txt"
+    # shell escape for form
+    printf 'chat_id=%s&text=%s&disable_web_page_preview=true' "$chat" "$text" > "$form"
+    if command -v curl >/dev/null 2>&1; then
+      curl -sS -m 30 -X POST "$url" --data-urlencode "chat_id=${chat}" --data-urlencode "text=${text}" -o "$resp" 2>/dev/null
+      [ -s "$resp" ] && return 0
+    fi
+    if [ -x /system/bin/toybox ]; then
+      /system/bin/toybox wget -q -O "$resp" -T 30 --post-file="$form" "$url" 2>/dev/null
+      [ -s "$resp" ] && return 0
+    fi
   fi
-  if command -v wget >/dev/null 2>&1; then
-    wget -q -O "$resp" --timeout=25 --header="Content-Type: application/json" --post-file="$payload" "$url" 2>/dev/null
-    return $?
-  fi
-  echo "no_curl_wget" > "$resp"
+  echo "no_http_client" > "$resp"
   return 1
 }
 
-# Save pe Telegram test — SIRF ek baar per token|chat (mark sent BEFORE send)
+# Save pe Telegram test — success pe hi mark sent; fail pe 5 retry
 send_tg_test_if_requested() {
   [ -f /data/local/tmp/hivirtus_tg_test.request ] || return 0
   read_tg_creds
   if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+    echo "tg_test_skip_no_creds $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     rm -f /data/local/tmp/hivirtus_tg_test.request
     return 0
   fi
@@ -723,11 +737,12 @@ send_tg_test_if_requested() {
     rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
     return 0
   fi
-  # Mark sent FIRST — network fail pe bhi spam nahi
-  echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
-  echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
-  echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
-  rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
+  NOW=$(date +%s)
+  LAST_TRY=$(cat /data/local/tmp/hivirtus_tg_test_last_try.ts 2>/dev/null || echo 0)
+  if [ $((NOW - LAST_TRY)) -lt 15 ]; then
+    return 0
+  fi
+  echo "$NOW" > /data/local/tmp/hivirtus_tg_test_last_try.ts
 
   DEV=$(device_name)
   if module_is_active; then
@@ -743,12 +758,24 @@ Device: ${DEV}"
   PAYLOAD="/data/local/tmp/hivirtus_tg_test_payload.json"
   printf '%s' "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"${ESC_TEXT}\",\"disable_web_page_preview\":true}" > "$PAYLOAD"
   RESP="/data/local/tmp/hivirtus_tg_test_response.txt"
+  : > "$RESP"
   if tg_http_post "$PAYLOAD" "$RESP" && grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$RESP" 2>/dev/null; then
+    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
+    echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_creds.hash
+    echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag
+    rm -f /data/local/tmp/hivirtus_tg_test.request "$PAYLOAD" /data/local/tmp/hivirtus_tg_test_fails
     echo "tg_test_ok $STATUS device=$DEV $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
   else
-    echo "tg_test_fail_once $(date +%s) resp=$(head -c 120 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    FAILS=$(cat /data/local/tmp/hivirtus_tg_test_fails 2>/dev/null || echo 0)
+    FAILS=$((FAILS + 1))
+    echo "$FAILS" > /data/local/tmp/hivirtus_tg_test_fails
+    echo "tg_test_fail try=$FAILS $(date +%s) resp=$(head -c 160 "$RESP" 2>/dev/null)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    if [ "$FAILS" -ge 5 ]; then
+      echo "$CUR_HASH" > /data/local/tmp/hivirtus_tg_test_sent.hash
+      rm -f /data/local/tmp/hivirtus_tg_test.request /data/local/tmp/hivirtus_tg_test_fails
+      echo "tg_test_give_up $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    fi
   fi
-  rm -f "$PAYLOAD"
 }
 
 # SMSTweaks-style inbox rewrite — ANY recent inbox address → saved Sender ID

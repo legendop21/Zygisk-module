@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.37 FINAL HOOK FIX     "
-ui_print "  real SIM block + TG body      "
-ui_print "  Save persist + test once      "
-ui_print "  A11-16 crash harden           "
+ui_print "     v1.0.38 CRASH-SAFE         "
+ui_print "  content-only ISms block       "
+ui_print "  no phone-hook crash           "
+ui_print "  TG test on Save works         "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → force-stop UPI"
-ui_print "! Save once → SEND SMS → check TG"
+ui_print "! Flash → reboot → apps should NOT crash"
+ui_print "! Save once → TG test → then SEND SMS"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
@@ -160,15 +160,18 @@ if [ -n "$OLD_TG_TOKEN" ] && [ -n "$OLD_TG_CHAT" ]; then
     > /data/local/tmp/hivirtus_telegram_credentials.json
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
   ui_print "- Telegram + phone + sender preserved"
-  # Kill spam leftovers; KEEP sent.hash so same token pe test dubara na aaye
+  # Kill spam leftovers; do NOT mark sent — Save pe ek test jaana chahiye
   rm -f /data/local/tmp/hivirtus_tg_test.request \
         /sdcard/Documents/hivirtus_tg_test.request \
         /sdcard/Download/hivirtus_tg_test.request 2>/dev/null
+  rm -f /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
+  rm -f /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
   echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_creds.hash 2>/dev/null
-  # Mark already-sent so flash/reboot pe 🚀 test spam na ho
-  echo "${OLD_TG_TOKEN}|${OLD_TG_CHAT}" > /data/local/tmp/hivirtus_tg_test_sent.hash 2>/dev/null
-  echo 1 > /data/local/tmp/hivirtus_tg_boot_sent.flag 2>/dev/null
   chmod 666 /data/local/tmp/hivirtus_telegram_credentials.json 2>/dev/null
+  # Queue ONE boot test after flash
+  echo 1 > /data/local/tmp/hivirtus_tg_test.request
+  chmod 666 /data/local/tmp/hivirtus_tg_test.request 2>/dev/null
+  ui_print "- TG test queued (once after reboot)"
 else
   ui_print "- Telegram empty — bubble → Token+Chat → Save"
 fi

