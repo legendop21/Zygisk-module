@@ -495,13 +495,26 @@ bool ConfigManager::apply_ui_save_file() {
         config_.hide_sukisu = config_.hide_all_root_apps = true;
     }
 
-    const std::string phone = config_.resolve_mock_phone();
-    if (!phone.empty()) {
-        FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "w");
-        if (f) {
-            fprintf(f, "%s\n", phone.c_str());
-            fclose(f);
-            chmod("/data/local/tmp/hivirtus_spoof_phone.txt", 0644);
+    // Write spoof from Save JSON only — never re-lock an old spoof file
+    {
+        std::string digits;
+        for (char c : config_.mock_phone_sim1) {
+            if (c >= '0' && c <= '9') digits += c;
+        }
+        if (digits.size() >= 12 && digits.rfind("91", 0) == 0) digits = digits.substr(digits.size() - 10);
+        if (digits.size() > 10) digits = digits.substr(digits.size() - 10);
+        if (digits.size() >= 10) {
+            FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "w");
+            if (f) {
+                fprintf(f, "%s\n", digits.c_str());
+                fclose(f);
+                chmod("/data/local/tmp/hivirtus_spoof_phone.txt", 0666);
+            }
+            FILE* f2 = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "w");
+            if (f2) {
+                fprintf(f2, "%s\n", digits.c_str());
+                fclose(f2);
+            }
         }
     }
 
@@ -521,7 +534,14 @@ bool ModuleConfig::has_mock_phone_configured() const {
 }
 
 std::string ModuleConfig::resolve_mock_phone() const {
-    // Live spoof file wins (Save updates this) — stale JSON was blocking number updates
+    // Menu Save JSON wins — stale spoof_phone.txt was locking the old number forever
+    if (!mock_phone_sim1.empty()) {
+        size_t digits = 0;
+        for (char c : mock_phone_sim1) {
+            if (c >= '0' && c <= '9') digits++;
+        }
+        if (digits >= 10) return mock_phone_sim1;
+    }
     char buf[96] = {};
     FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
     if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
@@ -538,13 +558,6 @@ std::string ModuleConfig::resolve_mock_phone() const {
         } else {
             fclose(f);
         }
-    }
-    if (!mock_phone_sim1.empty()) {
-        size_t digits = 0;
-        for (char c : mock_phone_sim1) {
-            if (c >= '0' && c <= '9') digits++;
-        }
-        if (digits >= 10) return mock_phone_sim1;
     }
     return {};
 }

