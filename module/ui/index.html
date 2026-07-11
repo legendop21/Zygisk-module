@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Virtus Zygisk Mode</title>
+  <title>Virtus Zygisk Menu</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,8 +12,8 @@
       <div class="brand">
         <span class="mark" id="brandMark">V</span>
         <div>
-          <div class="name">Virtus</div>
-          <div class="sub" id="statusLine">Intercept + spoof ready</div>
+          <div class="name">Virtus Zygisk Menu</div>
+          <div class="sub" id="statusLine">off</div>
         </div>
       </div>
       <button type="button" class="icon-btn" id="btnMin" aria-label="Close">✕</button>
@@ -26,11 +26,10 @@
     </nav>
 
     <main class="panels">
-      <!-- BASIC — SMSTweaks style -->
       <section class="panel active" id="panel-basic">
         <article class="card">
           <div class="card-head">
-            <div class="ico ico-purple">📱</div>
+            <div class="ico ico-teal">📱</div>
             <div class="card-copy">
               <h3>Fake Phone Number</h3>
               <p>Override number shown to apps</p>
@@ -70,7 +69,7 @@
 
         <article class="card">
           <div class="card-head">
-            <div class="ico ico-green">🏷️</div>
+            <div class="ico ico-mint">🏷️</div>
             <div class="card-copy">
               <h3>Incoming Sender ID</h3>
               <p>Override sender shown on incoming SMS</p>
@@ -89,22 +88,18 @@
         </article>
       </section>
 
-      <!-- ADVANCED -->
       <section class="panel" id="panel-advanced">
-        <article class="card card-danger">
+        <article class="card card-intercept">
           <div class="card-head">
-            <div class="ico ico-red">🚫</div>
+            <div class="ico ico-coral">🚫</div>
             <div class="card-copy">
               <h3>Intercept &amp; Fake Success</h3>
-              <p>Block SMS but tell app it was sent</p>
+              <p id="interceptHint">off</p>
             </div>
             <label class="switch">
               <input type="checkbox" data-key="intercept_fake_success" id="swIntercept" />
               <span class="slider"></span>
             </label>
-          </div>
-          <div class="warn">
-            When ON, no SMS leaves your SIM. App gets a fake success callback — same as SMSTweaks.
           </div>
         </article>
 
@@ -151,11 +146,10 @@
         </article>
       </section>
 
-      <!-- TELEGRAM -->
       <section class="panel" id="panel-telegram">
         <article class="card">
           <div class="card-head">
-            <div class="ico ico-blue">✈️</div>
+            <div class="ico ico-sky">✈️</div>
             <div class="card-copy">
               <h3>Telegram Forwarding</h3>
               <p>Send intercepted SMS to your bot</p>
@@ -174,7 +168,6 @@
               <span>Chat ID</span>
               <input type="text" data-key="telegram_chat_id" inputmode="numeric" placeholder="-100123…" />
             </label>
-            <p class="hint">1) Token + Chat ID dalo → Save → Telegram pe test aayega (🚀 Successful Active!). 2) Intercept ON → verify SMS → 📞 To + 💬 Message aayega.</p>
           </div>
         </article>
       </section>
@@ -182,7 +175,8 @@
 
     <footer class="foot">
       <button type="button" class="primary" id="btnSave">Update / Save</button>
-      <span class="credit">Virtus Zygisk Mode • no LSPosed • <span class="accent">@hivirtus</span></span>
+      <div class="save-status" id="saveStatus" hidden></div>
+      <span class="credit">Virtus Zygisk Menu · <span class="accent">@hivirtus</span></span>
     </footer>
   </div>
   <script src="app.js"></script>

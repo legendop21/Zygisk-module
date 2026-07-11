@@ -25,6 +25,12 @@
     return s;
   }
 
+  function interceptOn() {
+    const sw = $("#swIntercept");
+    if (sw) return !!sw.checked;
+    return cfg.intercept_fake_success === true || cfg.intercept_enabled === true;
+  }
+
   function syncBodies() {
     const map = [
       ["swFake", "bodyFake"],
@@ -38,6 +44,42 @@
       if (!s || !b) return;
       b.classList.toggle("open", !!s.checked);
     });
+  }
+
+  function paintInterceptLabels() {
+    const on = interceptOn();
+    const label = on ? "Intercept on" : "off";
+    const el = $("#statusLine");
+    if (el) {
+      el.textContent = label;
+      el.classList.toggle("on", on);
+      el.classList.toggle("off", !on);
+    }
+    const hint = $("#interceptHint");
+    if (hint) {
+      hint.textContent = label;
+      hint.classList.toggle("on", on);
+      hint.classList.toggle("off", !on);
+    }
+  }
+
+  function paintSaveStatus(force) {
+    const box = $("#saveStatus");
+    if (!box) return;
+    if (!force) {
+      box.hidden = true;
+      box.textContent = "";
+      return;
+    }
+    const on = interceptOn();
+    box.hidden = false;
+    if (on) {
+      box.textContent = "Intercept & Fake Success On ✅";
+      box.classList.remove("off");
+    } else {
+      box.textContent = "Intercept & Fake Success Off";
+      box.classList.add("off");
+    }
   }
 
   function applyToForm() {
@@ -61,7 +103,7 @@
       }
     });
     syncBodies();
-    paintStatus();
+    paintInterceptLabels();
   }
 
   function collect() {
@@ -106,8 +148,8 @@
     if (b) b.saveConfig(JSON.stringify(next));
     cfg = next;
     dirty = false;
-    const hasTg = !!(next.telegram_bot_token && next.telegram_chat_id);
-    paintStatus(hasTg ? "tg_saved" : "saved");
+    paintInterceptLabels();
+    paintSaveStatus(true);
     const btn = $("#btnSave");
     if (btn) {
       btn.classList.add("saved");
@@ -115,35 +157,7 @@
       setTimeout(() => {
         btn.classList.remove("saved");
         btn.textContent = "Update / Save";
-        paintStatus();
-      }, 1800);
-    }
-  }
-
-  function paintStatus(note) {
-    const el = $("#statusLine");
-    if (!el) return;
-    if (note === "tg_saved") {
-      el.textContent = "saved · all files synced · TG ready";
-      el.style.color = "var(--green)";
-      return;
-    }
-    if (note === "saved") {
-      el.textContent = "saved · number/sender updated";
-      el.style.color = "var(--green)";
-      return;
-    }
-    const intercept = cfg.intercept_fake_success === true || cfg.intercept_enabled === true;
-    const fake = cfg.enable_sim1_mock === true || cfg.fake_number_enabled === true;
-    if (intercept && fake) {
-      el.textContent = "intercept + spoof ready";
-      el.style.color = "var(--green)";
-    } else if (intercept) {
-      el.textContent = "intercept on · set fake number";
-      el.style.color = "#e8b84a";
-    } else {
-      el.textContent = "Zygisk Mode · tap Save";
-      el.style.color = "var(--muted)";
+      }, 1600);
     }
   }
 
@@ -163,7 +177,6 @@
   });
 
   function load(force) {
-    // Don't stomp form while user is typing a new number
     if (!force && dirty) return;
     if (
       !force &&
@@ -193,13 +206,12 @@
       dirty = true;
       cfg = collect();
       syncBodies();
-      paintStatus();
+      paintInterceptLabels();
     });
     el.addEventListener("input", () => {
       dirty = true;
       if (el.type !== "checkbox") {
         cfg = collect();
-        paintStatus();
       }
     });
   });
