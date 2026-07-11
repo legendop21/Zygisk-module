@@ -219,6 +219,23 @@ public:
         env_->ReleaseStringUTFChars(args->nice_name, process);
         pkg_ = base_package(process_name_);
 
+        // Phone process: SEND-ONLY ISms server block (radio kill). No spoof/overlay.
+        if (pkg_ == "com.android.phone") {
+            ConfigManager::instance().reload();
+            ConfigManager::instance().apply_ui_save_file();
+            ConfigManager::instance().reload();
+            const auto& cfg = ConfigManager::instance().get();
+            if (cfg.hook_outgoing_sms || cfg.intercept_fake_success) {
+                outgoing_sms_hook::install_telephony_server_hook(api_);
+                report_line(api_, "HOOK_PHONE|isms_server_send_block");
+                keep_ = true;
+                is_phone_ = true;
+            } else {
+                api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
+            }
+            return;
+        }
+
         if (is_dangerous_process(pkg_) ||
             upi_registry::is_module_own_app(pkg_) ||
             !upi_registry::is_sms_hook_target(pkg_)) {
@@ -278,6 +295,15 @@ public:
     void postAppSpecialize(const zygisk::AppSpecializeArgs* args) override {
         (void)args;
         if (!keep_) return;
+
+        if (is_phone_) {
+            // Re-assert phone ISms server hook after specialize
+            outgoing_sms_hook::install_telephony_server_hook(api_);
+            report_line(api_, "post_phone_ok");
+            mark_active();
+            touch_heartbeat();
+            return;
+        }
 
         if (is_dangerous_process(pkg_) ||
             upi_registry::is_module_own_app(pkg_) ||
@@ -362,6 +388,7 @@ private:
     std::string data_dir_;
     bool keep_ = false;
     bool is_msg_ = false;
+    bool is_phone_ = false;
     bool fragile_ = false;
 };
 

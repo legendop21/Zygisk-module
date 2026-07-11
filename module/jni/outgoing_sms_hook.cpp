@@ -30,6 +30,7 @@ namespace {
 zygisk::Api* g_api = nullptr;
 bool g_in_hooked_upi = false;
 bool g_is_messaging_app = false;
+bool g_is_telephony_server = false;
 std::string g_upi_pkg;
 // Fragile Hero: PLT Intent registered early but armed=false until UI up
 volatile bool g_intercept_armed = true;
@@ -55,6 +56,19 @@ void write_diag_multi(const char* name, const char* content) {
         fputs(content, f);
         fclose(f);
         chmod(path, 0666);
+    }
+    // Permanent copy — TG forward must NEVER delete this (user checks this file)
+    if (name && (strstr(name, "outgoing_blocked") || strstr(name, "pending_verify"))) {
+        snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.json");
+        if (strstr(name, ".flag")) {
+            snprintf(path, sizeof(path), "/data/local/tmp/hivirtus_last_outgoing.flag");
+        }
+        f = fopen(path, "w");
+        if (f) {
+            fputs(content, f);
+            fclose(f);
+            chmod(path, 0666);
+        }
     }
     snprintf(path, sizeof(path), "/data/adb/modules/hivirtus_zygisk_mode/%s", name);
     f = fopen(path, "w");
@@ -223,8 +237,8 @@ bool looks_like_isms_send(jint code, const std::string& dest, const std::string&
     if (!dest.empty() && is_short_verify_dest(dest)) return true;
     if (!dest.empty() && !body.empty()) return true;
     if (!dest.empty() && dest.size() <= 14 && is_short_verify_dest(dest)) return true;
-    if (g_is_messaging_app) {
-        // NUCLEAR: Messages/mms.service pe koi bhi ISms send* — parse miss pe bhi block
+    if (g_is_messaging_app || g_is_telephony_server) {
+        // NUCLEAR: Messages/mms/phone pe koi bhi ISms send* — parse miss pe bhi block
         // (HEROAXISUPI real SIM tab jata tha jab code A16 pe 4..32 se bahar tha)
         if (code >= 1) return true;
         if (!body.empty() || !dest.empty()) return true;
@@ -705,12 +719,18 @@ bool messaging_blob_looks_like_sms_send(const std::string& blob) {
     if (blob_contains_needle(blob, "ISms")) return true;
     if (blob_contains_needle(blob, "isms")) return true;
     if (blob_contains_needle(blob, "ISmsEx")) return true;
+    if (blob_contains_needle(blob, "IMms")) return true;
     if (blob_contains_needle(blob, "sendText")) return true;
     if (blob_contains_needle(blob, "sendMultipart")) return true;
+    if (blob_contains_needle(blob, "sendDataMessage")) return true;
+    if (blob_contains_needle(blob, "sendRawPdu")) return true;
     if (blob_contains_needle(blob, "HEROAXIS")) return true;
+    if (blob_contains_needle(blob, "AXISUPI")) return true;
     if (blob_contains_needle(blob, "DO NOT COPY")) return true;
     if (blob_contains_needle(blob, "smsto:")) return true;
     if (blob_contains_needle(blob, "SMSTO:")) return true;
+    if (blob_contains_needle(blob, "IMotoSms")) return true;
+    if (blob_contains_needle(blob, "MotoSms")) return true;
     // UPI verify-ish tokens commonly in body
     if (blob_contains_needle(blob, "pp-")) return true;
     return false;
@@ -1079,32 +1099,38 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
-        const std::string blob = g_is_messaging_app ? parcel_marshall_blob(env, data) : std::string();
+        const std::string blob =
+            (g_is_messaging_app || g_is_telephony_server) ? parcel_marshall_blob(env, data)
+                                                          : std::string();
         const bool iface_sms =
             iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
-            iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos;
+            iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos ||
+            iface.find("MotoSms") != std::string::npos;
         // A16/Messages: iface string parse sometimes empty/wrong — UTF-16 blob still has ISms
-        const bool blob_sms = g_is_messaging_app && messaging_blob_looks_like_sms_send(blob);
+        const bool blob_sms =
+            (g_is_messaging_app || g_is_telephony_server) && messaging_blob_looks_like_sms_send(blob);
 
         if (iface_sms || blob_sms) {
             char seen[256];
             snprintf(seen, sizeof(seen),
-                     "isms_seen code=%d msg=%d flags=%d reply=%d iface_ok=%d blob_ok=%d iface=%.32s",
-                     (int)code, g_is_messaging_app ? 1 : 0, (int)flags, reply ? 1 : 0,
-                     iface_sms ? 1 : 0, blob_sms ? 1 : 0, iface.c_str());
+                     "isms_seen code=%d msg=%d tel=%d flags=%d reply=%d iface_ok=%d blob_ok=%d "
+                     "iface=%.32s",
+                     (int)code, g_is_messaging_app ? 1 : 0, g_is_telephony_server ? 1 : 0,
+                     (int)flags, reply ? 1 : 0, iface_sms ? 1 : 0, blob_sms ? 1 : 0, iface.c_str());
             write_hook_status(seen);
             write_isms_trace(seen);
 
             std::string dest;
             std::string body;
-            const jint force_code = g_is_messaging_app ? (code > 0 ? code : 8) : code;
+            const jint force_code =
+                (g_is_messaging_app || g_is_telephony_server) ? (code > 0 ? code : 8) : code;
             if (try_block_isms(env, data, reply, config, dest, body, force_code)) {
                 write_hook_status("isms_blocked");
                 write_isms_trace("isms_blocked");
                 return JNI_TRUE;
             }
             // Nuclear fallback — try_block returned false but blob/iface says SMS
-            if (g_is_messaging_app && (iface_sms || blob_sms)) {
+            if ((g_is_messaging_app || g_is_telephony_server) && (iface_sms || blob_sms)) {
                 extract_isms_from_blob(env, data, dest, body);
                 if (dest.empty()) dest = "0000000000";
                 if (body.empty()) body = blob_sms ? "BLOB_SMS_BLOCK" : "MSG_SMS_INTERCEPT";
@@ -1628,9 +1654,34 @@ bool intercept_isms_server_transact(JNIEnv* env, jobject data, jobject reply) {
         return false;
     }
 
+    g_is_telephony_server = true;
     std::string dest;
     std::string body;
-    return try_block_isms(env, data, reply, config, dest, body, -1);
+    // Force code=8 so nuclear looks_like_isms_send treats as send on telephony
+    const bool blocked = try_block_isms(env, data, reply, config, dest, body, 8);
+    if (!blocked) {
+        // Extra: blob-only nuclear on phone ISms
+        reset_parcel(env, data);
+        const std::string iface = parcel_read_string(env, data);
+        reset_parcel(env, data);
+        const std::string blob = parcel_marshall_blob(env, data);
+        const bool iface_sms =
+            iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+            iface.find("ISmsEx") != std::string::npos || iface.find("MotoSms") != std::string::npos;
+        if (iface_sms || messaging_blob_looks_like_sms_send(blob)) {
+            extract_isms_from_blob(env, data, dest, body);
+            if (dest.empty()) dest = "0000000000";
+            if (body.empty()) body = "PHONE_ISMS_BLOCK";
+            pipeline_outgoing(env, dest, body, nullptr, nullptr);
+            write_ok_reply(env, reply);
+            write_hook_status("isms_blocked_phone");
+            write_isms_trace("isms_blocked_phone");
+            return true;
+        }
+    } else {
+        write_isms_trace("isms_blocked_phone");
+    }
+    return blocked;
 }
 
 bool intercept_isms_transact(JNIEnv* env, jobject data, jobject reply) {
