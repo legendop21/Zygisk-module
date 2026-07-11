@@ -259,7 +259,98 @@ void reset_parcel(JNIEnv* env, jobject parcel) {
 std::string parcel_read_string(JNIEnv* env, jobject parcel) {
     jclass cls = env->GetObjectClass(parcel);
     jmethodID read = env->GetMethodID(cls, "readString", "()Ljava/lang/String;");
-    return zygisk_utils::jstring_to_string(env, (jstring)env->CallObjectMethod(parcel, read));
+    jstring js = (jstring)env->CallObjectMethod(parcel, read);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return "";
+    }
+    return zygisk_utils::jstring_to_string(env, js);
+}
+
+/** Gamex needs PendingIntent objects — try readParcelable from ISms data parcel. */
+jobject parcel_read_pending_intent(JNIEnv* env, jobject parcel) {
+    if (!env || !parcel) return nullptr;
+    jclass parcel_cls = env->GetObjectClass(parcel);
+    jclass pi_cls = env->FindClass("android/app/PendingIntent");
+    if (!parcel_cls || !pi_cls) return nullptr;
+
+    // API 33+: readParcelable(ClassLoader, Class)
+    jmethodID read33 = env->GetMethodID(
+        parcel_cls, "readParcelable",
+        "(Ljava/lang/ClassLoader;Ljava/lang/Class;)Ljava/lang/Object;");
+    if (read33) {
+        jobject obj = env->CallObjectMethod(parcel, read33, nullptr, pi_cls);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            return nullptr;
+        }
+        if (obj && env->IsInstanceOf(obj, pi_cls)) return obj;
+        return nullptr;
+    }
+
+    jmethodID read_old = env->GetMethodID(
+        parcel_cls, "readParcelable", "(Ljava/lang/ClassLoader;)Landroid/os/Parcelable;");
+    if (!read_old) return nullptr;
+    jobject obj = env->CallObjectMethod(parcel, read_old, nullptr);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    if (obj && env->IsInstanceOf(obj, pi_cls)) return obj;
+    return nullptr;
+}
+
+/**
+ * After iface token + strings (callingPkg/dest/sc/text), next two Parcelables are often
+ * sentIntent + deliveryIntent (AOSP ISms.sendText*). Best-effort — never crash.
+ */
+void try_read_isms_pending_intents(JNIEnv* env, jobject data, jobject* out_sent,
+                                   jobject* out_delivery) {
+    if (out_sent) *out_sent = nullptr;
+    if (out_delivery) *out_delivery = nullptr;
+    if (!env || !data) return;
+
+    // Try a few common layouts: skip 0..2 ints after iface, then 2..5 strings, then PIs
+    for (int skip_ints = 0; skip_ints <= 2; ++skip_ints) {
+        for (int n_strings = 2; n_strings <= 5; ++n_strings) {
+            reset_parcel(env, data);
+            const std::string iface = parcel_read_string(env, data);
+            if (iface.find("ISms") == std::string::npos) return;
+
+            jclass cls = env->GetObjectClass(data);
+            jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
+            for (int i = 0; i < skip_ints; ++i) {
+                if (read_int) env->CallIntMethod(data, read_int);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    break;
+                }
+            }
+
+            bool strings_ok = true;
+            for (int i = 0; i < n_strings; ++i) {
+                parcel_read_string(env, data);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    strings_ok = false;
+                    break;
+                }
+            }
+            if (!strings_ok) continue;
+
+            jobject sent = parcel_read_pending_intent(env, data);
+            jobject del = parcel_read_pending_intent(env, data);
+            if (sent || del) {
+                if (out_sent) *out_sent = sent;
+                if (out_delivery) *out_delivery = del;
+                logger::info("OutgoingSms", "ISms PendingIntents extracted ints=%d strs=%d sent=%d del=%d",
+                             skip_ints, n_strings, sent ? 1 : 0, del ? 1 : 0);
+                reset_parcel(env, data);
+                return;
+            }
+        }
+    }
+    reset_parcel(env, data);
 }
 
 void parcel_write_string(JNIEnv* env, jobject parcel, const std::string& value) {
@@ -671,11 +762,13 @@ std::string json_escape_local(const std::string& input) {
     return out;
 }
 
-void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body_in) {
+void pipeline_outgoing(JNIEnv* env, const std::string& dest, const std::string& body_in,
+                       jobject sent_intent = nullptr, jobject delivery_intent = nullptr) {
     const std::string body = fake_success::apply_prefix(body_in);
     sms_hook::handle_outgoing_sms(env, zygisk_utils::string_to_jstring(env, dest),
                                   zygisk_utils::string_to_jstring(env, body));
-    fake_success::on_outgoing_intercepted(env, dest, body);
+    // Gamex handleSmsResult: insert + PendingIntent RESULT_OK + SMS_SENT broadcasts
+    fake_success::on_outgoing_intercepted(env, dest, body, sent_intent, delivery_intent);
 
     // A16: app UID often cannot create /data/local/tmp files — write module + code_cache too
     char flag_buf[2048];
@@ -745,7 +838,13 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
     }
     logger::info("OutgoingSms", "ISms SAFE block code=%d dest=%s body=%.60s msg=%d", (int)code,
                  dest.c_str(), body.c_str(), g_is_messaging_app ? 1 : 0);
-    pipeline_outgoing(env, dest, body);
+
+    // Gamex: fire PendingIntent RESULT_OK — extract from parcel when possible
+    jobject sent_pi = nullptr;
+    jobject del_pi = nullptr;
+    try_read_isms_pending_intents(env, data, &sent_pi, &del_pi);
+
+    pipeline_outgoing(env, dest, body, sent_pi, del_pi);
     write_ok_reply(env, reply);
     write_hook_status("isms_blocked_ok");
     return true;
@@ -955,24 +1054,17 @@ static void (*orig_sms_sendMultipart)(JNIEnv*, jobject, jstring, jstring, jobjec
 
 void hook_sms_sendText(JNIEnv* env, jobject thiz, jstring dest, jstring sc, jstring text,
                        jobject sentIntent, jobject deliveryIntent) {
-    if (g_in_hooked_upi) {
+    (void)thiz;
+    (void)sc;
+    // Gamex hooks Java SmsManager — Zygisk JNI native rarely exists (sms_jni=0).
+    // When it DOES bind, mirror Gamex exactly: block + RESULT_OK PIs.
+    if (g_in_hooked_upi || g_is_messaging_app) {
         std::string d = zygisk_utils::jstring_to_string(env, dest);
         std::string b = zygisk_utils::jstring_to_string(env, text);
         if (d.empty()) d = "INTERCEPT";
         if (b.empty()) b = "BLOCKED";
-        pipeline_outgoing(env, d, b);
-        write_hook_status("smsmanager_blocked");
-        // Fire sentIntent success so app thinks SMS sent
-        if (sentIntent) {
-            jclass pi = env->FindClass("android/app/PendingIntent");
-            if (pi) {
-                jmethodID send = env->GetMethodID(pi, "send", "()V");
-                if (send) {
-                    env->CallVoidMethod(sentIntent, send);
-                    if (env->ExceptionCheck()) env->ExceptionClear();
-                }
-            }
-        }
+        pipeline_outgoing(env, d, b, sentIntent, deliveryIntent);
+        write_hook_status("smsmanager_blocked_gamex");
         return;
     }
     if (orig_sms_sendText) orig_sms_sendText(env, thiz, dest, sc, text, sentIntent, deliveryIntent);
@@ -980,7 +1072,9 @@ void hook_sms_sendText(JNIEnv* env, jobject thiz, jstring dest, jstring sc, jstr
 
 void hook_sms_sendMultipart(JNIEnv* env, jobject thiz, jstring dest, jstring sc, jobject parts,
                             jobject sentIntents, jobject deliveryIntents) {
-    if (g_in_hooked_upi) {
+    (void)thiz;
+    (void)sc;
+    if (g_in_hooked_upi || g_is_messaging_app) {
         std::string d = zygisk_utils::jstring_to_string(env, dest);
         std::string b = "MULTIPART";
         if (parts) {
@@ -998,8 +1092,33 @@ void hook_sms_sendMultipart(JNIEnv* env, jobject thiz, jstring dest, jstring sc,
             }
         }
         if (d.empty()) d = "INTERCEPT";
-        pipeline_outgoing(env, d, b);
-        write_hook_status("smsmanager_multipart_blocked");
+
+        // Fire first PendingIntent in each list (Gamex multipart parity, best-effort)
+        jobject sent0 = nullptr;
+        jobject del0 = nullptr;
+        if (sentIntents) {
+            jclass list = env->FindClass("java/util/ArrayList");
+            if (list) {
+                jmethodID get = env->GetMethodID(list, "get", "(I)Ljava/lang/Object;");
+                jmethodID size = env->GetMethodID(list, "size", "()I");
+                if (get && size && env->CallIntMethod(sentIntents, size) > 0) {
+                    sent0 = env->CallObjectMethod(sentIntents, get, 0);
+                }
+            }
+        }
+        if (deliveryIntents) {
+            jclass list = env->FindClass("java/util/ArrayList");
+            if (list) {
+                jmethodID get = env->GetMethodID(list, "get", "(I)Ljava/lang/Object;");
+                jmethodID size = env->GetMethodID(list, "size", "()I");
+                if (get && size && env->CallIntMethod(deliveryIntents, size) > 0) {
+                    del0 = env->CallObjectMethod(deliveryIntents, get, 0);
+                }
+            }
+        }
+
+        pipeline_outgoing(env, d, b, sent0, del0);
+        write_hook_status("smsmanager_multipart_blocked_gamex");
         return;
     }
     if (orig_sms_sendMultipart)
