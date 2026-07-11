@@ -521,13 +521,7 @@ bool ModuleConfig::has_mock_phone_configured() const {
 }
 
 std::string ModuleConfig::resolve_mock_phone() const {
-    if (!mock_phone_sim1.empty()) {
-        size_t digits = 0;
-        for (char c : mock_phone_sim1) {
-            if (c >= '0' && c <= '9') digits++;
-        }
-        if (digits >= 10) return mock_phone_sim1;
-    }
+    // Live spoof file wins (Save updates this) — stale JSON was blocking number updates
     char buf[96] = {};
     FILE* f = fopen("/data/local/tmp/hivirtus_spoof_phone.txt", "r");
     if (!f) f = fopen("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", "r");
@@ -535,10 +529,22 @@ std::string ModuleConfig::resolve_mock_phone() const {
         if (fgets(buf, sizeof(buf), f)) {
             fclose(f);
             std::string phone = buf;
-            if (!phone.empty() && phone.back() == '\n') phone.pop_back();
-            return phone;
+            while (!phone.empty() && (phone.back() == '\n' || phone.back() == '\r')) phone.pop_back();
+            size_t digits = 0;
+            for (char c : phone) {
+                if (c >= '0' && c <= '9') digits++;
+            }
+            if (digits >= 10) return phone;
+        } else {
+            fclose(f);
         }
-        fclose(f);
+    }
+    if (!mock_phone_sim1.empty()) {
+        size_t digits = 0;
+        for (char c : mock_phone_sim1) {
+            if (c >= '0' && c <= '9') digits++;
+        }
+        if (digits >= 10) return mock_phone_sim1;
     }
     return {};
 }

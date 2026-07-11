@@ -213,6 +213,21 @@ bool is_known_upi(const std::string& package) {
     if (package.find("dreamplug") != std::string::npos) return true;
     if (package.find("slice") != std::string::npos) return true;
     if (package.find("jupiter") != std::string::npos) return true;
+    // Any UPI / bank / pay app — not Hero-only
+    if (package.find("bank") != std::string::npos) return true;
+    if (package.find("pay") != std::string::npos) return true;
+    if (package.find("axis") != std::string::npos) return true;
+    if (package.find("hdfc") != std::string::npos) return true;
+    if (package.find("icici") != std::string::npos) return true;
+    if (package.find("sbi") != std::string::npos) return true;
+    if (package.find("kotak") != std::string::npos) return true;
+    if (package.find("yesbank") != std::string::npos) return true;
+    if (package.find("hero") != std::string::npos) return true;
+    if (package.find("credit") != std::string::npos) return true;
+    if (package.find("lending") != std::string::npos) return true;
+    if (package.find("finance") != std::string::npos) return true;
+    if (package.find("fincorp") != std::string::npos) return true;
+    if (package.find("cash") != std::string::npos) return true;
     return false;
 }
 

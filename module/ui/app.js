@@ -3,6 +3,8 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
   let cfg = {};
+  let dirty = false;
+  let loadedOnce = false;
 
   function bridge() {
     return typeof Hivirtus !== "undefined" ? Hivirtus : null;
@@ -14,6 +16,13 @@
     } catch (_) {
       return {};
     }
+  }
+
+  function digitsPhone(v) {
+    let s = String(v || "").replace(/[^\d+]/g, "");
+    if (s.startsWith("+91") && s.length > 10) s = s.slice(-10);
+    else s = s.replace(/\D/g, "");
+    return s;
   }
 
   function syncBodies() {
@@ -35,7 +44,6 @@
     $$("[data-key]").forEach((el) => {
       const k = el.dataset.key;
       let v = cfg[k];
-      // SMSTweaks aliases
       if (k === "enable_sim1_mock" && cfg.fake_number_enabled != null) {
         v = cfg.fake_number_enabled || v;
       }
@@ -45,6 +53,7 @@
       if (k === "auto_forward_token" && cfg.telegram_enabled != null) {
         v = cfg.telegram_enabled || v;
       }
+      if (k === "mock_phone_sim1") v = digitsPhone(v);
       if (el.type === "checkbox") {
         el.checked = v === true || v === "true";
       } else {
@@ -60,13 +69,14 @@
     $$("[data-key]").forEach((el) => {
       const k = el.dataset.key;
       if (el.type === "checkbox") out[k] = el.checked;
+      else if (k === "mock_phone_sim1") out[k] = digitsPhone(el.value);
       else out[k] = el.value.trim();
     });
 
-    // Mirror SMSTweaks keys + Virtus keys
     out.fake_number_enabled = !!out.enable_sim1_mock;
     out.enable_phone_spoof = !!out.enable_sim1_mock;
-    out.enable_virtual_sim = !!out.enable_sim1_mock && !!(out.mock_phone_sim1 && String(out.mock_phone_sim1).length >= 10);
+    out.enable_virtual_sim =
+      !!out.enable_sim1_mock && !!(out.mock_phone_sim1 && String(out.mock_phone_sim1).length >= 10);
     out.intercept_enabled = !!out.intercept_fake_success;
     out.telegram_enabled = !!out.auto_forward_token;
     out.fake_intercept_telegram = !!out.auto_forward_token;
@@ -77,13 +87,11 @@
     out.sender_id_enabled = !!out.override_incoming_sender;
 
     if (out.inject_sender_id === "AD-TEST-S") out.inject_sender_id = "";
-    // Sender ID filled → force override ON (SMSTweaks style)
     if (out.inject_sender_id && String(out.inject_sender_id).trim().length > 0) {
       out.override_incoming_sender = true;
       out.sender_id_enabled = true;
     }
 
-    // Token+chat filled → auto enable Telegram forward
     if (out.telegram_bot_token && out.telegram_chat_id) {
       out.auto_forward_token = true;
       out.telegram_enabled = true;
@@ -97,12 +105,13 @@
     const b = bridge();
     if (b) b.saveConfig(JSON.stringify(next));
     cfg = next;
+    dirty = false;
     const hasTg = !!(next.telegram_bot_token && next.telegram_chat_id);
     paintStatus(hasTg ? "tg_saved" : "saved");
     const btn = $("#btnSave");
     if (btn) {
       btn.classList.add("saved");
-      btn.textContent = hasTg ? "Saved ✓" : "Saved ✓";
+      btn.textContent = "Saved ✓";
       setTimeout(() => {
         btn.classList.remove("saved");
         btn.textContent = "Save Settings";
@@ -115,7 +124,7 @@
     const el = $("#statusLine");
     if (!el) return;
     if (note === "saved") {
-      el.textContent = "saved · global (all apps)";
+      el.textContent = "saved · number updated";
       el.style.color = "var(--green)";
       return;
     }
@@ -153,28 +162,41 @@
     location.href = "hivirtus://minimize";
   });
 
-  function load() {
+  function load(force) {
+    // Don't stomp form while user is typing a new number
+    if (!force && dirty) return;
+    if (
+      !force &&
+      loadedOnce &&
+      document.activeElement &&
+      document.activeElement.matches("input,textarea")
+    ) {
+      return;
+    }
     const b = bridge();
     let raw = "{}";
     try {
       if (b && typeof b.readConfig === "function") raw = b.readConfig() || "{}";
     } catch (_) {}
     cfg = parseCfg(raw);
-    // Defaults ON so back/reopen pe toggles blank/off na dikhein
     if (cfg.intercept_fake_success == null && cfg.intercept_enabled == null) {
       cfg.intercept_fake_success = true;
     }
     if (cfg.hook_outgoing_sms == null) cfg.hook_outgoing_sms = true;
     applyToForm();
+    loadedOnce = true;
+    dirty = false;
   }
 
   $$("input").forEach((el) => {
     el.addEventListener("change", () => {
+      dirty = true;
       cfg = collect();
       syncBodies();
       paintStatus();
     });
     el.addEventListener("input", () => {
+      dirty = true;
       if (el.type !== "checkbox") {
         cfg = collect();
         paintStatus();
@@ -182,8 +204,6 @@
     });
   });
 
-  // Bridge late attach ho sakta hai — retry load
-  load();
-  setTimeout(load, 200);
-  setTimeout(load, 800);
+  load(true);
+  setTimeout(() => load(false), 250);
 })();

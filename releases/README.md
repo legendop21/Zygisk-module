@@ -1,7 +1,7 @@
 # Releases
 
-Latest: **virtus-zygisk-mode-v1.0.54.zip**
+Latest: **virtus-zygisk-mode-v1.0.55.zip**
 
-SMS Tweaks style: outgoing only (`DO NOT COPY…` / `USE UPI PIN ONLY` / HEROAXISUPI), TG once, no incoming OTP.
+Any-UPI outgoing intercept + fake-number update fix.
 
-https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.54.zip
+https://raw.githubusercontent.com/legendop21/Zygisk-module/cursor/zygisk-sms-otp-module-97d6/releases/virtus-zygisk-mode-v1.0.55.zip

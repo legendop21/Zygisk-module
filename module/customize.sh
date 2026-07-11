@@ -164,7 +164,7 @@ echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
-echo "v1.0.54" > /data/local/tmp/hivirtus_module_version.txt
+echo "v1.0.55" > /data/local/tmp/hivirtus_module_version.txt
 chmod 666 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
 
 # Silent SIM repair (v1.0.49/50 phone-hook breakage)

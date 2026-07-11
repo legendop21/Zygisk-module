@@ -162,15 +162,18 @@ public class HivirtusJsBridge {
         }
 
         try {
-            String phone = readFirstLine(new File(SPOOF_PHONE));
-            if (phone.isEmpty() && appCtx != null) {
-                phone = readFirstLine(new File(appCtx.getFilesDir(), "hivirtus_spoof_phone.txt"));
-            }
-            if (phone.length() >= 10) {
-                merged.put("mock_phone_sim1", phone);
-                merged.put("enable_sim1_mock", true);
-                merged.put("enable_phone_spoof", true);
-                merged.put("fake_number_enabled", true);
+            // Spoof file is fallback only — never clobber a phone already in Save JSON
+            if (!merged.has("mock_phone_sim1") || isEmptyValue(merged.opt("mock_phone_sim1"))) {
+                String phone = readFirstLine(new File(SPOOF_PHONE));
+                if (phone.isEmpty() && appCtx != null) {
+                    phone = readFirstLine(new File(appCtx.getFilesDir(), "hivirtus_spoof_phone.txt"));
+                }
+                if (phone.length() >= 10) {
+                    merged.put("mock_phone_sim1", phone);
+                    merged.put("enable_sim1_mock", true);
+                    merged.put("enable_phone_spoof", true);
+                    merged.put("fake_number_enabled", true);
+                }
             }
         } catch (Exception ignored) {
         }
@@ -194,23 +197,41 @@ public class HivirtusJsBridge {
         int wrote = 0;
         try {
             JSONObject incoming = new JSONObject(json);
+            // Digits-only phone from THIS save — ignore stale spoof/tmp overlays
+            String incomingPhone = incoming.optString("mock_phone_sim1", "").trim()
+                    .replaceAll("[^0-9+]", "");
+            if (incomingPhone.startsWith("+91") && incomingPhone.length() > 10) {
+                incomingPhone = incomingPhone.substring(incomingPhone.length() - 10);
+            } else {
+                incomingPhone = incomingPhone.replaceAll("[^0-9]", "");
+            }
+            if (incomingPhone.length() >= 10) {
+                incoming.put("mock_phone_sim1", incomingPhone);
+            }
+
             JSONObject merged = new JSONObject(readConfig());
             java.util.Iterator<String> keys = incoming.keys();
             while (keys.hasNext()) {
                 String k = keys.next();
                 merged.put(k, incoming.get(k));
             }
+            // Force phone from incoming after merge (readConfig must never win)
+            if (incomingPhone.length() >= 10) {
+                merged.put("mock_phone_sim1", incomingPhone);
+            }
 
             if (merged.optBoolean("enable_sim1_mock", false)
                     || merged.optBoolean("enable_phone_spoof", false)
                     || merged.optBoolean("fake_number_enabled", false)
-                    || merged.optBoolean("enable_virtual_sim", false)) {
+                    || merged.optBoolean("enable_virtual_sim", false)
+                    || incomingPhone.length() >= 10) {
                 merged.put("enable_sim1_mock", true);
                 merged.put("enable_phone_spoof", true);
                 String phone = merged.optString("mock_phone_sim1", "").trim();
                 if (phone.length() >= 10) {
                     merged.put("enable_virtual_sim", true);
                     writeEverywhere(SPOOF_PHONE, "hivirtus_spoof_phone.txt", phone + "\n");
+                    writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", phone + "\n");
                 }
             }
 
@@ -242,6 +263,7 @@ public class HivirtusJsBridge {
             wrote += writeEverywhere(RUNTIME_CFG, "hivirtus_zygisk_mode_config.json", body);
             // Module path — root harvest/push uses this as canonical
             writeUtf8(MODULE_SAVE, body);
+            writeUtf8(MODULE_CFG, body);
 
             if (!tgToken.isEmpty() && !tgChat.isEmpty()) {
                 String creds = "{\n  \"telegram_bot_token\": \"" + tgToken.replace("\"", "")
@@ -249,7 +271,6 @@ public class HivirtusJsBridge {
                         + "\"\n}\n";
                 wrote += writeEverywhere(TG_CREDS, "hivirtus_telegram_credentials.json", creds);
                 writeUtf8("/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json", creds);
-                // service.sh queues ONE TG test on save_ok (3-min cooldown, no spam)
             }
             if (wrote > 0) {
                 writeUtf8(SAVE_OK_FLAG, "1\n");

