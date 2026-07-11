@@ -64,6 +64,7 @@ cp "$MODULE_DIR/service.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/post-fs-data.sh" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/config.json" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/uninstall.sh" "$OUTPUT_DIR/"
+[ -f "$MODULE_DIR/spoof_phone.txt" ] && cp "$MODULE_DIR/spoof_phone.txt" "$OUTPUT_DIR/"
 cp "$MODULE_DIR/overlay_install.sh" "$OUTPUT_DIR/"
 # Faltu NOT packaged: repair_sim.sh, diag_bubble.sh, apatch_package_config_full.csv
 if [ -d "$MODULE_DIR/META-INF" ]; then

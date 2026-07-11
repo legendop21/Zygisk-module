@@ -92,13 +92,19 @@ hivirtus_harvest_saves() {
       break
     fi
   done
-  if [ -n "$found" ]; then
+    if [ -n "$found" ]; then
     # CRITICAL: only promote if app copy is NEWER than global tmp.
     # Old PhonePe/Paytm copies were overwriting fresh Save → same number stuck.
     TMP_SAVE=/data/local/tmp/hivirtus_ui_save.json
     FOUND_MT=$(stat -c %Y "$found" 2>/dev/null || echo 0)
     TMP_MT=$(stat -c %Y "$TMP_SAVE" 2>/dev/null || echo 0)
-    if [ ! -f "$TMP_SAVE" ] || [ "$FOUND_MT" -gt "$TMP_MT" ]; then
+    FOUND_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$found" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+    TMP_PHONE=""
+    [ -f "$TMP_SAVE" ] && TMP_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$TMP_SAVE" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9')
+    # Never let empty-phone harvest wipe a good saved number
+    if [ ${#TMP_PHONE} -ge 10 ] && [ ${#FOUND_PHONE} -lt 10 ]; then
+      echo "harvest_skip_empty_phone:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
+    elif [ ! -f "$TMP_SAVE" ] || [ "$FOUND_MT" -gt "$TMP_MT" ]; then
       cp -f "$found" "$TMP_SAVE" 2>/dev/null
       chmod 666 "$TMP_SAVE" 2>/dev/null
       echo "harvest_save:$found $(date +%s)" >> /data/local/tmp/hivirtus_tg_forward.log 2>/dev/null
@@ -159,12 +165,21 @@ sync_config() {
     chmod 644 "$RUNTIME" 2>/dev/null
   fi
   if [ -n "$SRC" ]; then
-    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')
-    if [ -n "$SPOOF_PHONE" ]; then
+    SPOOF_PHONE=$(grep -o '"mock_phone_sim1"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/' | tr -cd '0-9+')
+    # Prefer existing non-empty spoof file if JSON phone empty
+    if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
+      [ -s /data/local/tmp/hivirtus_spoof_phone.txt ] && \
+        SPOOF_PHONE=$(head -n1 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null | tr -cd '0-9')
+    fi
+    if [ -z "$SPOOF_PHONE" ] || [ ${#SPOOF_PHONE} -lt 10 ]; then
+      [ -s "$MODDIR/spoof_phone.txt" ] && \
+        SPOOF_PHONE=$(head -n1 "$MODDIR/spoof_phone.txt" 2>/dev/null | tr -cd '0-9')
+    fi
+    if [ -n "$SPOOF_PHONE" ] && [ ${#SPOOF_PHONE} -ge 10 ]; then
       echo "$SPOOF_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
       echo "$SPOOF_PHONE" > "$MODDIR/spoof_phone.txt"
-      chmod 644 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
-      chmod 644 "$MODDIR/spoof_phone.txt" 2>/dev/null
+      chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+      chmod 666 "$MODDIR/spoof_phone.txt" 2>/dev/null
     fi
     # Promote sender id from Save JSON → durable files (menu cut pe na hatе)
     SID=$(grep -o '"inject_sender_id"[[:space:]]*:[[:space:]]*"[^"]*"' "$SRC" 2>/dev/null | head -n1 | sed 's/.*: *"\([^"]*\)".*/\1/')

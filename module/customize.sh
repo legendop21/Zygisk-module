@@ -164,8 +164,20 @@ echo "1" > /data/local/tmp/hivirtus_module_installed.flag
 chmod 644 /data/local/tmp/hivirtus_module_installed.flag 2>/dev/null
 echo "1" > /data/local/tmp/hivirtus_zygisk_native.active
 chmod 644 /data/local/tmp/hivirtus_zygisk_native.active 2>/dev/null
-echo "v1.0.58" > /data/local/tmp/hivirtus_module_version.txt
+VER_TXT=$(grep '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2)
+[ -z "$VER_TXT" ] && VER_TXT="v1.0.63"
+echo "$VER_TXT" > /data/local/tmp/hivirtus_module_version.txt
 chmod 666 /data/local/tmp/hivirtus_module_version.txt 2>/dev/null
+# Always keep writable spoof placeholder (empty ok — Save fills it)
+touch /data/local/tmp/hivirtus_spoof_phone.txt "$MODPATH/spoof_phone.txt" 2>/dev/null
+chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt 2>/dev/null
+chmod 666 "$MODPATH/spoof_phone.txt" 2>/dev/null
+# If phone was preserved, rewrite again (ensure non-empty sticks)
+if [ -n "$OLD_PHONE" ] && [ ${#OLD_PHONE} -ge 10 ]; then
+  echo "$OLD_PHONE" > /data/local/tmp/hivirtus_spoof_phone.txt
+  echo "$OLD_PHONE" > "$MODPATH/spoof_phone.txt"
+  chmod 666 /data/local/tmp/hivirtus_spoof_phone.txt "$MODPATH/spoof_phone.txt" 2>/dev/null
+fi
 
 # Silent SIM repair (v1.0.49/50 phone-hook breakage)
 hivirtus_repair_sim_settings 2>/dev/null

