@@ -7,6 +7,7 @@ namespace upi_registry {
 bool is_known_upi(const std::string& package);
 bool is_sms_hook_target(const std::string& package);
 bool is_fragile_banking_app(const std::string& package);
+bool is_default_sms_app(const std::string& package);
 int hook_startup_delay_sec(const std::string& package);
 bool is_module_own_app(const std::string& package);
 bool is_denied_hook_package(const std::string& package);

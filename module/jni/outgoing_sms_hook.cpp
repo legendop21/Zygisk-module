@@ -1232,33 +1232,31 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
         (g_upi_pkg.find("messaging") != std::string::npos) ||
         (g_upi_pkg.find(".mms") != std::string::npos) ||
         (g_upi_pkg == "com.oneplus.mms") || (g_upi_pkg == "com.coloros.mms") ||
-        (g_upi_pkg == "com.android.mms") || (g_upi_pkg == "com.samsung.android.messaging");
+        (g_upi_pkg == "com.android.mms") || (g_upi_pkg == "com.samsung.android.messaging") ||
+        upi_registry::is_default_sms_app(g_upi_pkg);
     ensure_pkg_diag_dir();
     write_hook_status("upi_install_begin");
 
     const std::string pkg = g_upi_pkg;
     const bool fragile = upi_registry::is_fragile_banking_app(pkg);
 
-    // JNI BinderProxy first (safe — only installs if orig captured)
+    // SMSTweaks-style: JNI ONLY — never PLT Binder/Intent (banking open crash)
     bool jni_ok = register_binder_proxy_jni(env);
     bool sms_ok = register_smsmanager_jni(env);
     bool intent_jni = false;
-    // Intent SENDTO block only in UPI (not Messages) — clear smsto only
-    if (!g_is_messaging_app) {
+    // Intent hooks also crash some UPI — only non-fragile, non-messaging
+    if (!g_is_messaging_app && !fragile) {
         intent_jni = register_instrumentation_jni(env);
     }
-    // PLT only as backup when JNI missed
-    if (!orig_BinderProxy_transact) {
-        install_plt_hooks(env, true, true);
-    }
+    // One JNI retry if binder missed (lib not ready)
     if (!orig_BinderProxy_transact) {
         jni_ok = register_binder_proxy_jni(env) || jni_ok;
-        schedule_deferred_plt_hooks(api, true);
     }
 
-    char summary[240];
+    char summary[256];
     snprintf(summary, sizeof(summary),
-             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d sms_jni=%d intent=%d OK=%d SAFE=1",
+             "upi_hook_done pkg=%s fragile=%d msg=%d binder=%d sms_jni=%d intent=%d OK=%d "
+             "SAFE=jni_only",
              pkg.c_str(), fragile ? 1 : 0, g_is_messaging_app ? 1 : 0,
              orig_BinderProxy_transact ? 1 : 0, sms_ok ? 1 : 0, intent_jni ? 1 : 0,
              orig_BinderProxy_transact ? 1 : 0);
@@ -1269,15 +1267,10 @@ std::string install_for_upi(JNIEnv* env, zygisk::Api* api, const char* package_n
 }
 
 bool install_binder_plt_force(zygisk::Api* api) {
-    if (!api) return false;
-    g_api = api;
-    install_plt_hooks(nullptr, true, true);
-    if (!plt_hook::lib_loaded(".*/libandroid_runtime\\.so$")) {
-        schedule_deferred_plt_hooks(api, true);
-        return false;
-    }
-    logger::info("OutgoingSms", "Force BinderProxy ISms hook active");
-    return true;
+    // v1.0.39: PLT Binder FORCE DISABLED — YesPay/PhonePe open crash
+    (void)api;
+    write_hook_status("plt_force_disabled_v139");
+    return false;
 }
 
 void schedule_deferred_upi_hook(JNIEnv* env, zygisk::Api* api, int delay_sec) {

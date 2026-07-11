@@ -3,14 +3,14 @@
 
 ui_print "*******************************"
 ui_print "   Virtus Zygisk Mode           "
-ui_print "     v1.0.38 CRASH-SAFE         "
-ui_print "  content-only ISms block       "
-ui_print "  no phone-hook crash           "
-ui_print "  TG test on Save works         "
+ui_print "     v1.0.39 SMSTWEAKS SAFE     "
+ui_print "  YesPay/PhonePe: no pre-hooks  "
+ui_print "  Messages ISms = real SIM block"
+ui_print "  PLT disabled (crash fix)      "
 ui_print "  @Hivirtus                     "
 ui_print "*******************************"
-ui_print "! Flash → reboot → apps should NOT crash"
-ui_print "! Save once → TG test → then SEND SMS"
+ui_print "! Flash → reboot → apps MUST open"
+ui_print "! Wait 8s in YesPay then SEND SMS"
 
 if [ -z "$MODPATH" ]; then
   ui_print "! ERROR: MODPATH not set"
