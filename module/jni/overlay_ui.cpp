@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <ctime>
 #include <pthread.h>
 #include <string>
 #include <sys/stat.h>
@@ -1299,36 +1300,73 @@ jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
             dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
         }
     }
-    if (access(dex_path, R_OK) != 0 || !ctx) {
-        debug_marker("dex_missing");
+    if (!dex_path || access(dex_path, R_OK) != 0) {
+        // Last chance: module / tmp without app-private copy (Drive early path)
+        if (access("/data/local/tmp/hivirtus_bridge.dex", R_OK) == 0)
+            dex_path = "/data/local/tmp/hivirtus_bridge.dex";
+        else if (access("/data/adb/modules/hivirtus_zygisk_mode/bridge.dex", R_OK) == 0)
+            dex_path = "/data/adb/modules/hivirtus_zygisk_mode/bridge.dex";
+        else {
+            debug_marker("dex_missing");
+            return nullptr;
+        }
+    }
+
+    // Drive MenuLoader: may run before Application — fall back to system ClassLoader
+    jobject parent_loader = nullptr;
+    if (ctx) {
+        jclass ctx_cls = env->GetObjectClass(ctx);
+        parent_loader = env->CallObjectMethod(
+            ctx, env->GetMethodID(ctx_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            parent_loader = nullptr;
+        }
+    }
+    if (!parent_loader) {
+        jclass cl_cls = env->FindClass("java/lang/ClassLoader");
+        jmethodID get_sys =
+            cl_cls ? env->GetStaticMethodID(cl_cls, "getSystemClassLoader",
+                                            "()Ljava/lang/ClassLoader;")
+                   : nullptr;
+        parent_loader = get_sys ? env->CallStaticObjectMethod(cl_cls, get_sys) : nullptr;
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            parent_loader = nullptr;
+        }
+        if (parent_loader) debug_marker("dex_parent_system_cl");
+    }
+    if (!parent_loader) {
+        debug_marker("dex_parent_miss");
         return nullptr;
     }
 
-    jclass ctx_cls = env->GetObjectClass(ctx);
-    jobject parent_loader = env->CallObjectMethod(
-        ctx, env->GetMethodID(ctx_cls, "getClassLoader", "()Ljava/lang/ClassLoader;"));
-
     jobject dex_loader = try_inmemory_dex(env, parent_loader, dex_path);
 
-    // Fallback DexClassLoader (older / if InMemory fails)
+    // Fallback DexClassLoader / PathClassLoader (older / if InMemory fails)
     if (!dex_loader) {
         std::string opt = "/data/local/tmp";
-        jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
-        if (get_cache) {
-            jobject file = env->CallObjectMethod(ctx, get_cache);
-            if (file && !env->ExceptionCheck()) {
-                jmethodID get_path = env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
-                                                       "()Ljava/lang/String;");
-                jstring path_j = (jstring)env->CallObjectMethod(file, get_path);
-                if (path_j) {
-                    const char* p = env->GetStringUTFChars(path_j, nullptr);
-                    if (p) {
-                        opt = p;
-                        env->ReleaseStringUTFChars(path_j, p);
+        if (ctx) {
+            jclass ctx_cls = env->GetObjectClass(ctx);
+            jmethodID get_cache = env->GetMethodID(ctx_cls, "getCodeCacheDir", "()Ljava/io/File;");
+            if (get_cache) {
+                jobject file = env->CallObjectMethod(ctx, get_cache);
+                if (file && !env->ExceptionCheck()) {
+                    jmethodID get_path =
+                        env->GetMethodID(env->FindClass("java/io/File"), "getAbsolutePath",
+                                         "()Ljava/lang/String;");
+                    jstring path_j = get_path ? (jstring)env->CallObjectMethod(file, get_path)
+                                              : nullptr;
+                    if (path_j) {
+                        const char* p = env->GetStringUTFChars(path_j, nullptr);
+                        if (p) {
+                            opt = p;
+                            env->ReleaseStringUTFChars(path_j, p);
+                        }
                     }
+                } else if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
                 }
-            } else if (env->ExceptionCheck()) {
-                env->ExceptionClear();
             }
         }
         jclass dex_cls = env->FindClass("dalvik/system/DexClassLoader");
@@ -1348,6 +1386,26 @@ jobject load_bridge_class(JNIEnv* env, jobject ctx, const char* class_name) {
             }
         } else {
             env->ExceptionClear();
+        }
+        if (!dex_loader) {
+            jclass path_cls = env->FindClass("dalvik/system/PathClassLoader");
+            if (path_cls && !env->ExceptionCheck()) {
+                jmethodID path_ctor = env->GetMethodID(
+                    path_cls, "<init>", "(Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+                jstring dex_j = env->NewStringUTF(dex_path);
+                dex_loader = path_ctor
+                                 ? env->NewObject(path_cls, path_ctor, dex_j, parent_loader)
+                                 : nullptr;
+                if (!dex_loader || env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    dex_loader = nullptr;
+                    debug_marker("path_loader_fail");
+                } else {
+                    debug_marker("path_loader_ok");
+                }
+            } else if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
         }
     }
 
@@ -1514,35 +1572,90 @@ jboolean hook_performClick(JNIEnv* env, jobject thiz) {
 
 bool install_sms_tweaks_java(JNIEnv* env, const char* package_name) {
     if (!env) return false;
+    // Drive MenuLoader timing: prefer Application, else system Context, else no-ctx dex load
     jobject ctx = nullptr;
     jclass at = env->FindClass("android/app/ActivityThread");
     if (at) {
-        jmethodID cur = env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;");
+        jmethodID cur =
+            env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;");
         if (cur) ctx = env->CallStaticObjectMethod(at, cur);
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
             ctx = nullptr;
         }
+        if (!ctx) {
+            jmethodID cat =
+                env->GetStaticMethodID(at, "currentActivityThread",
+                                       "()Landroid/app/ActivityThread;");
+            jobject thread = cat ? env->CallStaticObjectMethod(at, cat) : nullptr;
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+                thread = nullptr;
+            }
+            if (thread) {
+                jmethodID gsc = env->GetMethodID(at, "getSystemContext",
+                                                 "()Landroid/app/ContextImpl;");
+                if (!gsc)
+                    gsc = env->GetMethodID(env->GetObjectClass(thread), "getSystemContext",
+                                           "()Landroid/content/Context;");
+                if (gsc) ctx = env->CallObjectMethod(thread, gsc);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    ctx = nullptr;
+                }
+                if (ctx) debug_marker("sms_tweaks_sys_ctx");
+            }
+        }
     }
-    jclass helper = (jclass)load_bridge_class(env, ctx, "com.hivirtus.zygisk.HivirtusUiHelper");
-    if (!helper) {
-        debug_marker("sms_tweaks_helper_miss");
-        return false;
+    // Direct Drive call: SmsTweaksHooks.init(process) — not waiting on UI helper
+    jclass hooks = (jclass)load_bridge_class(env, ctx, "com.hivirtus.zygisk.SmsTweaksHooks");
+    if (!hooks) {
+        // Retry via UiHelper for older dex / classpath quirks
+        jclass helper =
+            (jclass)load_bridge_class(env, ctx, "com.hivirtus.zygisk.HivirtusUiHelper");
+        if (!helper) {
+            debug_marker("sms_tweaks_helper_miss");
+            return false;
+        }
+        jmethodID mid =
+            env->GetStaticMethodID(helper, "installSmsTweaks", "(Ljava/lang/String;)V");
+        if (!mid) {
+            debug_marker("sms_tweaks_mid_miss");
+            return false;
+        }
+        jstring pkg = env->NewStringUTF(package_name ? package_name : "");
+        env->CallStaticVoidMethod(helper, mid, pkg);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            debug_marker("sms_tweaks_call_fail");
+            return false;
+        }
+        debug_marker("sms_tweaks_java_ok_via_helper");
+        return true;
     }
-    jmethodID mid =
-        env->GetStaticMethodID(helper, "installSmsTweaks", "(Ljava/lang/String;)V");
-    if (!mid) {
-        debug_marker("sms_tweaks_mid_miss");
+    jmethodID init =
+        env->GetStaticMethodID(hooks, "init", "(Ljava/lang/String;)V");
+    if (!init) {
+        debug_marker("sms_tweaks_init_miss");
         return false;
     }
     jstring pkg = env->NewStringUTF(package_name ? package_name : "");
-    env->CallStaticVoidMethod(helper, mid, pkg);
+    env->CallStaticVoidMethod(hooks, init, pkg);
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        debug_marker("sms_tweaks_call_fail");
+        debug_marker("sms_tweaks_init_fail");
         return false;
     }
     debug_marker("sms_tweaks_java_ok");
+    {
+        FILE* tf = fopen("/data/local/tmp/hivirtus_isms_trace.txt", "a");
+        if (tf) {
+            fprintf(tf, "java_init_done|%ld|%s\n", (long)time(nullptr),
+                    package_name ? package_name : "");
+            fclose(tf);
+            chmod("/data/local/tmp/hivirtus_isms_trace.txt", 0666);
+        }
+    }
     return true;
 }
 

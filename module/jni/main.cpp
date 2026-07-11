@@ -23,15 +23,15 @@
 namespace {
 
 /**
- * v1.0.39 — SMSTweaks-style crash-safe inject
+ * v1.0.59 — Drive Magisk floating-menu parity
  *
- * SMSTweaks (Xposed) hooks SmsManager/ISms AFTER app is up.
- * Zygisk pe same idea:
- *  - Messages: JNI BinderProxy ISms only (real SIM catch for SENDTO)
- *  - Fragile UPI (YesPay/PhonePe/…): NO hooks in preSpecialize (crash fix)
- *    → delayed JNI-only after app UI up
- *  - NEVER PLT Binder/Intent/Activity on banking apps
- *  - NEVER root_hide PLT (fopen/access) inside UPI — denylist Unmount Only
+ * Drive module injects almost all apps (*), loads classes.dex, then
+ * MenuLoader.init → ServiceManager ISms Java proxy BEFORE Application.
+ *
+ * Our map:
+ *  - Java ISms proxy (SmsTweaksHooks.init) → ALL non-dangerous apps (Drive *)
+ *  - Native Binder/Intent → only Messages + UPI targets (backup)
+ *  - NEVER inject com.android.phone / telephony (SIM death)
  */
 
 bool is_messaging_pkg(const std::string& pkg) {
@@ -176,11 +176,11 @@ void* deferred_hook_worker(void* arg) {
     if (job->vm && job->api) {
         JNIEnv* env = nullptr;
         if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
-            // Arm Intent PLT (registered in pre with pass-through) + JNI retry
+            // Re-assert Drive Java ISms (Application now warm) + native backup
+            overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
             outgoing_sms_hook::arm_intercept_hooks();
             std::string st =
                 outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
-            overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
             phone_number_hook::install(env, job->api, job->pkg.c_str());
             sender_spoof::install(env, job->api, job->pkg.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
@@ -190,6 +190,37 @@ void* deferred_hook_worker(void* arg) {
     }
     delete job;
     return nullptr;
+}
+
+void* deferred_java_only_worker(void* arg) {
+    auto* job = static_cast<DeferredHookJob*>(arg);
+    if (job->delay_sec > 0) sleep(static_cast<unsigned>(job->delay_sec));
+    if (job->vm) {
+        JNIEnv* env = nullptr;
+        if (job->vm->AttachCurrentThread(&env, nullptr) == JNI_OK && env) {
+            bool ok = overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
+            append_diag("/data/local/tmp/hivirtus_inject.log",
+                        ok ? ("JAVA_RETRY_OK|" + job->pkg).c_str()
+                           : ("JAVA_RETRY_FAIL|" + job->pkg).c_str());
+            job->vm->DetachCurrentThread();
+        }
+    }
+    delete job;
+    return nullptr;
+}
+
+void schedule_deferred_java_sms(JNIEnv* env, const std::string& pkg, int delay_sec) {
+    if (!env || pkg.empty()) return;
+    JavaVM* vm = nullptr;
+    if (env->GetJavaVM(&vm) != JNI_OK || !vm) return;
+    auto* job = new DeferredHookJob();
+    job->vm = vm;
+    job->api = nullptr;
+    job->pkg = pkg;
+    job->delay_sec = delay_sec;
+    pthread_t t{};
+    pthread_create(&t, nullptr, deferred_java_only_worker, job);
+    pthread_detach(t);
 }
 
 void schedule_deferred_sms_hooks(JNIEnv* env, zygisk::Api* api, const std::string& pkg,
@@ -220,29 +251,27 @@ public:
         env_->ReleaseStringUTFChars(args->nice_name, process);
         pkg_ = base_package(process_name_);
 
-        // NEVER inject com.android.phone — Binder.transact ISms block kills SIM / SIM Toolkit (v1.0.49 bug)
+        // NEVER inject com.android.phone — Binder.transact ISms block kills SIM / SIM Toolkit
         if (pkg_ == "com.android.phone" || pkg_ == "com.android.providers.telephony") {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
-        if (is_dangerous_process(pkg_) ||
-            upi_registry::is_module_own_app(pkg_) ||
-            !upi_registry::is_sms_hook_target(pkg_)) {
-            if (!pkg_.empty() && !is_dangerous_process(pkg_) &&
-                (pkg_.find("pay") != std::string::npos ||
-                 pkg_.find("upi") != std::string::npos ||
-                 pkg_.find("bank") != std::string::npos ||
-                 pkg_.find("loan") != std::string::npos ||
-                 pkg_.find("kredit") != std::string::npos)) {
-                report_line(api_, "skip_not_target:" + process_name_);
-            }
+        if (is_dangerous_process(pkg_) || upi_registry::is_module_own_app(pkg_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
 
+        // Drive target_packages=* — keep process for Java ISms on almost all apps.
+        // Native Binder/Intent only for Messages + UPI whitelist.
+        is_msg_ = is_messaging_pkg(pkg_);
+        is_upi_ = upi_registry::is_sms_hook_target(pkg_);
+        java_only_ = !is_msg_ && !is_upi_;
+        fragile_ = is_upi_ && upi_registry::is_fragile_banking_app(pkg_);
+
         report_line(api_, "pre_seen:" + process_name_);
-        report_line(api_, "safe_inject:" + pkg_);
+        report_line(api_, std::string("safe_inject:") + pkg_ +
+                              (java_only_ ? "|java_only" : (is_msg_ ? "|msg" : "|upi")));
 
         if (args->app_data_dir) {
             const char* dd = env_->GetStringUTFChars(args->app_data_dir, nullptr);
@@ -260,24 +289,19 @@ public:
         ConfigManager::instance().apply_ui_save_file();
         ConfigManager::instance().reload();
 
-        is_msg_ = is_messaging_pkg(pkg_);
-        fragile_ = !is_msg_ && upi_registry::is_fragile_banking_app(pkg_);
-
         if (is_msg_) {
-            // Messages: install ISms NOW (SENDTO real-SIM catch) — JNI + PLT
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_MSG|") + sms_st);
         } else if (fragile_) {
-            // Intent PLT ONLY in pre (armed=false) — Hero SENDTO catch without open crash
-            // Binder PLT still forbidden on banking
+            // Intent PLT ONLY in pre (armed=false) — Hero SENDTO without open crash
             bool intent_ok = outgoing_sms_hook::install_intent_plt_pre(api_, true);
             report_line(api_, std::string("fragile_intent_plt:") + pkg_ +
                                   (intent_ok ? "|ok" : "|fail"));
-        } else {
-            // Mild UPI: JNI hooks in pre OK
+        } else if (is_upi_) {
             std::string sms_st = outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
             report_line(api_, std::string("HOOK_UPI|") + sms_st);
         }
+        // java_only: no native in pre — Drive Java path only
 
         keep_ = true;
     }
@@ -286,9 +310,7 @@ public:
         (void)args;
         if (!keep_) return;
 
-        if (is_dangerous_process(pkg_) ||
-            upi_registry::is_module_own_app(pkg_) ||
-            !upi_registry::is_sms_hook_target(pkg_)) {
+        if (is_dangerous_process(pkg_) || upi_registry::is_module_own_app(pkg_)) {
             api_->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
             return;
         }
@@ -305,37 +327,42 @@ public:
             mkdir(base.c_str(), 0700);
             FILE* sf = fopen((base + "/post_hooks.txt").c_str(), "w");
             if (sf) {
-                fprintf(sf, "post_v139:%s msg=%d fragile=%d\n", pkg_.c_str(), is_msg_ ? 1 : 0,
-                        fragile_ ? 1 : 0);
+                fprintf(sf, "post_v159:%s msg=%d fragile=%d java_only=%d upi=%d\n",
+                        pkg_.c_str(), is_msg_ ? 1 : 0, fragile_ ? 1 : 0, java_only_ ? 1 : 0,
+                        is_upi_ ? 1 : 0);
                 fclose(sf);
             }
         }
 
+        // Drive MenuLoader: Java ISms FIRST (before SmsManager warms)
+        overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
+
         if (is_msg_) {
-            // Re-assert Messages hooks (JNI only — install_for_upi skips PLT)
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            // Drive SMS Tweaks: Java ISms ServiceManager proxy (primary)
-            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
+            schedule_deferred_java_sms(env_, pkg_, 2);
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
-            // SMSTweaks: Intent PLT armed ASAP + Java ISms + short deferred BinderProxy
             outgoing_sms_hook::arm_intercept_hooks();
-            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             const int delay = is_yespay(pkg_) ? 2 : 1;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
             if (native_overlay_wanted()) {
                 schedule_overlay_ui(env_, api_, pkg_, delay + 1);
             }
-        } else {
+        } else if (is_upi_) {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             phone_number_hook::install(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
+            schedule_deferred_java_sms(env_, pkg_, 2);
             if (native_overlay_wanted()) {
                 schedule_overlay_ui(env_, api_, pkg_, 3);
             }
+            report_line(api_, "post_upi_ok:" + pkg_);
+        } else {
+            // Drive *: Java ISms only — retry once Application exists
+            schedule_deferred_java_sms(env_, pkg_, 1);
+            report_line(api_, "post_java_only:" + pkg_);
         }
 
         touch_heartbeat();
@@ -372,6 +399,8 @@ private:
     std::string data_dir_;
     bool keep_ = false;
     bool is_msg_ = false;
+    bool is_upi_ = false;
+    bool java_only_ = false;
     bool fragile_ = false;
 };
 
@@ -448,7 +477,8 @@ void companion_handler(int client) {
     }
 
     if (line.rfind("HOOK", 0) == 0 || line.find("upi_hook_done") != std::string::npos ||
-        line.rfind("fragile_", 0) == 0 || line.rfind("post_", 0) == 0) {
+        line.rfind("fragile_", 0) == 0 || line.rfind("post_", 0) == 0 ||
+        line.rfind("JAVA_", 0) == 0 || line.find("java_only") != std::string::npos) {
         char tsline[512];
         snprintf(tsline, sizeof(tsline), "%ld %s\n", static_cast<long>(time(nullptr)),
                  line.c_str());

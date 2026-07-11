@@ -105,13 +105,16 @@ build_bridge_dex() {
   command -v javac >/dev/null 2>&1 || { echo "==> WARNING: javac missing — bridge.dex skip"; return 0; }
 
   mkdir -p "$out"
-  javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" \
+  if ! javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" \
     "$src_dir/HivirtusJsBridge.java" "$src_dir/LogoAsset.java" \
-    "$src_dir/SmsTweaksHooks.java" "$src_dir/HivirtusUiHelper.java" || return 0
+    "$src_dir/SmsTweaksHooks.java" "$src_dir/HivirtusUiHelper.java"; then
+    echo "ERROR: bridge.dex javac failed"
+    return 1
+  fi
 
   local classes=()
   while IFS= read -r -d '' f; do classes+=("$f"); done < <(find "$out" -name '*.class' -print0)
-  [ ${#classes[@]} -gt 0 ] || return 0
+  [ ${#classes[@]} -gt 0 ] || { echo "ERROR: no bridge classes"; return 1; }
 
   if command -v d8 >/dev/null 2>&1; then
     d8 --output "$ROOT_DIR/build" "${classes[@]}"
@@ -120,17 +123,21 @@ build_bridge_dex() {
   elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/build-tools/34.0.0/d8" ]; then
     "$ANDROID_HOME/build-tools/34.0.0/d8" --output "$ROOT_DIR/build" "${classes[@]}"
   else
-    echo "==> WARNING: d8 missing — bridge.dex skip"
-    return 0
+    echo "ERROR: d8 missing — bridge.dex required"
+    return 1
   fi
   if [ -f "$ROOT_DIR/build/classes.dex" ]; then
     mv -f "$ROOT_DIR/build/classes.dex" "$ROOT_DIR/build/bridge.dex"
   fi
+  [ -f "$ROOT_DIR/build/bridge.dex" ] || { echo "ERROR: bridge.dex not produced"; return 1; }
   echo "==> Built bridge.dex (JS bridge + UiHelper + SMS Tweaks ISms proxy)"
 }
 build_bridge_dex
 if [ -f "$ROOT_DIR/build/bridge.dex" ]; then
   cp "$ROOT_DIR/build/bridge.dex" "$OUTPUT_DIR/bridge.dex"
+else
+  echo "ERROR: bridge.dex missing after build"
+  exit 1
 fi
 
 # docs/ not packaged — runtime me kaam nahi, zip size + clutter
