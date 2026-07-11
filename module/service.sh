@@ -658,25 +658,25 @@ hivirtus_apatch_allow_upi_inject 2>/dev/null &
 # Messages/mms.service: when Intercept ON → SEND_SMS ignore so radio NEVER fires
 # even if binder intercept misses (v1.0.47 belt-and-suspenders)
 restore_sms_permission() {
-  for pkg in \
-    com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
-    com.herofincorp.android com.herofincorp.upi \
-    com.phonepe.app com.phonepe.app.business \
-    com.google.android.apps.nbu.paisa.user net.one97.paytm \
-    com.myairtelapp com.yespay.next com.yesbank.yespay com.yesbank.yespaynext \
-    com.kreditbee.android com.stashfin.android com.snapmint.customerapp \
-    com.hdfcbank.payzapp com.axis.mobile com.axis.mobilebanking \
-    in.axisbank.upi com.upi.axispay com.axismobile \
-    in.org.npci.upiapp
+  # ALL UPI (incl. BHIM ESAF) — missing grant → "Unable to send SMS"
+  for pkg in $UPI_PACKAGES \
+    com.fisglobal.esafupi.app com.sbi.upi in.org.npci.upiapp \
+    com.upi.axispay com.herofincorp.diyjourneys
   do
+    pkg=$(echo "$pkg" | tr -d ' \r\n')
+    [ -z "$pkg" ] && continue
     pm path "$pkg" >/dev/null 2>&1 || continue
     appops set "$pkg" SEND_SMS allow 2>/dev/null || \
       cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || \
       appops set "$pkg" SEND_SMS default 2>/dev/null || true
+    appops set "$pkg" READ_SMS allow 2>/dev/null || true
+    appops set "$pkg" WRITE_SMS allow 2>/dev/null || true
     pm grant "$pkg" android.permission.SEND_SMS 2>/dev/null || true
     pm grant "$pkg" android.permission.READ_SMS 2>/dev/null || true
     pm grant "$pkg" android.permission.RECEIVE_SMS 2>/dev/null || true
   done
+  echo "sms_perm_restored $(date +%s)" > /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
+  chmod 666 /data/local/tmp/hivirtus_appops_sms.txt 2>/dev/null
 }
 
 intercept_is_on() {

