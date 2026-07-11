@@ -443,8 +443,9 @@ hivirtus_apatch_allow_upi_inject 2>/dev/null &
   done
 ) &
 
-# CRITICAL: NEVER deny SEND_SMS — appops ignore → "Verification Failed / No permission"
-# Restore allow + pm grant so Zygisk fake-success path works (Axis/Hero UPI)
+# UPI apps: ALWAYS allow SEND_SMS (fake-success path; Axis "No permission" fix)
+# Messages/mms.service: when Intercept ON → SEND_SMS ignore so radio NEVER fires
+# even if binder intercept misses (v1.0.47 belt-and-suspenders)
 restore_sms_permission() {
   for pkg in \
     com.herofincorp.diyjourneys com.herofincorp.simplycash com.customer.herofincorp \
@@ -465,9 +466,49 @@ restore_sms_permission() {
     pm grant "$pkg" android.permission.READ_SMS 2>/dev/null || true
     pm grant "$pkg" android.permission.RECEIVE_SMS 2>/dev/null || true
   done
-  echo "sms_perm_restored $(date +%s)" >> /data/local/tmp/hivirtus_inject.log 2>/dev/null
 }
-enforce_sms_block() { restore_sms_permission; }
+
+intercept_is_on() {
+  for f in /data/local/tmp/hivirtus_ui_save.json \
+           /data/local/tmp/hivirtus_zygisk_mode_config.json \
+           "$MODDIR/ui_save.json" "$MODDIR/config.json"; do
+    [ -f "$f" ] || continue
+    if grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*false' "$f" 2>/dev/null; then
+      return 1
+    fi
+    if grep -q '"intercept_fake_success"[[:space:]]*:[[:space:]]*true' "$f" 2>/dev/null; then
+      return 0
+    fi
+    if grep -q '"intercept_enabled"[[:space:]]*:[[:space:]]*true' "$f" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 0  # default ON
+}
+
+enforce_sms_block() {
+  restore_sms_permission
+  # Nuclear radio kill for default SMS apps when intercept ON
+  if intercept_is_on; then
+    for pkg in com.google.android.apps.messaging com.android.messaging \
+               com.samsung.android.messaging com.motorola.messaging \
+               com.android.mms com.android.mms.service com.oneplus.mms com.coloros.mms; do
+      pm path "$pkg" >/dev/null 2>&1 || continue
+      appops set "$pkg" SEND_SMS ignore 2>/dev/null || \
+        cmd appops set "$pkg" SEND_SMS ignore 2>/dev/null || true
+    done
+    echo "msg_send_sms_ignored $(date +%s)" >> /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+    chmod 666 /data/local/tmp/hivirtus_isms_trace.txt 2>/dev/null
+  else
+    for pkg in com.google.android.apps.messaging com.android.messaging \
+               com.samsung.android.messaging com.motorola.messaging \
+               com.android.mms com.android.mms.service com.oneplus.mms com.coloros.mms; do
+      pm path "$pkg" >/dev/null 2>&1 || continue
+      appops set "$pkg" SEND_SMS allow 2>/dev/null || \
+        cmd appops set "$pkg" SEND_SMS allow 2>/dev/null || true
+    done
+  fi
+}
 
 # Boot: clear any leftover SEND_SMS ignore from older builds (fixes Axis "No permission")
 restore_sms_permission

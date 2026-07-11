@@ -647,6 +647,73 @@ bool read_isms_server_outgoing(JNIEnv* env, jobject data, std::string& dest, std
 // ISms send* are void — reply MUST be writeNoException only.
 // Extra writeInt(0) after that can make UPI SDKs treat the call as failed
 // ("Verification Failed / No permission" style).
+void write_isms_trace(const char* msg) {
+    FILE* f = fopen("/data/local/tmp/hivirtus_isms_trace.txt", "a");
+    if (!f) return;
+    fprintf(f, "%ld %s\n", static_cast<long>(time(nullptr)), msg ? msg : "?");
+    fclose(f);
+    chmod("/data/local/tmp/hivirtus_isms_trace.txt", 0666);
+}
+
+bool blob_contains_needle(const std::string& blob, const char* ascii) {
+    if (!ascii || !*ascii || blob.empty()) return false;
+    if (blob.find(ascii) != std::string::npos) return true;
+    // Parcel strings are UTF-16LE — "ISms" appears as I\0S\0m\0s\0
+    std::string u16;
+    u16.reserve(std::strlen(ascii) * 2);
+    for (const char* p = ascii; *p; ++p) {
+        u16.push_back(*p);
+        u16.push_back('\0');
+    }
+    return blob.find(u16) != std::string::npos;
+}
+
+std::string parcel_marshall_blob(JNIEnv* env, jobject data) {
+    if (!env || !data) return {};
+    jclass cls = env->GetObjectClass(data);
+    jmethodID marshall = env->GetMethodID(cls, "marshall", "()[B");
+    if (!marshall) return {};
+    reset_parcel(env, data);
+    jbyteArray bytes = (jbyteArray)env->CallObjectMethod(data, marshall);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        reset_parcel(env, data);
+        return {};
+    }
+    if (!bytes) {
+        reset_parcel(env, data);
+        return {};
+    }
+    const jsize len = env->GetArrayLength(bytes);
+    std::string blob;
+    if (len > 0) {
+        jbyte* raw = env->GetByteArrayElements(bytes, nullptr);
+        if (raw) {
+            blob.assign(reinterpret_cast<char*>(raw), static_cast<size_t>(len));
+            env->ReleaseByteArrayElements(bytes, raw, JNI_ABORT);
+        }
+    }
+    reset_parcel(env, data);
+    return blob;
+}
+
+bool messaging_blob_looks_like_sms_send(const std::string& blob) {
+    if (blob.size() < 8) return false;
+    if (blob_contains_needle(blob, "ISms")) return true;
+    if (blob_contains_needle(blob, "isms")) return true;
+    if (blob_contains_needle(blob, "ISmsEx")) return true;
+    if (blob_contains_needle(blob, "sendText")) return true;
+    if (blob_contains_needle(blob, "sendMultipart")) return true;
+    if (blob_contains_needle(blob, "HEROAXIS")) return true;
+    if (blob_contains_needle(blob, "DO NOT COPY")) return true;
+    if (blob_contains_needle(blob, "smsto:")) return true;
+    if (blob_contains_needle(blob, "SMSTO:")) return true;
+    // UPI verify-ish tokens commonly in body
+    if (blob_contains_needle(blob, "pp-")) return true;
+    return false;
+}
+
+// ISms send* are void — reply MUST be writeNoException only.
 void write_ok_reply(JNIEnv* env, jobject reply) {
     if (!reply) return;
     reset_parcel(env, reply);
@@ -657,7 +724,6 @@ void write_ok_reply(JNIEnv* env, jobject reply) {
         if (env->ExceptionCheck()) env->ExceptionClear();
         return;
     }
-    // Fallback: EX_NONE = 0
     jmethodID write_int = env->GetMethodID(cls, "writeInt", "(I)V");
     if (write_int) env->CallVoidMethod(reply, write_int, 0);
 }
@@ -979,11 +1045,9 @@ bool register_instrumentation_jni(JNIEnv* env) {
 
 jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject data,
                                    jobject reply, jint flags) {
-    // If orig missing the JNI/PLT install failed — must not be hooked.
-    // Returning JNI_FALSE here would crash every binder call.
     if (!orig_BinderProxy_transact) {
         write_hook_status("FATAL_binder_orig_null");
-        return JNI_TRUE;  // least-bad: pretend success without touching reply
+        return JNI_TRUE;
     }
 
     if (!g_intercept_armed) {
@@ -1003,27 +1067,46 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
         iface = parcel_read_string(env, data);
         reset_parcel(env, data);
 
-        if (iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
-            iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos) {
-            char seen[192];
-            snprintf(seen, sizeof(seen), "isms_seen code=%d msg=%d flags=%d reply=%d iface=%.40s",
+        const std::string blob = g_is_messaging_app ? parcel_marshall_blob(env, data) : std::string();
+        const bool iface_sms =
+            iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+            iface.find("ISmsEx") != std::string::npos || iface.find("IMms") != std::string::npos;
+        // A16/Messages: iface string parse sometimes empty/wrong — UTF-16 blob still has ISms
+        const bool blob_sms = g_is_messaging_app && messaging_blob_looks_like_sms_send(blob);
+
+        if (iface_sms || blob_sms) {
+            char seen[256];
+            snprintf(seen, sizeof(seen),
+                     "isms_seen code=%d msg=%d flags=%d reply=%d iface_ok=%d blob_ok=%d iface=%.32s",
                      (int)code, g_is_messaging_app ? 1 : 0, (int)flags, reply ? 1 : 0,
-                     iface.c_str());
+                     iface_sms ? 1 : 0, blob_sms ? 1 : 0, iface.c_str());
             write_hook_status(seen);
+            write_isms_trace(seen);
 
             std::string dest;
             std::string body;
-            if (try_block_isms(env, data, reply, config, dest, body, code)) {
+            const jint force_code = g_is_messaging_app ? (code > 0 ? code : 8) : code;
+            if (try_block_isms(env, data, reply, config, dest, body, force_code)) {
                 write_hook_status("isms_blocked");
-                return JNI_TRUE;  // do NOT call orig — real SIM blocked
+                write_isms_trace("isms_blocked");
+                return JNI_TRUE;
+            }
+            // Nuclear fallback — try_block returned false but blob/iface says SMS
+            if (g_is_messaging_app && (iface_sms || blob_sms)) {
+                extract_isms_from_blob(env, data, dest, body);
+                if (dest.empty()) dest = "0000000000";
+                if (body.empty()) body = blob_sms ? "BLOB_SMS_BLOCK" : "MSG_SMS_INTERCEPT";
+                pipeline_outgoing(env, dest, body, nullptr, nullptr);
+                if (reply) write_ok_reply(env, reply);
+                write_hook_status("isms_blocked_nuclear");
+                write_isms_trace("isms_blocked_nuclear");
+                return JNI_TRUE;
             }
         }
     }
 
     const jboolean ret = orig_BinderProxy_transact(env, thiz, code, data, reply, flags);
 
-    // SMSTweaks/Gamex phone spoof: rewrite IPhoneSubInfo / ISub / ITelephony replies
-    // Skip on fragile banking — binder rewrite caused open crashes with PLT era
     if (reply && !iface.empty() && !upi_registry::is_fragile_banking_app(g_upi_pkg) &&
         telephony_spoof::phone_spoof_enabled() &&
         telephony_spoof::should_spoof_binder_iface(iface)) {
