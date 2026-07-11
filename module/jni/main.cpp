@@ -180,10 +180,11 @@ void* deferred_hook_worker(void* arg) {
             outgoing_sms_hook::arm_intercept_hooks();
             std::string st =
                 outgoing_sms_hook::install_for_upi(env, job->api, job->pkg.c_str());
+            overlay_ui::install_sms_tweaks_java(env, job->pkg.c_str());
             phone_number_hook::install(env, job->api, job->pkg.c_str());
             sender_spoof::install(env, job->api, job->pkg.c_str());
             append_diag("/data/local/tmp/hivirtus_inject.log",
-                        ("HOOK_DEFERRED|" + st + "|armed+phone+sender").c_str());
+                        ("HOOK_DEFERRED|" + st + "|armed+phone+sender+java_isms").c_str());
             job->vm->DetachCurrentThread();
         }
     }
@@ -313,12 +314,14 @@ public:
         if (is_msg_) {
             // Re-assert Messages hooks (JNI only — install_for_upi skips PLT)
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
-            // Sender spoof useful if Messages reads SmsMessage; phone optional
+            // Drive SMS Tweaks: Java ISms ServiceManager proxy (primary)
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
             report_line(api_, "post_msg_ok:" + pkg_);
         } else if (fragile_) {
-            // SMSTweaks: Intent PLT armed ASAP + short deferred BinderProxy
+            // SMSTweaks: Intent PLT armed ASAP + Java ISms + short deferred BinderProxy
             outgoing_sms_hook::arm_intercept_hooks();
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             const int delay = is_yespay(pkg_) ? 2 : 1;
             schedule_deferred_sms_hooks(env_, api_, pkg_, delay);
             report_line(api_, "post_fragile_deferred:" + pkg_ + "|d=" + std::to_string(delay));
@@ -327,6 +330,7 @@ public:
             }
         } else {
             outgoing_sms_hook::install_for_upi(env_, api_, pkg_.c_str());
+            overlay_ui::install_sms_tweaks_java(env_, pkg_.c_str());
             phone_number_hook::install(env_, api_, pkg_.c_str());
             sender_spoof::install(env_, api_, pkg_.c_str());
             if (native_overlay_wanted()) {

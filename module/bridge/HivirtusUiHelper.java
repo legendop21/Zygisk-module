@@ -63,6 +63,11 @@ public class HivirtusUiHelper {
             if (activity.isFinishing()) return;
         } catch (Throwable ignored) {
         }
+        try {
+            SmsTweaksHooks.setPackage(activity.getPackageName());
+            SmsTweaksHooks.install(activity.getPackageName());
+        } catch (Throwable ignored) {
+        }
         ensureLifecycle(activity.getApplicationContext());
         activity.runOnUiThread(new Runnable() {
             @Override
@@ -121,7 +126,13 @@ public class HivirtusUiHelper {
     }
 
     public static void ensureLifecycle(Context ctx) {
-        if (lifecycleRegistered || ctx == null) return;
+        if (ctx == null) return;
+        try {
+            SmsTweaksHooks.setPackage(ctx.getPackageName());
+            SmsTweaksHooks.install(ctx.getPackageName());
+        } catch (Throwable ignored) {
+        }
+        if (lifecycleRegistered) return;
         try {
             Context appCtx = ctx.getApplicationContext();
             if (!(appCtx instanceof Application)) return;
@@ -143,6 +154,16 @@ public class HivirtusUiHelper {
             logEnv(app);
         } catch (Throwable t) {
             writeDebug("ui_lifecycle_fail:" + safeMsg(t));
+        }
+    }
+
+    /** Native early call — Drive MenuLoader.init SMS path. */
+    public static void installSmsTweaks(String processOrPkg) {
+        try {
+            if (processOrPkg != null) SmsTweaksHooks.setPackage(processOrPkg);
+            SmsTweaksHooks.install(processOrPkg);
+        } catch (Throwable t) {
+            writeDebug("sms_tweaks_install_fail:" + safeMsg(t));
         }
     }
 

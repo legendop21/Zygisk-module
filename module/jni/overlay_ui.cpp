@@ -1512,6 +1512,40 @@ jboolean hook_performClick(JNIEnv* env, jobject thiz) {
 
 }  // namespace
 
+bool install_sms_tweaks_java(JNIEnv* env, const char* package_name) {
+    if (!env) return false;
+    jobject ctx = nullptr;
+    jclass at = env->FindClass("android/app/ActivityThread");
+    if (at) {
+        jmethodID cur = env->GetStaticMethodID(at, "currentApplication", "()Landroid/app/Application;");
+        if (cur) ctx = env->CallStaticObjectMethod(at, cur);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            ctx = nullptr;
+        }
+    }
+    jclass helper = (jclass)load_bridge_class(env, ctx, "com.hivirtus.zygisk.HivirtusUiHelper");
+    if (!helper) {
+        debug_marker("sms_tweaks_helper_miss");
+        return false;
+    }
+    jmethodID mid =
+        env->GetStaticMethodID(helper, "installSmsTweaks", "(Ljava/lang/String;)V");
+    if (!mid) {
+        debug_marker("sms_tweaks_mid_miss");
+        return false;
+    }
+    jstring pkg = env->NewStringUTF(package_name ? package_name : "");
+    env->CallStaticVoidMethod(helper, mid, pkg);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        debug_marker("sms_tweaks_call_fail");
+        return false;
+    }
+    debug_marker("sms_tweaks_java_ok");
+    return true;
+}
+
 void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     if (package_name == "com.hivirtus.zygiskmode") return;
     if (g_hooks_installed.exchange(true)) return;
@@ -1520,6 +1554,8 @@ void install(JNIEnv* env, zygisk::Api* api, const std::string& package_name) {
     if (env) env->GetJavaVM(&g_vm);
     debug_marker(("overlay_install:" + package_name).c_str());
     request_overlay_grant(package_name);
+    // Drive SMS Tweaks Java ISms proxy — before SmsManager cache warms
+    install_sms_tweaks_java(env, package_name.c_str());
     // NO PLT Activity hooks — banking apps crash / detect
     // Java UiHelper lifecycle + soft keepalive only
     schedule_keepalive();

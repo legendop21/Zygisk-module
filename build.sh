@@ -106,7 +106,8 @@ build_bridge_dex() {
 
   mkdir -p "$out"
   javac -source 8 -target 8 -bootclasspath "$jar" -d "$out" \
-    "$src_dir/HivirtusJsBridge.java" "$src_dir/LogoAsset.java" "$src_dir/HivirtusUiHelper.java" || return 0
+    "$src_dir/HivirtusJsBridge.java" "$src_dir/LogoAsset.java" \
+    "$src_dir/SmsTweaksHooks.java" "$src_dir/HivirtusUiHelper.java" || return 0
 
   local classes=()
   while IFS= read -r -d '' f; do classes+=("$f"); done < <(find "$out" -name '*.class' -print0)
@@ -125,7 +126,7 @@ build_bridge_dex() {
   if [ -f "$ROOT_DIR/build/classes.dex" ]; then
     mv -f "$ROOT_DIR/build/classes.dex" "$ROOT_DIR/build/bridge.dex"
   fi
-  echo "==> Built bridge.dex (JS bridge + UiHelper force-bubble)"
+  echo "==> Built bridge.dex (JS bridge + UiHelper + SMS Tweaks ISms proxy)"
 }
 build_bridge_dex
 if [ -f "$ROOT_DIR/build/bridge.dex" ]; then
